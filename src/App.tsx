@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import CollectionPage from "@/pages/CollectionPage";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
+import Tuiles from "@/pages/Tuiles";
 import { useAuth } from "@/lib/auth";
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/tuiles" element={<Tuiles />} />
         <Route path="/c/:name" element={<CollectionPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
