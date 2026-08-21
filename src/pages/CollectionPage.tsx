@@ -1,25 +1,21 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import RecordForm, { type FormValues } from "@/components/RecordForm";
 import { pb } from "@/lib/pb";
-import { COLLECTION_INFO, fieldsOf, titleFieldOf, type PbCollection } from "@/lib/schema";
+import { collectionByName, titleFieldOf } from "@/lib/schema";
 
 const PER_PAGE = 50;
 
 /** Aperçu court d'une valeur pour la vue tableau. */
 function preview(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "object") {
-    const text = JSON.stringify(value);
-    return text.length > 60 ? `${text.slice(0, 57)}…` : text;
-  }
-  const text = String(value);
+  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
   return text.length > 60 ? `${text.slice(0, 57)}…` : text;
 }
 
-export default function CollectionPage({ collections }: { collections: PbCollection[] }) {
+export default function CollectionPage() {
   const { name = "" } = useParams();
-  const collection = useMemo(() => collections.find((c) => c.name === name), [collections, name]);
+  const collection = collectionByName(name);
 
   const [records, setRecords] = useState<FormValues[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,8 +32,7 @@ export default function CollectionPage({ collections }: { collections: PbCollect
       const list = await pb.collection(collection.name).getList(1, PER_PAGE, { sort: "-created" });
       setRecords(list.items as unknown as FormValues[]);
     } catch (e) {
-      const err = e as { message?: string };
-      setError(err.message ?? "Chargement impossible.");
+      setError((e as { message?: string }).message ?? "Chargement impossible.");
     } finally {
       setLoading(false);
     }
@@ -52,9 +47,6 @@ export default function CollectionPage({ collections }: { collections: PbCollect
     return <p className="text-slate-400">Collection « {name} » introuvable.</p>;
   }
 
-  const columns = fieldsOf(collection)
-    .filter((f) => f.type !== "autodate" && f.type !== "password")
-    .slice(0, 6);
   const title = titleFieldOf(collection);
 
   const visible = records.filter((record) =>
@@ -75,11 +67,19 @@ export default function CollectionPage({ collections }: { collections: PbCollect
       setEditing(undefined);
       await load();
     } catch (e) {
-      const err = e as { message?: string; response?: { data?: Record<string, { message?: string }> } };
+      const err = e as {
+        status?: number;
+        message?: string;
+        response?: { data?: Record<string, { message?: string }> };
+      };
       const details = Object.entries(err.response?.data ?? {})
         .map(([field, info]) => `${field} : ${info?.message ?? ""}`)
         .join(" · ");
-      setError(details || err.message || "Enregistrement refusé.");
+      setError(
+        err.status === 403
+          ? "Écriture refusée par PocketBase : ce compte n'a pas (ou plus) le rôle admin."
+          : details || err.message || "Enregistrement refusé.",
+      );
     } finally {
       setSaving(false);
     }
@@ -100,12 +100,8 @@ export default function CollectionPage({ collections }: { collections: PbCollect
     <div>
       <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">
-            {COLLECTION_INFO[collection.name]?.label ?? collection.name}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {COLLECTION_INFO[collection.name]?.hint ?? `Collection ${collection.name}`}
-          </p>
+          <h1 className="text-xl font-semibold text-white">{collection.label}</h1>
+          <p className="text-sm text-slate-500">{collection.hint}</p>
         </div>
         <div className="flex items-center gap-2">
           <input
@@ -131,9 +127,9 @@ export default function CollectionPage({ collections }: { collections: PbCollect
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
-              {columns.map((column) => (
-                <th key={column.name} className="px-3 py-2 font-medium">
-                  {column.name}
+              {collection.fields.map((field) => (
+                <th key={field.name} className="px-3 py-2 font-medium">
+                  {field.name}
                 </th>
               ))}
               <th className="w-32 px-3 py-2" />
@@ -142,14 +138,14 @@ export default function CollectionPage({ collections }: { collections: PbCollect
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={columns.length + 1} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={collection.fields.length + 1} className="px-3 py-6 text-center text-slate-500">
                   Chargement…
                 </td>
               </tr>
             )}
             {!loading && visible.length === 0 && (
               <tr>
-                <td colSpan={columns.length + 1} className="px-3 py-6 text-center text-slate-500">
+                <td colSpan={collection.fields.length + 1} className="px-3 py-6 text-center text-slate-500">
                   Aucun record. Clique sur « + Nouveau » pour en créer un.
                 </td>
               </tr>
@@ -157,9 +153,9 @@ export default function CollectionPage({ collections }: { collections: PbCollect
             {!loading &&
               visible.map((record) => (
                 <tr key={String(record.id)} className="border-b border-edge/60 last:border-0 hover:bg-ink/40">
-                  {columns.map((column) => (
-                    <td key={column.name} className="px-3 py-2 align-top text-slate-300">
-                      {preview(record[column.name])}
+                  {collection.fields.map((field) => (
+                    <td key={field.name} className="px-3 py-2 align-top text-slate-300">
+                      {preview(record[field.name])}
                     </td>
                   ))}
                   <td className="px-3 py-2 text-right">

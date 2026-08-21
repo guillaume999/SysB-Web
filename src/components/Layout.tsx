@@ -1,16 +1,10 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { PB_URL } from "@/lib/pb";
-import { COLLECTION_INFO, type PbCollection } from "@/lib/schema";
+import { COLLECTIONS } from "@/lib/schema";
 import type { ReactNode } from "react";
 
-export default function Layout({
-  collections,
-  children,
-}: {
-  collections: PbCollection[];
-  children: ReactNode;
-}) {
+export default function Layout({ children }: { children: ReactNode }) {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -27,7 +21,7 @@ export default function Layout({
         </div>
 
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-2">
-          {collections.map((collection) => (
+          {COLLECTIONS.map((collection) => (
             <NavLink
               key={collection.id}
               to={`/c/${collection.name}`}
@@ -37,29 +31,25 @@ export default function Layout({
                 }`
               }
             >
-              {COLLECTION_INFO[collection.name]?.label ?? collection.name}
+              {collection.label}
             </NavLink>
           ))}
         </nav>
 
         <div className="border-t border-edge p-3 text-xs">
-          <p className="truncate text-slate-400" title={String(user?.email ?? "")}>
-            {String(user?.email ?? "superuser")}
+          <p className="truncate text-slate-300" title={String(user?.email ?? "")}>
+            {String(user?.pseudo || user?.email || "admin")}
           </p>
-          <div className="mt-2 flex gap-2">
-            <a className="text-accent hover:underline" href={`${PB_URL}/_/`} target="_blank" rel="noreferrer">
-              Admin PocketBase
-            </a>
-            <button
-              className="text-slate-400 hover:text-red-400"
-              onClick={() => {
-                signOut();
-                navigate("/login");
-              }}
-            >
-              Déconnexion
-            </button>
-          </div>
+          <p className="text-slate-500">rôle admin</p>
+          <button
+            className="mt-2 text-slate-400 hover:text-red-400"
+            onClick={() => {
+              signOut();
+              navigate("/");
+            }}
+          >
+            Déconnexion
+          </button>
         </div>
       </aside>
 
@@ -71,9 +61,9 @@ export default function Layout({
             defaultValue=""
           >
             <option value="">Choisir une collection…</option>
-            {collections.map((collection) => (
+            {COLLECTIONS.map((collection) => (
               <option key={collection.id} value={collection.name}>
-                {COLLECTION_INFO[collection.name]?.label ?? collection.name}
+                {collection.label}
               </option>
             ))}
           </select>

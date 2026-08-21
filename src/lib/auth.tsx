@@ -2,38 +2,52 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { pb } from "@/lib/pb";
 
 /**
- * L'admin SysB s'authentifie en **superuser PocketBase** : depuis le retrait du
- * champ `role` (2026-08-21), les collections de contenu sont en écriture
- * superuser-only, donc c'est le seul compte capable d'écrire config / fiches /
- * templates / productions / evolutions.
+ * Le site s'authentifie avec un **compte joueur PocketBase dont `role = "admin"`**
+ * (collection `users`), pas avec le superuser : le superuser reste réservé à
+ * l'admin PocketBase brut sur pb-sysb.physiooffice.com/_/.
+ *
+ * Les règles d'API de `config`, `fiches`, `templates`, `productions` et
+ * `evolutions` autorisent create/update/delete pour `@request.auth.role = 'admin'`.
  */
-type Superuser = { id: string; email?: string; collectionName?: string } & Record<string, unknown>;
+export type Role = "player" | "admin" | "tester";
+
+export type AdminUser = {
+  id: string;
+  email?: string;
+  pseudo?: string;
+  role?: Role;
+  collectionName?: string;
+} & Record<string, unknown>;
 
 interface AuthContextValue {
-  user: Superuser | null;
+  user: AdminUser | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => void;
 }
 
+const NOT_ADMIN =
+  "Ce compte n'a pas le rôle admin. Demande à un administrateur de te l'attribuer dans PocketBase.";
+
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function readUser(): Superuser | null {
+function readUser(): AdminUser | null {
   if (!pb.authStore.isValid) return null;
-  const record = pb.authStore.record as Superuser | null;
-  // On refuse une session utilisateur "joueur" : elle n'a aucun droit d'écriture ici.
-  if (record?.collectionName !== "_superusers") return null;
+  const record = pb.authStore.record as AdminUser | null;
+  // Seuls les comptes `users` avec le rôle admin ouvrent l'interface :
+  // une session superuser ou un compte joueur ordinaire n'y donne pas accès.
+  if (!record || record.collectionName !== "users" || record.role !== "admin") return null;
   return record;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<Superuser | null>(readUser());
+  const [user, setUser] = useState<AdminUser | null>(readUser());
   const [loading, setLoading] = useState<boolean>(pb.authStore.isValid);
 
   useEffect(() => pb.authStore.onChange(() => setUser(readUser())), []);
 
-  // Au montage : si un token traîne en localStorage, on le valide côté serveur.
-  // Un token expiré vide la session au lieu de laisser une UI qui échoue partout.
+  // Au montage : un token en localStorage est revalidé côté serveur, ce qui
+  // rafraîchit aussi le rôle (un admin rétrogradé perd l'accès au rechargement).
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -42,7 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        await pb.collection("_superusers").authRefresh();
+        await pb.collection("users").authRefresh();
+        if (!readUser()) pb.authStore.clear();
       } catch {
         pb.authStore.clear();
       } finally {
@@ -63,14 +78,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loading,
       signIn: async (email, password) => {
         try {
-          await pb.collection("_superusers").authWithPassword(email, password);
+          const auth = await pb.collection("users").authWithPassword(email, password);
+          if ((auth.record as AdminUser)?.role !== "admin") {
+            pb.authStore.clear();
+            return { error: new Error(NOT_ADMIN) };
+          }
           setUser(readUser());
           return { error: null };
         } catch (e) {
           const err = e as { status?: number; message?: string };
           const message =
             err.status === 400
-              ? "Identifiants superuser invalides."
+              ? "Email ou mot de passe incorrect."
               : err.message || "Connexion impossible.";
           return { error: new Error(message) };
         }

@@ -23,7 +23,8 @@ export default function Login() {
       <form onSubmit={submit} className="card w-full max-w-sm p-6">
         <h1 className="text-xl font-semibold text-white">SysB — administration</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Connexion avec un compte <strong className="text-slate-300">superuser</strong> PocketBase.
+          Connexion avec ton compte de jeu SysB, à condition qu'il ait le rôle{" "}
+          <strong className="text-slate-300">admin</strong>.
         </p>
 
         <div className="mt-6 space-y-4">

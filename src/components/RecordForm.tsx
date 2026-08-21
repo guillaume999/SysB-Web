@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import JsonField from "@/components/JsonField";
-import { editableFields, emptyValue, type PbCollection, type PbField } from "@/lib/schema";
+import { emptyValue, type PbCollection, type PbField } from "@/lib/schema";
 
 export type FormValues = Record<string, unknown>;
 
 /** Convertit un record PocketBase en valeurs de formulaire (les json passent en texte). */
 function toFormValues(collection: PbCollection, record: FormValues | null): FormValues {
   const values: FormValues = {};
-  for (const field of editableFields(collection)) {
+  for (const field of collection.fields) {
     const current = record?.[field.name];
     if (field.type === "json") {
       values[field.name] =
@@ -16,8 +16,6 @@ function toFormValues(collection: PbCollection, record: FormValues | null): Form
           : typeof current === "string"
             ? current
             : JSON.stringify(current, null, 2);
-    } else if (field.type === "password") {
-      values[field.name] = "";
     } else {
       values[field.name] = current ?? emptyValue(field);
     }
@@ -28,7 +26,7 @@ function toFormValues(collection: PbCollection, record: FormValues | null): Form
 /** Repasse les valeurs de formulaire vers le format attendu par l'API. */
 function toPayload(collection: PbCollection, values: FormValues): { data: FormValues; error: string | null } {
   const data: FormValues = {};
-  for (const field of editableFields(collection)) {
+  for (const field of collection.fields) {
     const value = values[field.name];
     if (field.type === "json") {
       const text = String(value ?? "").trim();
@@ -43,8 +41,6 @@ function toPayload(collection: PbCollection, values: FormValues): { data: FormVa
       }
     } else if (field.type === "number") {
       data[field.name] = value === "" || value === null ? null : Number(value);
-    } else if (field.type === "password" && String(value ?? "") === "") {
-      continue; // ne pas écraser le mot de passe si laissé vide
     } else {
       data[field.name] = value;
     }
@@ -65,7 +61,6 @@ export default function RecordForm({
   onCancel: () => void;
   onSubmit: (data: FormValues) => void;
 }) {
-  const fields = useMemo(() => editableFields(collection), [collection]);
   const [values, setValues] = useState<FormValues>(() => toFormValues(collection, record));
   const [error, setError] = useState<string | null>(null);
 
@@ -88,23 +83,25 @@ export default function RecordForm({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
       <form onSubmit={submit} className="card w-full max-w-2xl p-5 shadow-2xl">
         <h2 className="mb-4 text-lg font-semibold text-white">
-          {record ? "Modifier" : "Nouveau"} — <span className="text-slate-400">{collection.name}</span>
+          {record ? "Modifier" : "Nouveau"} — <span className="text-slate-400">{collection.label}</span>
         </h2>
 
         <div className="space-y-4">
-          {fields.map((field) => (
+          {collection.fields.map((field) => (
             <div key={field.name}>
               <label className="label" htmlFor={field.name}>
                 {field.name}
                 {field.required && <span className="ml-1 text-red-400">*</span>}
-                <span className="ml-2 font-normal normal-case text-slate-600">{field.type}</span>
               </label>
               <FieldInput field={field} value={values[field.name]} onChange={(v) => set(field.name, v)} />
+              {field.hint && <p className="mt-1 text-xs text-slate-600">{field.hint}</p>}
             </div>
           ))}
         </div>
 
-        {error && <p className="mt-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">{error}</p>}
+        {error && (
+          <p className="mt-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">{error}</p>
+        )}
 
         <div className="mt-6 flex justify-end gap-2">
           <button type="button" className="btn-ghost" onClick={onCancel} disabled={saving}>
@@ -155,22 +152,15 @@ function FieldInput({
         />
       );
 
-    case "select": {
-      const multi = (field.maxSelect ?? 1) > 1;
-      const selected = multi ? (Array.isArray(value) ? value.map(String) : []) : String(value ?? "");
+    case "select":
       return (
         <select
           id={field.name}
-          multiple={multi}
           className="input"
-          value={selected as string & string[]}
-          onChange={(e) =>
-            onChange(
-              multi ? Array.from(e.target.selectedOptions).map((o) => o.value) : e.target.value,
-            )
-          }
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value)}
         >
-          {!multi && <option value="">—</option>}
+          <option value="">—</option>
           {(field.values ?? []).map((option) => (
             <option key={option} value={option}>
               {option}
@@ -178,7 +168,6 @@ function FieldInput({
           ))}
         </select>
       );
-    }
 
     case "editor":
       return (
@@ -190,57 +179,16 @@ function FieldInput({
         />
       );
 
-    case "password":
-      return (
-        <input
-          id={field.name}
-          type="password"
-          className="input"
-          placeholder="laisser vide pour ne pas changer"
-          value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
-          autoComplete="new-password"
-        />
-      );
-
-    case "date":
-      return (
-        <input
-          id={field.name}
-          type="text"
-          className="input"
-          placeholder="YYYY-MM-DD HH:MM:SS"
-          value={String(value ?? "")}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      );
-
-    case "file":
-      return (
-        <p className="rounded border border-edge bg-ink/60 p-2 text-xs text-slate-500">
-          Les fichiers se gèrent dans l'admin PocketBase (`/_/`) — pas encore pris en charge ici.
-        </p>
-      );
-
-    case "relation":
-      return (
-        <input
-          id={field.name}
-          className="input font-mono text-xs"
-          placeholder="id du record lié"
-          value={Array.isArray(value) ? value.join(",") : String(value ?? "")}
-          onChange={(e) =>
-            onChange(
-              (field.maxSelect ?? 1) > 1
-                ? e.target.value.split(",").map((s) => s.trim()).filter(Boolean)
-                : e.target.value,
-            )
-          }
-        />
-      );
-
     default:
-      return (
+      return field.multiline ? (
+        <textarea
+          id={field.name}
+          className="input min-h-[7rem] font-mono text-xs"
+          spellCheck={false}
+          value={String(value ?? "")}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
         <input
           id={field.name}
           className="input"

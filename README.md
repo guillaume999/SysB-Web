@@ -2,10 +2,12 @@
 
 Admin web du contenu du jeu Unity **SysB**, branchée sur PocketBase.
 
-Depuis le retrait du champ `role` (2026-08-21), les collections de contenu
-(`config`, `templates`, `productions`, `fiches`, `evolutions`) sont en **écriture
-superuser uniquement** : le client Unity ne peut plus les écrire. Ce site est le
-seul moyen de peupler et maintenir ce contenu.
+L'admin se connecte avec son **compte de jeu PocketBase** (collection `users`)
+à condition que son champ `role` vaille `admin`. Le **superuser PocketBase n'est pas
+utilisé ici** : il reste réservé à l'admin PocketBase brut sur `pb-sysb.physiooffice.com/_/`.
+
+Les règles d'API de `config`, `fiches`, `templates`, `productions` et `evolutions`
+autorisent la lecture à tout le monde et l'écriture à `@request.auth.role = 'admin'`.
 
 | | |
 |---|---|
@@ -16,14 +18,14 @@ seul moyen de peupler et maintenir ce contenu.
 
 ## Comment ça marche
 
-L'appli est un SPA React + Vite servi par nginx. Elle se connecte en
-`_superusers` sur PocketBase, lit le **schéma des collections à l'exécution**
-(`/api/collections`) et génère les tableaux et formulaires à partir de là — donc
-un champ ajouté côté PocketBase apparaît ici sans rebuild.
+L'appli est un SPA React + Vite servi par nginx. Le schéma des collections est
+décrit **en dur** dans `src/lib/schema.ts` : l'endpoint `/api/collections` de
+PocketBase est réservé aux superusers, donc un compte `role = admin` ne peut pas
+le lire. Un champ ajouté côté PocketBase doit donc être ajouté dans ce fichier.
 
 Les champs `json` (héritage du modèle Firestore : `consomation`, `production`,
-`obtention`, `niveaux`, `value`…) ont un éditeur en grille quand la valeur est un
-tableau d'objets plats, et un éditeur JSON brut sinon.
+`obtention`, `niveaux`, `conditions`, `value`…) ont un éditeur en grille quand la
+valeur est un tableau d'objets plats, et un éditeur JSON brut sinon.
 
 ## Développement
 
@@ -48,5 +50,5 @@ Même schéma que `physiooffice-dev` : Portainer clone ce dépôt, build le
 - Exposition : tunnel Cloudflare `nas-physiooffice`,
   route `sysb.physiooffice.com` → `http://192.168.1.95:8083` (NPM n'est pas dans le chemin)
 
-Aucun identifiant PocketBase n'est stocké dans le code ni dans le build : ils sont
-saisis à la connexion et le token vit dans le `localStorage` du navigateur.
+Aucun identifiant n'est stocké dans le code ni dans le build : ils sont saisis à la
+connexion et le token vit dans le `localStorage` du navigateur.
