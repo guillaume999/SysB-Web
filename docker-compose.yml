@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  sysb-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_PB_URL: ${VITE_PB_URL:-https://pb-sysb.physiooffice.com}
+    # Pas d'`image:` volontairement : le service est construit localement.
+    # Avec un nom d'image, le `docker compose pull` de Portainer tenterait un
+    # pull en registre et échouerait ("pull access denied"). Les services
+    # build-only sont ignorés par `compose pull`, donc le redeploy peut builder.
+    pull_policy: build
+    container_name: ${CONTAINER_NAME:-sysb-web}
+    ports:
+      - "${HOST_PORT:-8083}:8081"
+    restart: unless-stopped
+    environment:
+      - NGINX_ENTRYPOINT_QUIET_LOGS=1

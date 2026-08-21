@@ -1,0 +1,11 @@
+node_modules
+dist
+.DS_Store
+*.local
+*.tsbuildinfo
+
+# Environnement local — ne pas committer (voir stack.env.example)
+stack.env
+.env
+.env.*
+!.env.example
