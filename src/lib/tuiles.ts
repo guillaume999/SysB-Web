@@ -6,8 +6,9 @@
  * et à terme conditions d'utilisation, coûts, productions.
  *
  * Le lien vers le modèle passe par le champ `prefabPath`, qui contient la même
- * valeur que `tuile3dmodel.nom_dans_le_jeu`. Le nom du champ est hérité, il
- * sera aligné quand le catalogue sera repris (les règles de jeu restent à faire).
+ * valeur que `cheminJeu(modele)`, c'est-à-dire `Prefabs/<chemin_prefab>/<nom_prefab>`.
+ * Le nom du champ est hérité, il sera aligné quand le catalogue sera repris
+ * (les règles de jeu restent à faire).
  *
  * Déclaré en `type` et non en `interface` : le SDK PocketBase attend un
  * `RecordModel` indexable, auquel une interface n'est pas assignable.
@@ -24,7 +25,7 @@ export type Tuile = {
   collectionName: string;
   tileId: number;
   nom: string;
-  /** Miroir de `tuile3dmodel.nom_dans_le_jeu`. */
+  /** Miroir de `cheminJeu(modele)` — le chemin que `Resources.Load` reçoit. */
   prefabPath: string;
   typeOfPlateau: TypePlateau;
   updated: string;

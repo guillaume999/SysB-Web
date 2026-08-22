@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   CHAMPS_SECTION,
+  DOSSIERS_CONNUS,
   PREFABS_CONNUS,
   RACINE_PREFABS,
+  avertissementsDe,
+  cheminJeuDe,
   sectionsConnues,
   typeDepuisChemin,
   type ChampSection,
@@ -10,10 +13,12 @@ import {
 } from "@/lib/modeles3d";
 
 export interface SoumissionModele3D {
-  nom_dans_le_jeu: string;
+  nom_prefab: string;
+  chemin_prefab: string;
   section: string;
   section2: string;
   section3: string;
+  section4: string;
 }
 
 /** Libellés des trois champs de section, dans l'ordre de `CHAMPS_SECTION`. */
@@ -21,16 +26,17 @@ const LIBELLES_SECTION: Record<ChampSection, string> = {
   section: "Section",
   section2: "Section 2",
   section3: "Section 3",
+  section4: "Section 4",
 };
 
 /**
  * Création / modification d'une entrée 3DmodelTuile.
  *
- * Le champ décisif est `nom_dans_le_jeu` : c'est lui, et lui seul, que le jeu
- * utilise pour retrouver le prefab. Il est donc laissé **libre** (un prefab
- * ajouté dans Unity ne doit pas attendre une mise à jour du site pour être
- * référençable), mais assisté par la liste des prefabs connus et par des
- * avertissements sur les erreurs de saisie classiques.
+ * Les deux champs décisifs sont `chemin_prefab` et `nom_prefab` : c'est leur
+ * concaténation, et elle seule, que le jeu utilise pour retrouver le prefab. Ils
+ * sont laissés **libres** (un prefab ajouté dans Unity ne doit pas attendre une
+ * mise à jour du site pour être référençable), mais assistés par la liste des
+ * prefabs connus et par des avertissements sur les erreurs de saisie classiques.
  */
 export default function Modele3DDialog({
   modele,
@@ -49,12 +55,14 @@ export default function Modele3DDialog({
 }) {
   const enEdition = modele !== null;
 
-  const [nomJeu, setNomJeu] = useState(modele?.nom_dans_le_jeu ?? "");
+  const [nomPrefab, setNomPrefab] = useState(modele?.nom_prefab ?? "");
+  const [cheminPrefab, setCheminPrefab] = useState(modele?.chemin_prefab ?? "");
   // Les trois sections vivent dans un seul état : elles se comportent à l'identique.
   const [sections, setSections] = useState<Record<ChampSection, string>>({
     section: modele?.section ?? "",
     section2: modele?.section2 ?? "",
     section3: modele?.section3 ?? "",
+    section4: modele?.section4 ?? "",
   });
 
   useEffect(() => {
@@ -64,38 +72,47 @@ export default function Modele3DDialog({
     return () => window.removeEventListener("keydown", onKey);
   }, [onCancel]);
 
-  const chemin = nomJeu.trim();
+  const nom = nomPrefab.trim();
+  const chemin = cheminPrefab.trim();
   const type = typeDepuisChemin(chemin);
+  const cheminComplet = cheminJeuDe(chemin, nom);
+
+  /**
+   * Le dossier suit le prefab choisi tant que l'admin ne l'a pas rempli lui-même :
+   * taper « VERT_BLE » dans la liste doit poser son dossier tout seul.
+   */
+  const [cheminTouche, setCheminTouche] = useState(enEdition);
+  useEffect(() => {
+    if (cheminTouche || nom === "") return;
+    const connu = PREFABS_CONNUS.find((p) => p.nom === nom);
+    if (connu) setCheminPrefab(connu.chemin);
+  }, [nom, cheminTouche]);
 
   const doublon = useMemo(
-    () => modeles.find((m) => m.nom_dans_le_jeu === chemin && m.id !== modele?.id) ?? null,
-    [modeles, chemin, modele?.id],
+    () =>
+      modeles.find(
+        (m) => m.nom_prefab === nom && (m.chemin_prefab ?? "").trim() === chemin && m.id !== modele?.id,
+      ) ?? null,
+    [modeles, nom, chemin, modele?.id],
   );
 
-  const remarques = useMemo(() => {
-    const liste: string[] = [];
-    if (chemin === "") return liste;
-    if (/\.(prefab|fbx|blend)$/i.test(chemin))
-      liste.push("Retire l'extension : le jeu charge « Prefabs/…/VERT_BLE », pas « VERT_BLE.prefab ».");
-    if (chemin.startsWith("Assets/") || chemin.includes("Resources/"))
-      liste.push("Le chemin est relatif au dossier Resources/ : il commence à « Prefabs/ ».");
-    if (!type)
-      liste.push(`Chemin inhabituel : les prefabs du jeu vivent sous « ${RACINE_PREFABS}/Ground » ou « /Space ».`);
-    if (!PREFABS_CONNUS.includes(chemin))
-      liste.push("Ce prefab ne fait pas partie de ceux relevés dans le projet — à vérifier dans Unity.");
-    return liste;
-  }, [chemin, type]);
+  const remarques = useMemo(
+    () => (nom === "" && chemin === "" ? [] : avertissementsDe(chemin, nom)),
+    [chemin, nom],
+  );
 
-  const bloque = saving || chemin === "" || doublon !== null;
+  const bloque = saving || nom === "" || doublon !== null;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (bloque) return;
     onSubmit({
-      nom_dans_le_jeu: chemin,
+      nom_prefab: nom,
+      chemin_prefab: chemin,
       section: sections.section.trim(),
       section2: sections.section2.trim(),
       section3: sections.section3.trim(),
+      section4: sections.section4.trim(),
     });
   };
 
@@ -111,39 +128,76 @@ export default function Modele3DDialog({
         </p>
 
         <div className="mt-5 space-y-4">
-          <div>
-            <label className="label" htmlFor="m3d-nom-jeu">
-              nom_dans_le_jeu
-            </label>
-            <input
-              id="m3d-nom-jeu"
-              className="input font-mono text-xs"
-              list="prefabs-connus"
-              value={nomJeu}
-              onChange={(e) => setNomJeu(e.target.value)}
-              placeholder="Prefabs/Empire/Earth/Ground/VERT_BLE"
-              autoFocus
-              required
-            />
-            <datalist id="prefabs-connus">
-              {PREFABS_CONNUS.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
-            <p className="mt-1 text-xs text-slate-500">
-              Chemin du prefab sous <code className="text-slate-400">Assets/Resources/</code>, sans
-              extension. C'est ce que <code className="text-slate-400">Resources.Load</code> reçoit.
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="m3d-nom-prefab">
+                nom_prefab
+              </label>
+              <input
+                id="m3d-nom-prefab"
+                className="input font-mono text-xs"
+                list="prefabs-connus"
+                value={nomPrefab}
+                onChange={(e) => setNomPrefab(e.target.value)}
+                placeholder="VERT_BLE"
+                autoFocus
+                required
+              />
+              <datalist id="prefabs-connus">
+                {PREFABS_CONNUS.map((p) => (
+                  <option key={`${p.chemin}/${p.nom}`} value={p.nom}>
+                    {p.chemin}
+                  </option>
+                ))}
+              </datalist>
+              <p className="mt-1 text-xs text-slate-500">Le fichier, sans extension.</p>
+            </div>
+
+            <div>
+              <label className="label" htmlFor="m3d-chemin-prefab">
+                chemin_prefab
+              </label>
+              <input
+                id="m3d-chemin-prefab"
+                className="input font-mono text-xs"
+                list="dossiers-connus"
+                value={cheminPrefab}
+                onChange={(e) => {
+                  setCheminTouche(true);
+                  setCheminPrefab(e.target.value);
+                }}
+                placeholder="Empire/Earth/Ground"
+              />
+              <datalist id="dossiers-connus">
+                {DOSSIERS_CONNUS.map((d) => (
+                  <option key={d} value={d} />
+                ))}
+              </datalist>
+              <p className="mt-1 text-xs text-slate-500">
+                Le dossier, à partir de{" "}
+                <code className="text-slate-400">Assets/Resources/{RACINE_PREFABS}/</code>.
+              </p>
+            </div>
+          </div>
+
+          {/* Ce que le jeu recevra réellement — la seule chose qui compte au runtime. */}
+          <div className="rounded border border-edge bg-ink/60 px-3 py-2">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              Resources.Load
+            </p>
+            <p className="mt-0.5 break-all font-mono text-xs text-slate-300">
+              {cheminComplet || <span className="text-slate-600">—</span>}
               {type && (
-                <>
-                  {" "}Dossier <span className="uppercase text-slate-400">{type}</span>.
-                </>
+                <span className="ml-2 rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
+                  {type}
+                </span>
               )}
             </p>
           </div>
 
           <div>
             <p className="label mb-2">Sections</p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {CHAMPS_SECTION.map((champ) => (
                 <div key={champ}>
                   <input
@@ -165,7 +219,7 @@ export default function Modele3DDialog({
               ))}
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              Toutes facultatives — trois libellés de classement libres, à remplir dans l'ordre ou pas.
+              Toutes facultatives — quatre libellés de classement libres, à remplir dans l'ordre ou pas.
             </p>
           </div>
         </div>

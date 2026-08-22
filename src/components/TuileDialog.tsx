@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { libelle, typeDepuisChemin, type Modele3D, type TypePlateau } from "@/lib/modeles3d";
+import { cheminJeu, libelle, typeDepuisChemin, type Modele3D, type TypePlateau } from "@/lib/modeles3d";
 import { TILE_ID_MAX, TILE_ID_MIN, prochainTileIdLibre, type Tuile } from "@/lib/tuiles";
 
 export interface ValeursTuile {
@@ -37,11 +37,11 @@ export default function TuileDialog({
 }) {
   const enEdition = tuile !== null;
 
-  const [prefabPath, setPrefabPath] = useState(tuile?.prefabPath ?? modeleInitial?.nom_dans_le_jeu ?? "");
+  const [prefabPath, setPrefabPath] = useState(tuile?.prefabPath ?? (modeleInitial ? cheminJeu(modeleInitial) : ""));
   const [nom, setNom] = useState(tuile?.nom ?? (modeleInitial ? libelle(modeleInitial) : ""));
   const [type, setType] = useState<TypePlateau>(
     tuile?.typeOfPlateau ??
-      (modeleInitial ? typeDepuisChemin(modeleInitial.nom_dans_le_jeu) || "ground" : "ground"),
+      (modeleInitial ? typeDepuisChemin(modeleInitial.chemin_prefab ?? "") || "ground" : "ground"),
   );
   const [tileId, setTileId] = useState<string>(
     String(tuile?.tileId ?? prochainTileIdLibre(tuiles) ?? TILE_ID_MIN),
@@ -55,7 +55,7 @@ export default function TuileDialog({
   }, [onCancel]);
 
   const modele = useMemo(
-    () => modeles.find((m) => m.nom_dans_le_jeu === prefabPath) ?? null,
+    () => modeles.find((m) => cheminJeu(m) === prefabPath) ?? null,
     [modeles, prefabPath],
   );
 
@@ -113,8 +113,8 @@ export default function TuileDialog({
               >
                 {prefabPath === "" && <option value="">— choisir un modèle —</option>}
                 {modeles.map((m) => (
-                  <option key={m.id} value={m.nom_dans_le_jeu}>
-                    {libelle(m)} ({m.nom_dans_le_jeu})
+                  <option key={m.id} value={cheminJeu(m)}>
+                    {libelle(m)} ({cheminJeu(m)})
                   </option>
                 ))}
               </select>

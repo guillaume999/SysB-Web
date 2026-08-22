@@ -7,14 +7,26 @@ import {
   COLLECTION_MODELES_3D,
   RACINE_PREFABS,
   avertissements,
-  sectionsDe,
+  cheminJeu,
+  loadModeles3D,
+  sectionsConnues,
   typeDepuisChemin,
+  type ChampSection,
   type Modele3D,
-  type TypePlateau,
 } from "@/lib/modeles3d";
 import { loadTuiles, tuilesParPrefab, type Tuile } from "@/lib/tuiles";
 
-type Filtre = "tous" | TypePlateau;
+/**
+ * Valeur de filtre spéciale : ne garder que les modèles dont cette section est vide.
+ * Commence par un espace pour ne jamais entrer en collision avec une valeur saisie,
+ * qui est toujours trimée avant enregistrement.
+ */
+const VIDE = " vide";
+
+/** `""` = pas de filtre sur cette section. */
+type Filtres = Record<ChampSection, string>;
+
+const AUCUN_FILTRE: Filtres = { section: "", section2: "", section3: "", section4: "" };
 
 /**
  * Onglet 3DmodelTuile — l'inventaire des modèles 3D du jeu.
@@ -23,8 +35,8 @@ type Filtre = "tous" | TypePlateau;
  * La seconde moitié, le catalogue de tuiles, ajoute les règles du jeu par-dessus
  * (voir l'onglet Tuiles).
  *
- * Depuis le 2026-08-22 un modèle n'est plus qu'un chemin plus trois sections :
- * une table dit ça mieux qu'une grille de cartes.
+ * Le tri se fait par les quatre sections, chacune avec sa propre liste de valeurs
+ * existantes : c'est le classement que l'admin s'est donné, pas une taxonomie imposée.
  */
 export default function Modeles3D() {
   const [modeles, setModeles] = useState<Modele3D[]>([]);
@@ -32,8 +44,7 @@ export default function Modeles3D() {
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
-  const [filtre, setFiltre] = useState<Filtre>("tous");
-  const [recherche, setRecherche] = useState("");
+  const [filtres, setFiltres] = useState<Filtres>(AUCUN_FILTRE);
 
   const [dialog, setDialog] = useState<{ modele: Modele3D | null } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -47,10 +58,7 @@ export default function Modeles3D() {
     try {
       // Le catalogue n'est pas indispensable à cet écran : s'il échoue, on
       // affiche quand même les modèles plutôt que de tout bloquer.
-      const [m, t] = await Promise.all([
-        pb.collection(COLLECTION_MODELES_3D).getFullList<Modele3D>({ sort: "nom_dans_le_jeu" }),
-        loadTuiles().catch(() => [] as Tuile[]),
-      ]);
+      const [m, t] = await Promise.all([loadModeles3D(), loadTuiles().catch(() => [] as Tuile[])]);
       setModeles(m);
       setTuiles(t);
     } catch (e) {
@@ -66,15 +74,36 @@ export default function Modeles3D() {
 
   const parPrefab = useMemo(() => tuilesParPrefab(tuiles), [tuiles]);
 
-  const visibles = useMemo(() => {
-    const terme = recherche.trim().toLowerCase();
-    return modeles.filter((m) => {
-      // Le type n'est plus un champ : il se lit dans le dossier du prefab.
-      if (filtre !== "tous" && typeDepuisChemin(m.nom_dans_le_jeu) !== filtre) return false;
-      if (terme === "") return true;
-      return `${m.nom_dans_le_jeu} ${sectionsDe(m).join(" ")}`.toLowerCase().includes(terme);
-    });
-  }, [modeles, filtre, recherche]);
+  /**
+   * Options de chaque liste : les valeurs réellement saisies dans *cette* colonne.
+   * Calculées sur l'ensemble des modèles, pas sur le résultat filtré — sinon choisir
+   * une valeur ferait disparaître les autres et on ne pourrait plus changer d'avis.
+   */
+  const options = useMemo(() => {
+    const par = {} as Record<ChampSection, { valeurs: string[]; vides: number }>;
+    for (const champ of CHAMPS_SECTION) {
+      par[champ] = {
+        valeurs: sectionsConnues(modeles, champ),
+        vides: modeles.filter((m) => !m[champ]?.trim()).length,
+      };
+    }
+    return par;
+  }, [modeles]);
+
+  const visibles = useMemo(
+    () =>
+      modeles.filter((m) =>
+        CHAMPS_SECTION.every((champ) => {
+          const choix = filtres[champ];
+          if (choix === "") return true;
+          const valeur = m[champ]?.trim() ?? "";
+          return choix === VIDE ? valeur === "" : valeur === choix;
+        }),
+      ),
+    [modeles, filtres],
+  );
+
+  const filtresActifs = CHAMPS_SECTION.filter((c) => filtres[c] !== "").length;
 
   const enregistrer = async (valeurs: SoumissionModele3D) => {
     if (!dialog) return;
@@ -102,6 +131,9 @@ export default function Modeles3D() {
     }
   };
 
+  /** nom + chemin + type + sections + tuiles + actions */
+  const nbColonnes = 5 + CHAMPS_SECTION.length;
+
   return (
     <div>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -109,8 +141,9 @@ export default function Modeles3D() {
           <h1 className="text-xl font-semibold text-white">3DmodelTuile</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Le lien entre les prefabs du jeu et le site. Une entrée = un modèle 3D présent dans{" "}
-            <code className="text-slate-400">Assets/Resources/{RACINE_PREFABS}/…</code>. Aucune règle de
-            jeu ici : les coûts, productions et conditions se posent sur les{" "}
+            <code className="text-slate-400">Assets/Resources/{RACINE_PREFABS}/…</code>, décrit en deux
+            morceaux : le nom du fichier et son dossier. Aucune règle de jeu ici : les coûts,
+            productions et conditions se posent sur les{" "}
             <Link to="/tuiles" className="text-accent hover:underline">
               tuiles du catalogue
             </Link>
@@ -139,30 +172,46 @@ export default function Modeles3D() {
         </p>
       )}
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Modèles déclarés ({modeles.length})
-        </h2>
-        <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden rounded-md border border-edge">
-            {(["tous", "ground", "space"] as Filtre[]).map((valeur) => (
-              <button
-                key={valeur}
-                onClick={() => setFiltre(valeur)}
-                className={`px-3 py-1.5 text-xs transition-colors ${
-                  filtre === valeur ? "bg-accent/20 text-white" : "text-slate-400 hover:bg-ink"
-                }`}
+      {/* Filtres : une liste par section, alimentée par ce qui a été saisi dans cette colonne. */}
+      <div className="card mb-4 p-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {CHAMPS_SECTION.map((champ) => (
+            <div key={champ}>
+              <label className="label" htmlFor={`filtre-${champ}`}>
+                {champ}
+              </label>
+              <select
+                id={`filtre-${champ}`}
+                className="input"
+                value={filtres[champ]}
+                onChange={(e) => setFiltres((f) => ({ ...f, [champ]: e.target.value }))}
               >
-                {valeur}
-              </button>
-            ))}
-          </div>
-          <input
-            className="input w-44"
-            placeholder="Filtrer…"
-            value={recherche}
-            onChange={(e) => setRecherche(e.target.value)}
-          />
+                <option value="">Toutes ({modeles.length})</option>
+                {options[champ]?.valeurs.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+                {(options[champ]?.vides ?? 0) > 0 && (
+                  <option value={VIDE}>non renseignée ({options[champ].vides})</option>
+                )}
+              </select>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+          <span>
+            {visibles.length} modèle{visibles.length > 1 ? "s" : ""} sur {modeles.length}
+          </span>
+          {filtresActifs > 0 && (
+            <button
+              className="text-slate-400 hover:text-white"
+              onClick={() => setFiltres(AUCUN_FILTRE)}
+            >
+              Réinitialiser les filtres
+            </button>
+          )}
         </div>
       </div>
 
@@ -171,10 +220,11 @@ export default function Modeles3D() {
           <p className="font-medium text-slate-200">Aucun modèle déclaré.</p>
           <p className="mt-2 max-w-2xl">
             Ouvre le projet Unity, regarde ce qu'il y a dans{" "}
-            <code className="text-slate-300">Assets/Resources/{RACINE_PREFABS}/Ground</code> et{" "}
-            <code className="text-slate-300">/Space</code>, et déclare ici un modèle par prefab que tu
-            veux rendre utilisable. Le champ{" "}
-            <code className="text-slate-300">nom_dans_le_jeu</code> doit reprendre le chemin exactement.
+            <code className="text-slate-300">Assets/Resources/{RACINE_PREFABS}/Empire/Earth/Ground</code>{" "}
+            et <code className="text-slate-300">/Space</code>, et déclare ici un modèle par prefab que tu
+            veux rendre utilisable. <code className="text-slate-300">nom_prefab</code> et{" "}
+            <code className="text-slate-300">chemin_prefab</code> doivent reprendre le nom et le dossier
+            exactement.
           </p>
         </div>
       ) : (
@@ -182,8 +232,9 @@ export default function Modeles3D() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
-                <th className="px-3 py-2 font-medium">nom_dans_le_jeu</th>
-                <th className="w-20 px-3 py-2 font-medium">dossier</th>
+                <th className="px-3 py-2 font-medium">nom_prefab</th>
+                <th className="px-3 py-2 font-medium">chemin_prefab</th>
+                <th className="w-20 px-3 py-2 font-medium">type</th>
                 {CHAMPS_SECTION.map((champ) => (
                   <th key={champ} className="px-3 py-2 font-medium">
                     {champ}
@@ -196,7 +247,7 @@ export default function Modeles3D() {
             <tbody>
               {chargement && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={nbColonnes} className="px-3 py-6 text-center text-slate-500">
                     Chargement…
                   </td>
                 </tr>
@@ -204,25 +255,33 @@ export default function Modeles3D() {
 
               {!chargement && visibles.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
-                    Aucun modèle ne correspond au filtre.
+                  <td colSpan={nbColonnes} className="px-3 py-6 text-center text-slate-500">
+                    Aucun modèle ne correspond aux filtres.
                   </td>
                 </tr>
               )}
 
               {!chargement &&
                 visibles.map((modele) => {
-                  const usages = parPrefab.get(modele.nom_dans_le_jeu) ?? [];
+                  const usages = parPrefab.get(cheminJeu(modele)) ?? [];
                   const alertes = avertissements(modele);
-                  const type = typeDepuisChemin(modele.nom_dans_le_jeu);
+                  const type = typeDepuisChemin(modele.chemin_prefab ?? "");
                   const confirme = aSupprimer === modele.id;
                   return (
-                    <tr key={modele.id} className="border-b border-edge/60 last:border-0 align-top hover:bg-ink/40">
+                    <tr
+                      key={modele.id}
+                      className="border-b border-edge/60 align-top last:border-0 hover:bg-ink/40"
+                    >
                       <td className="px-3 py-2">
-                        <span className="font-mono text-xs text-slate-200">{modele.nom_dans_le_jeu}</span>
+                        <span className="font-mono text-xs text-slate-200">{modele.nom_prefab}</span>
                         {alertes.length > 0 && (
                           <p className="mt-1 text-[10px] leading-tight text-amber-300">{alertes[0]}</p>
                         )}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="font-mono text-xs text-slate-400">
+                          {modele.chemin_prefab?.trim() || <span className="text-slate-600">—</span>}
+                        </span>
                       </td>
                       <td className="px-3 py-2">
                         <span className="rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
@@ -241,7 +300,7 @@ export default function Modeles3D() {
                         {confirme ? (
                           <div className="inline-flex flex-col items-end gap-1">
                             <span className="text-[11px] leading-tight text-red-300">
-                              Supprimer&nbsp;?
+                              Supprimer ?
                               {usages.length > 0 &&
                                 ` ${usages.length} tuile${usages.length > 1 ? "s" : ""} pointe${
                                   usages.length > 1 ? "nt" : ""

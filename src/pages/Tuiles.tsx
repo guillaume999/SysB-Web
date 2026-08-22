@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import TuileDialog, { type ValeursTuile } from "@/components/TuileDialog";
 import { messageErreur, pb } from "@/lib/pb";
 import {
+  cheminJeu,
   libelle,
   loadModeles3D,
   typeDepuisChemin,
@@ -49,7 +50,7 @@ export default function Tuiles() {
 
   const parPrefab = useMemo(() => tuilesParPrefab(tuiles), [tuiles]);
   const modeleParPrefab = useMemo(
-    () => new Map(modeles.map((m) => [m.nom_dans_le_jeu, m])),
+    () => new Map(modeles.map((m) => [cheminJeu(m), m])),
     [modeles],
   );
 
@@ -57,10 +58,10 @@ export default function Tuiles() {
     const terme = recherche.trim().toLowerCase();
     return modeles.filter((m) => {
       // Le type d'un modèle n'est plus un champ : il se lit dans le dossier du prefab.
-      const type = typeDepuisChemin(m.nom_dans_le_jeu);
+      const type = typeDepuisChemin(m.chemin_prefab ?? "");
       if (filtre !== "tous" && type && type !== filtre) return false;
       if (terme === "") return true;
-      return `${libelle(m)} ${m.nom_dans_le_jeu}`.toLowerCase().includes(terme);
+      return `${libelle(m)} ${cheminJeu(m)}`.toLowerCase().includes(terme);
     });
   }, [modeles, filtre, recherche]);
 
@@ -160,8 +161,8 @@ export default function Tuiles() {
         {!chargement && modeles.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {modelesVisibles.map((modele) => {
-              const usages = parPrefab.get(modele.nom_dans_le_jeu) ?? [];
-              const type = typeDepuisChemin(modele.nom_dans_le_jeu);
+              const usages = parPrefab.get(cheminJeu(modele)) ?? [];
+              const type = typeDepuisChemin(modele.chemin_prefab ?? "");
               return (
                 <div key={modele.id} className="card flex flex-col overflow-hidden">
                   <div className="flex flex-1 flex-col gap-1 p-3">
@@ -175,8 +176,8 @@ export default function Tuiles() {
                         </span>
                       )}
                     </div>
-                    <p className="truncate font-mono text-[11px] text-slate-500" title={modele.nom_dans_le_jeu}>
-                      {modele.nom_dans_le_jeu}
+                    <p className="truncate font-mono text-[11px] text-slate-500" title={cheminJeu(modele)}>
+                      {cheminJeu(modele)}
                     </p>
                     <p className="mt-1 text-xs text-slate-500">
                       {usages.length === 0
