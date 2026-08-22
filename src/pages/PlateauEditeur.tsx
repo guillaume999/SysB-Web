@@ -24,8 +24,15 @@ import {
 } from "@/lib/plateaux";
 import { loadTuiles, type Tuile } from "@/lib/tuiles";
 
-/** Au-delà, le SVG rame et le plateau devient injouable sur mobile de toute façon. */
-const SEUIL_GRANDE_GRILLE = 2500;
+/** Au-delà, le SVG commence à ramer, et le plateau devient difficile à jouer sur mobile. */
+const SEUIL_LENT = 2500;
+
+/**
+ * Au-delà, on ne dessine plus tout seul : un élément SVG par case, à ce
+ * nombre-là, fige l'onglet plusieurs secondes. Le cadre reste modifiable, et un
+ * bouton permet d'afficher quand même en connaissance de cause.
+ */
+const SEUIL_LOURD = 8000;
 
 /**
  * Éditeur d'un plateau : le cadre, la grille, et les états.
@@ -38,9 +45,11 @@ const SEUIL_GRANDE_GRILLE = 2500;
  * question d'écrire en base à chaque case. La sauvegarde est explicite, et un
  * indicateur dit ce qui n'est pas encore enregistré.
  */
-export default function PlateauEditeur() {
-  const { source, id } = useParams<{ source: SourcePlateau; id: string }>();
-  const collection = source === COLLECTION_PLATEAUX ? COLLECTION_PLATEAUX : COLLECTION_TEMPLATES;
+export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
+  const { id } = useParams<{ id: string }>();
+  const collection = source;
+  const estModele = collection === COLLECTION_TEMPLATES;
+  const retour = estModele ? "/modeles" : "/plateaux";
 
   const [plateau, setPlateau] = useState<Plateau | null>(null);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
@@ -62,6 +71,8 @@ export default function PlateauEditeur() {
   const [mode, setMode] = useState<"peindre" | "inspecter">("peindre");
   const [selection, setSelection] = useState<{ x: number; z: number } | null>(null);
 
+  /** L'admin a demandé le rendu d'une grille au-delà du seuil lourd. */
+  const [forcerRendu, setForcerRendu] = useState(false);
   const [modifie, setModifie] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -164,7 +175,7 @@ export default function PlateauEditeur() {
         tilesBase64: encoderTiles(octets),
         etats: propres,
       };
-      if (collection === COLLECTION_TEMPLATES) corps.actif = actif;
+      if (estModele) corps.actif = actif;
       await pb.collection(collection).update(plateau.id, corps);
       setEtats(propres);
       setModifie(false);
@@ -187,7 +198,10 @@ export default function PlateauEditeur() {
         <p className="rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
           {erreur ?? "Plateau introuvable."}
         </p>
-        <Link to="/plateaux" className="mt-3 inline-block text-sm text-accent hover:underline">
+        <Link
+          to={source === COLLECTION_TEMPLATES ? "/modeles" : "/plateaux"}
+          className="mt-3 inline-block text-sm text-accent hover:underline"
+        >
           Retour à la liste
         </Link>
       </div>
@@ -200,15 +214,13 @@ export default function PlateauEditeur() {
     <div>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link to="/plateaux" className="text-xs text-slate-500 hover:text-white">
-            ← Plateaux
+          <Link to={retour} className="text-xs text-slate-500 hover:text-white">
+            ← {estModele ? "Modèles" : "Plateaux des joueurs"}
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-white">
             {nom || "(sans nom)"}
             <span className="ml-2 text-sm font-normal text-slate-500">
-              {collection === COLLECTION_TEMPLATES
-                ? "modèle"
-                : `plateau de ${libelleProprietaire(plateau)}`}
+              {estModele ? "modèle" : `plateau de ${libelleProprietaire(plateau)}`}
             </span>
           </h1>
         </div>
@@ -299,7 +311,7 @@ export default function PlateauEditeur() {
             {occupees} case{occupees > 1 ? "s" : ""} occupée{occupees > 1 ? "s" : ""} sur {cases} ·{" "}
             {etats.length} état{etats.length > 1 ? "s" : ""}
           </span>
-          {collection === COLLECTION_TEMPLATES && (
+          {estModele && (
             <label className="flex items-center gap-2 text-slate-400">
               <input
                 type="checkbox"
@@ -348,7 +360,23 @@ export default function PlateauEditeur() {
       <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
         {/* ── La grille ───────────────────────────────────────────────────── */}
         <div className="card overflow-hidden p-3">
-          {cases > SEUIL_GRANDE_GRILLE && (
+          {cases > SEUIL_LOURD && !forcerRendu ? (
+            <div className="p-4 text-sm text-slate-400">
+              <p className="font-medium text-slate-200">
+                {cases.toLocaleString("fr-FR")} cases — grille non affichée.
+              </p>
+              <p className="mt-2 max-w-xl">
+                Une case = un élément dessiné : à ce nombre-là, l'affichage fige l'onglet plusieurs
+                secondes à chaque coup de pinceau. Le cadre reste modifiable au-dessus — réduis la
+                taille, ou affiche quand même si tu sais ce que tu fais.
+              </p>
+              <button className="btn-ghost mt-3" onClick={() => setForcerRendu(true)}>
+                Afficher quand même
+              </button>
+            </div>
+          ) : (
+            <>
+          {cases > SEUIL_LENT && (
             <p className="mb-2 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
               {cases} cases : l'affichage peut devenir lent, et un plateau de cette taille est déjà
               difficile à jouer sur mobile.
@@ -370,6 +398,8 @@ export default function PlateauEditeur() {
             onPeindre={mode === "peindre" ? peindre : null}
             onSelectionner={(x, z) => setSelection({ x, z })}
           />
+            </>
+          )}
         </div>
 
         {/* ── Palette et case sélectionnée ────────────────────────────────── */}

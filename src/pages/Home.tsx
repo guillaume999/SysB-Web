@@ -42,9 +42,9 @@ export default function Home() {
       },
       {
         cle: "templates",
-        to: "/plateaux",
+        to: "/modeles",
         collection: "templates",
-        label: "Modèles de plateau",
+        label: "Modèles",
         hint: "Le terrain de départ, copié pour chaque joueur à sa première venue.",
       },
       {
