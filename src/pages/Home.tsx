@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { pb, PB_URL } from "@/lib/pb";
 import { useAuth } from "@/lib/auth";
-import { COLLECTIONS } from "@/lib/schema";
 
 interface Carte {
   cle: string;
@@ -41,13 +40,6 @@ export default function Home() {
         label: "Tuiles",
         hint: "Le catalogue jouable : un modèle 3D plus ses règles de jeu.",
       },
-      ...COLLECTIONS.map((c) => ({
-        cle: c.id,
-        to: `/c/${c.name}`,
-        collection: c.name,
-        label: c.label,
-        hint: c.hint,
-      })),
     ],
     [],
   );

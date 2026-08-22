@@ -1,16 +1,15 @@
 import { NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { PB_URL } from "@/lib/pb";
-import { COLLECTIONS } from "@/lib/schema";
 import type { ReactNode } from "react";
 
 /**
- * Écrans dédiés, qui ne sont pas de simples tableaux de collection.
- * Ils sont listés à part parce qu'ils composent plusieurs collections
- * (« Tuiles » croise `tuile3dmodel` et `tuiles`).
+ * Les écrans du site. L'ordre suit la chaîne de fabrication : on déclare un
+ * modèle 3D, on nomme les ressources, puis on en fait des tuiles jouables.
  *
- * L'ordre suit la chaîne de fabrication : on déclare un modèle 3D, puis on en
- * fait des tuiles jouables.
+ * Il n'y a plus d'écran générique piloté par un schéma : chaque collection a le
+ * sien, taillé pour son contenu. Le schéma en dur et les écrans `CollectionPage`
+ * / `RecordForm` / `JsonField` ont été retirés le 2026-08-22.
  */
 const PAGES = [
   { to: "/3dmodeltuile", label: "3DmodelTuile" },
@@ -48,21 +47,6 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </div>
 
-          {/* Masqué tant qu'aucune collection générique n'est déclarée. */}
-          {COLLECTIONS.length > 0 && (
-            <>
-              <p className="px-3 pb-1 pt-4 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                Collections
-              </p>
-              <div className="space-y-0.5">
-                {COLLECTIONS.map((collection) => (
-                  <NavLink key={collection.id} to={`/c/${collection.name}`} className={lienClasses}>
-                    {collection.label}
-                  </NavLink>
-                ))}
-              </div>
-            </>
-          )}
         </nav>
 
         <div className="border-t border-edge p-3 text-xs">
@@ -93,11 +77,6 @@ export default function Layout({ children }: { children: ReactNode }) {
             {PAGES.map((page) => (
               <option key={page.to} value={page.to}>
                 {page.label}
-              </option>
-            ))}
-            {COLLECTIONS.map((collection) => (
-              <option key={collection.id} value={`/c/${collection.name}`}>
-                {collection.label}
               </option>
             ))}
           </select>

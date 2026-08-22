@@ -1,6 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "@/components/Layout";
-import CollectionPage from "@/pages/CollectionPage";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
@@ -27,7 +26,6 @@ export default function App() {
         <Route path="/3dmodeltuile" element={<Modeles3D />} />
         <Route path="/tuiles" element={<Tuiles />} />
         <Route path="/ressources" element={<Ressources />} />
-        <Route path="/c/:name" element={<CollectionPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
