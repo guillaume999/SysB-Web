@@ -54,6 +54,13 @@ export default function Home() {
         label: "Plateaux des joueurs",
         hint: "Une copie par joueur et par type, née de son modèle.",
       },
+      {
+        cle: "users",
+        to: "/joueurs",
+        collection: "users",
+        label: "Joueurs",
+        hint: "Les comptes du jeu : pseudo, email, mot de passe oublié.",
+      },
     ],
     [],
   );

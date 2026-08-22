@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "@/components/Layout";
 import Home from "@/pages/Home";
+import Joueurs from "@/pages/Joueurs";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
 import ListePlateaux from "@/pages/ListePlateaux";
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />
         <Route path="/plateaux" element={<ListePlateaux source="plateaux" />} />
         <Route path="/plateaux/:id" element={<PlateauEditeur source="plateaux" />} />
+      <Route path="/joueurs" element={<Joueurs />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

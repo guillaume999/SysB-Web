@@ -17,6 +17,7 @@ const PAGES = [
   { to: "/tuiles", label: "Tuiles" },
   { to: "/modeles", label: "Modèles" },
   { to: "/plateaux", label: "Plateaux joueurs" },
+  { to: "/joueurs", label: "Joueurs" },
 ];
 
 const lienClasses = ({ isActive }: { isActive: boolean }) =>
