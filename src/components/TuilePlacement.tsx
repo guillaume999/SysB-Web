@@ -1,3 +1,4 @@
+import Aide, { Terme } from "@/components/Aide";
 import {
   TYPES_REGLE,
   casesCouvertes,
@@ -56,9 +57,37 @@ export default function TuilePlacement({
         </button>
       </div>
       <p className="mt-0.5 text-[11px] text-slate-500">
-        Toutes les règles doivent être vraies. Les distances sont hexagonales : un rayon r couvre
-        3r(r+1) cases.
+        Toutes les règles doivent être vraies en même temps.
       </p>
+
+      <Aide titre="Les quatre types de règle, et le rayon">
+        <Terme nom="proximité">
+          Il faut au moins <em>N</em> tuiles de l'id choisi à portée. « au moins 2 » avec un rayon
+          de 3 se lit : deux exemplaires ou plus dans les 36 cases autour.
+        </Terme>
+        <Terme nom="exclusion">
+          L'inverse : <strong>aucune</strong> tuile de cet id à portée. C'est ce qui empêche deux
+          bâtiments de se gêner, ou une usine de s'installer contre les habitations.
+        </Terme>
+        <Terme nom="support">
+          Ne regarde pas le voisinage mais <strong>la case elle-même</strong> : elle doit porter
+          l'une des tuiles cochées. Sert à dire « seulement sur du sable ».
+        </Terme>
+        <Terme nom="limite">
+          Nombre maximum d'exemplaires, par plateau ou dans tout l'empire. Pour les bâtiments
+          uniques.
+        </Terme>
+        <Terme nom="rayon">
+          Une distance <strong>hexagonale</strong>, pas un carré : la grille du jeu est en
+          hexagones. <code>0</code> = la case elle-même, et « tout le plateau » veut dire qu'il n'y
+          a pas de limite de distance. Un rayon <em>r</em> couvre 3r(r+1) cases, ce qui monte
+          vite : 6 · 18 · 36 · 60 · 90. Les portées utiles restent donc petites.
+        </Terme>
+        <p className="text-slate-500">
+          Chaque règle se relit en français juste en dessous d'elle : c'est là qu'une saisie
+          malheureuse se voit.
+        </p>
+      </Aide>
 
       {regles.length === 0 ? (
         <p className="mt-1 text-xs text-slate-600">aucune — la tuile se pose n'importe où</p>

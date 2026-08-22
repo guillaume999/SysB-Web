@@ -1,3 +1,4 @@
+import Aide, { Terme } from "@/components/Aide";
 import {
   ROLES_LOGISTIQUE,
   casesCouvertes,
@@ -55,6 +56,34 @@ export default function TuileLogistique({
             "la tuile ne transporte rien"}
         </span>
       </div>
+
+      <Aide titre="Comment circulent les ressources">
+        <p>
+          Un producteur remplit son propre coffre et s'arrête quand il est plein. Ce qui est resté
+          chez lui <strong>n'est pas disponible</strong> pour la population : il faut venir le
+          chercher. C'est le rôle des tuiles ci-dessous.
+        </p>
+        <Terme nom="collecteur">
+          L'entrepôt. Il draine, à son débit, les stocks locaux de tous les producteurs dans son
+          rayon. Ce qui arrive chez lui devient disponible.
+        </Terme>
+        <Terme nom="consommateur">
+          L'habitat. L'inverse : il puise dans les collecteurs à portée.
+        </Terme>
+        <Terme nom="débit">
+          Combien d'unités il déplace à chaque période, tous producteurs confondus. C'est le
+          goulot : un entrepôt trop lent laisse ses fermes saturer.
+        </Terme>
+        <Terme nom="capacité">Ce qu'il peut contenir avant de saturer à son tour.</Terme>
+        <Terme nom="ressources acceptées">
+          Rien de sélectionné = toutes. Sélectionne pour faire un entrepôt spécialisé.
+        </Terme>
+        <p className="text-slate-500">
+          Les navettes visibles en jeu sont une <strong>animation</strong> de ces transferts, pas
+          une simulation de camions. C'est ce qui permet de recalculer huit heures d'absence avec
+          une formule, au lieu de rejouer huit heures de déplacements au lancement.
+        </p>
+      </Aide>
 
       {logistique && (
         <div className="mt-3 space-y-3 rounded border border-edge bg-ink/40 p-3">

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import Aide, { Terme } from "@/components/Aide";
 import TuileLogistique from "@/components/TuileLogistique";
 import TuileNiveaux from "@/components/TuileNiveaux";
 import TuilePlacement from "@/components/TuilePlacement";
@@ -71,6 +72,9 @@ export default function TuileDialog({
   const [categorie, setCategorie] = useState(tuile?.categorie ?? "");
   const [description, setDescription] = useState(tuile?.description ?? "");
   const [actif, setActif] = useState(tuile?.actif ?? false);
+  const [apresDestruction, setApresDestruction] = useState<string>(
+    String(tuile?.tileId_apres_destruction ?? 0),
+  );
 
   const [placement, setPlacement] = useState<ReglePlacement[]>(tuile ? placementDe(tuile) : []);
   const [niveaux, setNiveaux] = useState<Niveau[]>(tuile ? niveauxDe(tuile) : [niveauVide(1)]);
@@ -119,6 +123,7 @@ export default function TuileDialog({
       categorie: categorie.trim(),
       description: description.trim(),
       actif,
+      tileId_apres_destruction: Number(apresDestruction) || 0,
       placement,
       // Renumerotation de securite : la position et le champ `niveau` restent d'accord.
       niveaux: niveaux.map((n, i) => ({ ...n, niveau: i + 1 })),
@@ -157,6 +162,40 @@ export default function TuileDialog({
         <div className="mt-4 min-h-[18rem]">
           {onglet === "identite" && (
             <div className="space-y-4">
+              <Aide titre="A quoi servent ces champs">
+                <Terme nom="tileId">
+                  L'octet ecrit dans le plateau du joueur. C'est par ce nombre que le jeu et les
+                  regles de placement designent la tuile. Il ne se recycle <strong>jamais</strong> :
+                  reattribuer l'id d'une tuile supprimee ferait pointer en silence toutes les regles
+                  qui la citaient vers la nouvelle.
+                </Terme>
+                <Terme nom="modele 3D">
+                  Le prefab a instancier, choisi parmi ceux declares dans l'onglet 3DmodelTuile.
+                  Plusieurs tuiles peuvent viser le meme modele : c'est ce qui permet d'avoir
+                  &laquo; Ferme du nord &raquo; et &laquo; Ferme du sud &raquo; sur la meme
+                  apparence.
+                </Terme>
+                <Terme nom="type de plateau">
+                  Sur quel plateau la tuile existe. Il est devine du dossier du modele, tu peux le
+                  forcer.
+                </Terme>
+                <Terme nom="categorie">
+                  Le regroupement dans le menu de construction du jeu. Texte libre : les tuiles
+                  partageant la meme categorie se retrouvent ensemble.
+                </Terme>
+                <Terme nom="description">L'infobulle montree au joueur.</Terme>
+                <Terme nom="active">
+                  Tant que ce n'est pas coche, la tuile est un brouillon : elle existe en base mais
+                  n'est pas proposee aux joueurs. Utile pour preparer une tuile en plusieurs fois.
+                </Terme>
+                <Terme nom="apres destruction">
+                  Ce que la case redevient quand le joueur detruit cette tuile.
+                  &laquo; case vide &raquo; laisse un trou ; sinon choisis la tuile de repli, en
+                  general le sol d'origine. C'est le <strong>type</strong> qui decide : l'instance
+                  posee sur le plateau ne memorise rien.
+                </Terme>
+              </Aide>
+
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
                   <label className="label" htmlFor="tuile-nom">
@@ -257,6 +296,31 @@ export default function TuileDialog({
                     Regroupement dans le menu de construction.
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="tuile-destruction">
+                  Apres destruction
+                </label>
+                <select
+                  id="tuile-destruction"
+                  className="input"
+                  value={apresDestruction}
+                  onChange={(e) => setApresDestruction(e.target.value)}
+                >
+                  <option value="0">case vide</option>
+                  {tuiles
+                    .filter((t) => t.id !== tuile?.id)
+                    .map((t) => (
+                      <option key={t.id} value={t.tileId}>
+                        #{t.tileId} {t.nom}
+                      </option>
+                    ))}
+                </select>
+                <p className="mt-1 text-xs text-slate-500">
+                  Ce que la case redevient quand le joueur detruit cette tuile. Une seule couche :
+                  c'est le type de tuile qui decide, l'instance ne memorise rien.
+                </p>
               </div>
 
               <div>

@@ -217,6 +217,11 @@ export type Tuile = {
   categorie: string;
   description: string;
   actif: boolean;
+  /**
+   * tileId laisse sur la case quand cette tuile est detruite.
+   * `0` = case vide, la meme convention que dans `tilesBase64`.
+   */
+  tileId_apres_destruction: number;
   placement: ReglePlacement[] | null;
   niveaux: Niveau[] | null;
   logistique: Logistique | null;
@@ -234,6 +239,7 @@ export interface ValeursTuile {
   categorie: string;
   description: string;
   actif: boolean;
+  tileId_apres_destruction: number;
   placement: ReglePlacement[];
   niveaux: Niveau[];
   logistique: Logistique | null;

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import Aide, { Terme } from "@/components/Aide";
 import {
   CHAMPS_SECTION,
   DOSSIERS_CONNUS,
@@ -126,6 +127,25 @@ export default function Modele3DDialog({
           Une entrée 3DmodelTuile ne fait que désigner un prefab du jeu. Les coûts, productions et
           conditions se posent ensuite, sur les tuiles du catalogue.
         </p>
+
+        <Aide titre="A quoi servent ces champs">
+          <Terme nom="nom_prefab">
+            Le nom du fichier prefab dans Unity, sans extension. Doit correspondre exactement :
+            une faute de frappe ne se voit pas ici, elle se voit en jeu sous forme de case vide.
+          </Terme>
+          <Terme nom="chemin_prefab">
+            Le dossier qui contient ce prefab, compte a partir de Assets/Resources/Prefabs/. Le
+            segment &laquo; Prefabs &raquo; n'est pas a retaper.
+          </Terme>
+          <Terme nom="Resources.Load">
+            L'encart gris montre le chemin recompose a partir des deux champs. C'est la seule
+            chaine qui compte au moment ou le jeu charge le modele.
+          </Terme>
+          <Terme nom="sections">
+            Quatre libelles de classement libres, tous facultatifs. Ils ne servent qu'a toi : ce
+            sont les quatre filtres de la liste. Le jeu les ignore.
+          </Terme>
+        </Aide>
 
         <div className="mt-5 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">

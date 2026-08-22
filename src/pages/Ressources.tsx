@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import Aide, { Terme } from "@/components/Aide";
 import { messageErreur, pb } from "@/lib/pb";
 import {
   COLLECTION_RESSOURCES,
@@ -268,6 +269,33 @@ function RessourceDialog({
         <h2 className="text-lg font-semibold text-white">
           {enEdition ? "Modifier la ressource" : "Nouvelle ressource"}
         </h2>
+
+        <Aide titre="A quoi servent ces champs">
+          <Terme nom="code">
+            Ce que le jeu lit, et ce que les couts et productions des tuiles stockent. Il ne se
+            change pas a la legere : les tuiles deja saisies continueraient a citer l'ancien code.
+          </Terme>
+          <Terme nom="nom">Le libelle montre, ici comme en jeu. Modifiable sans risque.</Terme>
+          <Terme nom="genre, stock">
+            S'accumule et se depense : bois, pierre, or, viande. Le cas courant.
+          </Terme>
+          <Terme nom="genre, flux">
+            N'existe qu'en debit et ne s'accumule pas : energie, eau courante. Un bilan, pas un
+            coffre.
+          </Terme>
+          <Terme nom="genre, population">
+            Se mobilise et se libere plutot que se consommer. C'est ce qui permet a un batiment
+            d'occuper des habitants et de les rendre quand il est detruit.
+          </Terme>
+          <Terme nom="ordre d'affichage">
+            L'ordre des listes, ici et dans les formulaires de tuiles. Laisse des trous (10, 20,
+            30) pour pouvoir intercaler plus tard sans tout renumeroter.
+          </Terme>
+          <Terme nom="chemin de la vignette">
+            L'icone en jeu, sous Assets/Resources/. A laisser vide tant que les icones ne sont pas
+            faites.
+          </Terme>
+        </Aide>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div>

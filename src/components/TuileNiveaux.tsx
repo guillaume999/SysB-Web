@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Aide, { Terme } from "@/components/Aide";
 import TuileLignes from "@/components/TuileLignes";
 import {
   TYPES_PREREQUIS,
@@ -101,7 +102,44 @@ export default function TuileNiveaux({
         )}
       </div>
 
-      <div className="space-y-4 rounded border border-edge bg-ink/40 p-3">
+      <Aide titre="Ce que porte un niveau">
+        <Terme nom="niveau 1">
+          Ce que le joueur construit. Les paliers suivants sont les améliorations : chacun a son
+          propre coût et sa propre production, et remplace le précédent.
+        </Terme>
+        <Terme nom="durée de construction">
+          Le temps d'attente avant que le bâtiment devienne actif. 0 = immédiat.
+        </Terme>
+        <Terme nom="coût, consommé">Payé et perdu au moment de construire.</Terme>
+        <Terme nom="coût, occupé">
+          Mobilisé <strong>tant que le bâtiment vit</strong>, et rendu s'il est détruit. C'est le
+          cas normal de la population : trois habitants travaillent ici et ne sont plus disponibles
+          ailleurs. La case à cocher dit si un bâtiment <strong>éteint</strong> les rend aussi.
+        </Terme>
+        <Terme nom="coût, requis">
+          Vérifié mais pas prélevé. « Il faut 100 habitants dans l'empire », sans les dépenser.
+        </Terme>
+        <Terme nom="prérequis">
+          Ce qui n'est pas une ressource : un niveau de joueur, ou une autre tuile déjà posée.
+        </Terme>
+        <Terme nom="production périodique">
+          La quantité produite à chaque période. On écrit « 2 toutes les 120 s » plutôt qu'un taux à
+          virgule : le calcul hors ligne reste en nombres entiers, sans dérive d'arrondi sur douze
+          heures.
+        </Terme>
+        <Terme nom="consommation périodique">
+          Les intrants. Un abattoir consomme du bovin pour produire de la viande ; sans intrant
+          disponible, il ne produit pas.
+        </Terme>
+        <Terme nom="versement immédiat">Versé une seule fois, à la construction.</Terme>
+        <Terme nom="stock local maximum">
+          Le coffre du bâtiment. Une fois plein, <strong>il s'arrête</strong> jusqu'à ce qu'un
+          collecteur vienne le vider — c'est cette pression qui donne une raison d'exister aux
+          entrepôts, et au joueur une raison de revenir. 0 = pas de plafond.
+        </Terme>
+      </Aide>
+
+      <div className="mt-3 space-y-4 rounded border border-edge bg-ink/40 p-3">
         <label className="flex items-center gap-2 text-xs text-slate-500">
           Durée de construction
           <input
