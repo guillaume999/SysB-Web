@@ -8,6 +8,7 @@ import type { Ressource } from "@/lib/ressources";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
+  couleurAuto,
   logistiqueDe,
   niveauVide,
   niveauxDe,
@@ -71,6 +72,7 @@ export default function TuileDialog({
   const [type, setType] = useState<TypePlateau>(tuile?.typeOfPlateau ?? "ground");
   const [categorie, setCategorie] = useState(tuile?.categorie ?? "");
   const [description, setDescription] = useState(tuile?.description ?? "");
+  const [couleur, setCouleur] = useState(tuile?.couleur ?? "");
   const [actif, setActif] = useState(tuile?.actif ?? false);
   const [apresDestruction, setApresDestruction] = useState<string>(
     String(tuile?.tileId_apres_destruction ?? 0),
@@ -110,6 +112,11 @@ export default function TuileDialog({
     !Number.isInteger(idNumerique) || idNumerique < TILE_ID_MIN || idNumerique > TILE_ID_MAX;
   const conflit = tuiles.find((t) => t.tileId === idNumerique && t.id !== tuile?.id) ?? null;
 
+  // Le selecteur de couleur exige toujours un #rrggbb : quand le catalogue ne dit
+  // rien, il montre la couleur automatique, celle que l'editeur utiliserait.
+  const couleurEffective =
+    couleur || couleurAuto(Number.isFinite(idNumerique) ? idNumerique : 0);
+
   const bloque = saving || nom.trim() === "" || modele === "" || idHorsBornes || conflit !== null;
 
   const submit = (event: React.FormEvent) => {
@@ -122,6 +129,7 @@ export default function TuileDialog({
       typeOfPlateau: type,
       categorie: categorie.trim(),
       description: description.trim(),
+      couleur: couleur.trim(),
       actif,
       tileId_apres_destruction: Number(apresDestruction) || 0,
       placement,
@@ -184,6 +192,12 @@ export default function TuileDialog({
                   partageant la meme categorie se retrouvent ensemble.
                 </Terme>
                 <Terme nom="description">L'infobulle montree au joueur.</Terme>
+                <Terme nom="couleur">
+                  La couleur de la tuile sur la grille de l'editeur de plateaux, et rien d'autre :
+                  le jeu affiche le prefab, pas cette couleur. Laisse le champ sur
+                  &laquo; automatique &raquo; et une teinte stable est deduite du tileId ; regle-la
+                  pour rendre lisibles les tuiles que tu peins le plus souvent.
+                </Terme>
                 <Terme nom="active">
                   Tant que ce n'est pas coche, la tuile est un brouillon : elle existe en base mais
                   n'est pas proposee aux joueurs. Utile pour preparer une tuile en plusieurs fois.
@@ -296,6 +310,36 @@ export default function TuileDialog({
                     Regroupement dans le menu de construction.
                   </p>
                 </div>
+              </div>
+
+              {/* La couleur ne sert qu'a l'editeur de plateaux : en jeu, c'est le prefab. */}
+              <div>
+                <p className="label">Couleur sur la grille</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="color"
+                    aria-label="couleur de la tuile"
+                    className="h-9 w-14 cursor-pointer rounded border border-edge bg-ink p-1"
+                    value={couleurEffective}
+                    onChange={(e) => setCouleur(e.target.value)}
+                  />
+                  <code className="text-xs text-slate-400">{couleurEffective}</code>
+                  {couleur ? (
+                    <button
+                      type="button"
+                      className="text-xs text-slate-500 hover:text-white"
+                      onClick={() => setCouleur("")}
+                    >
+                      revenir a l'automatique
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-600">automatique, deduite du tileId</span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Seulement pour l'editeur de plateaux du site : en jeu, c'est le prefab 3D qui est
+                  affiche.
+                </p>
               </div>
 
               <div>

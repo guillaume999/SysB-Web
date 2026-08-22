@@ -6,6 +6,7 @@ import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
 import { loadRessources, libelleRessource, type Ressource } from "@/lib/ressources";
 import {
   COLLECTION_TUILES,
+  couleurDe,
   formatDuree,
   loadTuiles,
   logistiqueDe,
@@ -193,7 +194,15 @@ export default function Tuiles() {
                       className="border-b border-edge/60 align-top last:border-0 hover:bg-ink/40"
                     >
                       <td className="px-3 py-2 font-mono tabular-nums text-slate-300">
-                        {tuile.tileId}
+                        <span className="flex items-center gap-2">
+                          {/* La pastille : la meme couleur que dans l'editeur de plateaux. */}
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-sm border border-edge"
+                            style={{ background: couleurDe(tuile) }}
+                            title={tuile.couleur ? tuile.couleur : "couleur automatique"}
+                          />
+                          {tuile.tileId}
+                        </span>
                       </td>
                       <td className="px-3 py-2">
                         <span className={tuile.actif ? "text-slate-200" : "text-slate-500"}>

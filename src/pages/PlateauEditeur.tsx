@@ -7,6 +7,7 @@ import {
   COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
   TILE_VIDE,
+  casesDansRayon,
   cleCase,
   decoderTiles,
   encoderTiles,
@@ -22,7 +23,7 @@ import {
   type Plateau,
   type SourcePlateau,
 } from "@/lib/plateaux";
-import { loadTuiles, type Tuile } from "@/lib/tuiles";
+import { casesCouvertes, loadTuiles, type Tuile } from "@/lib/tuiles";
 
 /** Au-delà, le SVG commence à ramer, et le plateau devient difficile à jouer sur mobile. */
 const SEUIL_LENT = 2500;
@@ -68,6 +69,8 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   const [etats, setEtats] = useState<EtatCase[]>([]);
 
   const [pinceau, setPinceau] = useState<number>(TILE_VIDE);
+  /** Rayon hexagonal du pinceau : 0 = une case, 1 = sept, 2 = dix-neuf. */
+  const [rayonPinceau, setRayonPinceau] = useState(0);
   const [mode, setMode] = useState<"peindre" | "inspecter">("peindre");
   const [selection, setSelection] = useState<{ x: number; z: number } | null>(null);
 
@@ -126,15 +129,30 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     setModifie(true);
   };
 
+  /**
+   * Peint le disque du pinceau, centré sur la case visée.
+   *
+   * Le disque est **hexagonal**, comme les rayons du jeu : un pinceau de rayon 2
+   * couvre 19 cases, pas les 25 d'un carré. Peindre autrement donnerait à l'admin
+   * une intuition fausse des portées qu'il configure ailleurs.
+   */
   const peindre = (x: number, z: number) => {
-    const i = index(largeur, x, z);
-    if (octets[i] === pinceau) return;
-    const copie = new Uint8Array(octets);
-    copie[i] = pinceau;
+    const cibles = casesDansRayon(x, z, rayonPinceau, largeur, hauteur);
+    let copie: Uint8Array | null = null;
+    const changees = new Set<string>();
+    for (const c of cibles) {
+      const i = index(largeur, c.x, c.z);
+      if (octets[i] === pinceau) continue;
+      if (!copie) copie = new Uint8Array(octets);
+      copie[i] = pinceau;
+      changees.add(cleCase(c.x, c.z));
+    }
+    if (!copie) return;
     setOctets(copie);
     // Repeindre une case change ce qu'elle porte : l'état de l'ancien bâtiment
-    // n'a plus de sens et continuerait à produire pour une tuile disparue.
-    setEtats((e) => e.filter((s) => !(s.x === x && s.z === z)));
+    // n'a plus de sens et continuerait à produire pour une tuile disparue. Seules
+    // les cases réellement changées perdent le leur.
+    setEtats((e) => e.filter((s) => !changees.has(cleCase(s.x, s.z))));
     setModifie(true);
   };
 
@@ -329,7 +347,23 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
         <Aide titre="Ce que fait l'éditeur">
           <Terme nom="peindre">
             Choisis une tuile dans la palette et clique, ou glisse pour peindre plusieurs cases.
-            La gomme remet la case à vide.
+            La gomme remet la case à vide. Une case n'est sélectionnée qu'au clic : survoler la
+            grille ne change plus le panneau de droite.
+          </Terme>
+          <Terme nom="taille du pinceau">
+            1, 7, 19 ou 37 cases — un disque <strong>hexagonal</strong>, exactement ce que couvre
+            un rayon dans les règles du jeu. La zone visée s'éclaircit sous le curseur avant que
+            tu ne cliques. La gomme suit la même taille.
+          </Terme>
+          <Terme nom="zoom">
+            Les boutons − et + agrandissent les cases sans rien changer au plateau, en gardant le
+            centre de la fenêtre au même endroit ; les flèches déplacent la vue.
+            &laquo; Ajuster &raquo; ramène le plateau entier dans la largeur.
+          </Terme>
+          <Terme nom="couleurs">
+            La couleur d'une tuile se règle dans son onglet Identité, au{" "}
+            <Link to="/tuiles" className="underline">catalogue</Link>. Sans réglage, une teinte
+            stable est déduite du tileId.
           </Terme>
           <Terme nom="redimensionner">
             Les cases sont conservées <strong>par coordonnées</strong>, pas par position dans le
@@ -395,6 +429,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             etats={etatsIndex}
             tuiles={tuiles}
             selection={selection}
+            rayonPinceau={rayonPinceau}
             onPeindre={mode === "peindre" ? peindre : null}
             onSelectionner={(x, z) => setSelection({ x, z })}
           />
@@ -413,6 +448,26 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
               >
                 {mode === "peindre" ? "passer en inspection" : "passer en peinture"}
               </button>
+            </div>
+
+            {/* Le disque est hexagonal : 1, 7, 19, 37 cases, pas 1, 9, 25, 49. */}
+            <div className="mb-2 flex items-center gap-1">
+              <span className="mr-1 text-[11px] text-slate-500">Taille</span>
+              {[0, 1, 2, 3].map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  className={`h-7 min-w-[2rem] rounded border border-edge px-1.5 text-[11px] tabular-nums transition-colors ${
+                    rayonPinceau === r
+                      ? "bg-accent/20 text-white"
+                      : "text-slate-400 hover:bg-ink hover:text-white"
+                  }`}
+                  onClick={() => setRayonPinceau(r)}
+                  title={r === 0 ? "une seule case" : `rayon ${r} — ${casesCouvertes(r) + 1} cases`}
+                >
+                  {casesCouvertes(r) + 1}
+                </button>
+              ))}
             </div>
 
             <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
@@ -435,7 +490,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                 >
                   <span
                     className="h-4 w-4 shrink-0 rounded"
-                    style={{ background: couleurTuile(t.tileId) }}
+                    style={{ background: couleurTuile(t.tileId, t) }}
                   />
                   <span className="truncate">
                     #{t.tileId} {t.nom}

@@ -216,6 +216,11 @@ export type Tuile = {
   typeOfPlateau: TypePlateau;
   categorie: string;
   description: string;
+  /**
+   * Couleur de la tuile sur la grille de l'editeur, en `#rrggbb`.
+   * Vide = la couleur automatique deduite du tileId.
+   */
+  couleur: string;
   actif: boolean;
   /**
    * tileId laisse sur la case quand cette tuile est detruite.
@@ -238,6 +243,7 @@ export interface ValeursTuile {
   typeOfPlateau: TypePlateau;
   categorie: string;
   description: string;
+  couleur: string;
   actif: boolean;
   tileId_apres_destruction: number;
   placement: ReglePlacement[];
@@ -354,4 +360,43 @@ export function formatDuree(secondes: number): string {
 /** Nombre de cases couvertes par un rayon sur une grille hexagonale : 3r(r+1). */
 export function casesCouvertes(rayon: number): number {
   return 3 * rayon * (rayon + 1);
+}
+
+// --- Couleurs ---------------------------------------------------------------
+
+/**
+ * Couleur de repli, deduite du `tileId` et de lui seul.
+ *
+ * L'angle d'or en degres repartit les teintes sans jamais retomber juste : deux
+ * tuiles creees a la suite ne se ressemblent pas, et une tuile garde sa couleur
+ * d'une session a l'autre puisqu'un `tileId` n'est jamais recycle.
+ *
+ * Le resultat est en `#rrggbb` plutot qu'en `hsl()` : c'est le seul format
+ * qu'accepte `<input type="color">`, qui doit pouvoir afficher la couleur
+ * effective d'une tuile meme quand le catalogue ne dit rien.
+ */
+export function couleurAuto(tileId: number): string {
+  return hslVersHex((tileId * 137.508) % 360, 0.55, 0.45);
+}
+
+/** Couleur retenue : celle du catalogue si elle est renseignee, sinon l'automatique. */
+export function couleurDe(tuile: { tileId: number; couleur?: string }): string {
+  const choisie = tuile.couleur?.trim();
+  return choisie ? choisie : couleurAuto(tuile.tileId);
+}
+
+/** Vrai pour `#rrggbb` et pour la chaine vide — ce qu'accepte le champ en base. */
+export function couleurValide(valeur: string): boolean {
+  return /^(#[0-9a-fA-F]{6})?$/.test(valeur.trim());
+}
+
+function hslVersHex(h: number, s: number, l: number): string {
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = s * Math.min(l, 1 - l);
+  const canal = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+  const octet = (n: number) =>
+    Math.round(canal(n) * 255)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${octet(0)}${octet(8)}${octet(4)}`;
 }

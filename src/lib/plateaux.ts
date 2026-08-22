@@ -207,6 +207,34 @@ export function distanceHex(x1: number, z1: number, x2: number, z2: number): num
 
 // --- Chargement -------------------------------------------------------------
 
+/**
+ * Les cases du plateau a distance hexagonale <= `rayon`, bord compris.
+ *
+ * Sert au pinceau large comme a son apercu : les deux doivent peindre exactement
+ * la meme chose, et c'est la distance du jeu qui decide, pas un carre de cases.
+ *
+ * La double boucle est bornee genereusement puis filtree au vrai calcul : en
+ * offset odd-r, un rayon `r` peut deborder de `r/2` colonnes de plus qu'on ne le
+ * croit, et une borne trop juste raboterait un cote du disque.
+ */
+export function casesDansRayon(
+  cx: number,
+  cz: number,
+  rayon: number,
+  largeur: number,
+  hauteur: number,
+): { x: number; z: number }[] {
+  if (rayon <= 0) return [{ x: cx, z: cz }];
+  const liste: { x: number; z: number }[] = [];
+  const marge = rayon + Math.ceil(rayon / 2);
+  for (let z = Math.max(0, cz - rayon); z <= Math.min(hauteur - 1, cz + rayon); z++) {
+    for (let x = Math.max(0, cx - marge); x <= Math.min(largeur - 1, cx + marge); x++) {
+      if (distanceHex(cx, cz, x, z) <= rayon) liste.push({ x, z });
+    }
+  }
+  return liste;
+}
+
 export function loadTemplates(): Promise<Plateau[]> {
   return pb.collection(COLLECTION_TEMPLATES).getFullList<Plateau>({ sort: "typeOfPlateau,nom" });
 }
