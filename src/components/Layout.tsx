@@ -7,9 +7,15 @@ import type { ReactNode } from "react";
 /**
  * Écrans dédiés, qui ne sont pas de simples tableaux de collection.
  * Ils sont listés à part parce qu'ils composent plusieurs collections
- * (« Tuiles » croise `modeles` et `tuiles`).
+ * (« Tuiles » croise `tuile3dmodel` et `tuiles`).
+ *
+ * L'ordre suit la chaîne de fabrication : on déclare un modèle 3D, puis on en
+ * fait des tuiles jouables.
  */
-const PAGES = [{ to: "/tuiles", label: "Tuiles" }];
+const PAGES = [
+  { to: "/3dmodeltuile", label: "3DmodelTuile" },
+  { to: "/tuiles", label: "Tuiles" },
+];
 
 const lienClasses = ({ isActive }: { isActive: boolean }) =>
   `block rounded px-3 py-2 text-sm transition-colors ${
@@ -41,16 +47,21 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </div>
 
-          <p className="px-3 pb-1 pt-4 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-            Collections
-          </p>
-          <div className="space-y-0.5">
-            {COLLECTIONS.map((collection) => (
-              <NavLink key={collection.id} to={`/c/${collection.name}`} className={lienClasses}>
-                {collection.label}
-              </NavLink>
-            ))}
-          </div>
+          {/* Masqué tant qu'aucune collection générique n'est déclarée. */}
+          {COLLECTIONS.length > 0 && (
+            <>
+              <p className="px-3 pb-1 pt-4 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+                Collections
+              </p>
+              <div className="space-y-0.5">
+                {COLLECTIONS.map((collection) => (
+                  <NavLink key={collection.id} to={`/c/${collection.name}`} className={lienClasses}>
+                    {collection.label}
+                  </NavLink>
+                ))}
+              </div>
+            </>
+          )}
         </nav>
 
         <div className="border-t border-edge p-3 text-xs">

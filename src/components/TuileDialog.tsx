@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  TILE_ID_MAX,
-  TILE_ID_MIN,
-  prochainTileIdLibre,
-  vignetteUrl,
-  type Modele,
-  type Tuile,
-  type TypePlateau,
-} from "@/lib/tuiles";
+import { libelle, typeDepuisChemin, type Modele3D, type TypePlateau } from "@/lib/modeles3d";
+import { TILE_ID_MAX, TILE_ID_MIN, prochainTileIdLibre, type Tuile } from "@/lib/tuiles";
 
 export interface ValeursTuile {
   tileId: number;
@@ -33,9 +26,9 @@ export default function TuileDialog({
   onCancel,
   onSubmit,
 }: {
-  modeles: Modele[];
+  modeles: Modele3D[];
   tuiles: Tuile[];
-  modeleInitial: Modele | null;
+  modeleInitial: Modele3D | null;
   tuile: Tuile | null;
   saving: boolean;
   erreur: string | null;
@@ -44,10 +37,11 @@ export default function TuileDialog({
 }) {
   const enEdition = tuile !== null;
 
-  const [prefabPath, setPrefabPath] = useState(tuile?.prefabPath ?? modeleInitial?.prefabPath ?? "");
-  const [nom, setNom] = useState(tuile?.nom ?? modeleInitial?.nom ?? "");
+  const [prefabPath, setPrefabPath] = useState(tuile?.prefabPath ?? modeleInitial?.nom_dans_le_jeu ?? "");
+  const [nom, setNom] = useState(tuile?.nom ?? (modeleInitial ? libelle(modeleInitial) : ""));
   const [type, setType] = useState<TypePlateau>(
-    tuile?.typeOfPlateau ?? (modeleInitial?.typeSuggere || "ground"),
+    tuile?.typeOfPlateau ??
+      (modeleInitial ? typeDepuisChemin(modeleInitial.nom_dans_le_jeu) || "ground" : "ground"),
   );
   const [tileId, setTileId] = useState<string>(
     String(tuile?.tileId ?? prochainTileIdLibre(tuiles) ?? TILE_ID_MIN),
@@ -61,7 +55,7 @@ export default function TuileDialog({
   }, [onCancel]);
 
   const modele = useMemo(
-    () => modeles.find((m) => m.prefabPath === prefabPath) ?? null,
+    () => modeles.find((m) => m.nom_dans_le_jeu === prefabPath) ?? null,
     [modeles, prefabPath],
   );
 
@@ -72,7 +66,6 @@ export default function TuileDialog({
 
   const memeModele = tuiles.filter((t) => t.prefabPath === prefabPath && t.id !== tuile?.id);
 
-  const vignette = modele ? vignetteUrl(modele, "120x120") : null;
   const bloque = saving || idHorsBornes || conflit !== null || nom.trim() === "" || prefabPath === "";
 
   const submit = (event: React.FormEvent) => {
@@ -88,20 +81,10 @@ export default function TuileDialog({
           {enEdition ? "Modifier la tuile" : "Nouvelle tuile"}
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Le nom est libre. Le même modèle 3D peut servir à autant de tuiles que tu veux.
+          Le nom est libre. Le même modèle 3DmodelTuile peut servir à autant de tuiles que tu veux.
         </p>
 
         <div className="mt-5 flex gap-4">
-          <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-edge bg-ink">
-            {vignette ? (
-              <img src={vignette} alt="" className="h-full w-full object-contain" />
-            ) : (
-              <span className="px-1 text-center text-[10px] leading-tight text-slate-600">
-                pas de vignette
-              </span>
-            )}
-          </div>
-
           <div className="min-w-0 flex-1 space-y-4">
             <div>
               <label className="label" htmlFor="tuile-nom">
@@ -130,8 +113,8 @@ export default function TuileDialog({
               >
                 {prefabPath === "" && <option value="">— choisir un modèle —</option>}
                 {modeles.map((m) => (
-                  <option key={m.id} value={m.prefabPath}>
-                    {m.nom} ({m.prefabPath})
+                  <option key={m.id} value={m.nom_dans_le_jeu}>
+                    {libelle(m)} ({m.nom_dans_le_jeu})
                   </option>
                 ))}
               </select>

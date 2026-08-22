@@ -21,11 +21,18 @@ export default function Home() {
   const cartes = useMemo<Carte[]>(
     () => [
       {
+        cle: "tuile3dmodel",
+        to: "/3dmodeltuile",
+        collection: "tuile3dmodel",
+        label: "3DmodelTuile",
+        hint: "Les prefabs du jeu déclarés ici, un par modèle 3D utilisable.",
+      },
+      {
         cle: "tuiles",
         to: "/tuiles",
         collection: "tuiles",
         label: "Tuiles",
-        hint: "Modèles 3D du jeu associés à un nom et à un tileId.",
+        hint: "Le catalogue jouable : un modèle 3D plus ses règles de jeu.",
       },
       ...COLLECTIONS.map((c) => ({
         cle: c.id,
