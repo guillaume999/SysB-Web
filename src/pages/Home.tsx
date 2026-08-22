@@ -40,6 +40,20 @@ export default function Home() {
         label: "Tuiles",
         hint: "Le catalogue jouable : un modèle 3D plus ses règles de jeu.",
       },
+      {
+        cle: "templates",
+        to: "/plateaux",
+        collection: "templates",
+        label: "Modèles de plateau",
+        hint: "Le terrain de départ, copié pour chaque joueur à sa première venue.",
+      },
+      {
+        cle: "plateaux",
+        to: "/plateaux",
+        collection: "plateaux",
+        label: "Plateaux des joueurs",
+        hint: "Une copie par joueur et par type, née de son modèle.",
+      },
     ],
     [],
   );

@@ -3,6 +3,8 @@ import Layout from "@/components/Layout";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
+import PlateauEditeur from "@/pages/PlateauEditeur";
+import Plateaux from "@/pages/Plateaux";
 import Ressources from "@/pages/Ressources";
 import Tuiles from "@/pages/Tuiles";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +28,8 @@ export default function App() {
         <Route path="/3dmodeltuile" element={<Modeles3D />} />
         <Route path="/tuiles" element={<Tuiles />} />
         <Route path="/ressources" element={<Ressources />} />
+        <Route path="/plateaux" element={<Plateaux />} />
+        <Route path="/plateaux/:source/:id" element={<PlateauEditeur />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

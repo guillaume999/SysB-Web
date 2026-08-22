@@ -15,6 +15,7 @@ const PAGES = [
   { to: "/3dmodeltuile", label: "3DmodelTuile" },
   { to: "/ressources", label: "Ressources" },
   { to: "/tuiles", label: "Tuiles" },
+  { to: "/plateaux", label: "Plateaux" },
 ];
 
 const lienClasses = ({ isActive }: { isActive: boolean }) =>
