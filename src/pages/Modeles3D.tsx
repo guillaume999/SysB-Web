@@ -7,14 +7,13 @@ import {
   COLLECTION_MODELES_3D,
   RACINE_PREFABS,
   avertissements,
-  cheminJeu,
   loadModeles3D,
   sectionsConnues,
   typeDepuisChemin,
   type ChampSection,
   type Modele3D,
 } from "@/lib/modeles3d";
-import { loadTuiles, tuilesParPrefab, type Tuile } from "@/lib/tuiles";
+import { loadTuiles, tuilesParModele, type Tuile } from "@/lib/tuiles";
 
 /**
  * Valeur de filtre spéciale : ne garder que les modèles dont cette section est vide.
@@ -72,7 +71,7 @@ export default function Modeles3D() {
     void charger();
   }, [charger]);
 
-  const parPrefab = useMemo(() => tuilesParPrefab(tuiles), [tuiles]);
+  const parModele = useMemo(() => tuilesParModele(tuiles), [tuiles]);
 
   /**
    * Options de chaque liste : les valeurs réellement saisies dans *cette* colonne.
@@ -263,7 +262,7 @@ export default function Modeles3D() {
 
               {!chargement &&
                 visibles.map((modele) => {
-                  const usages = parPrefab.get(cheminJeu(modele)) ?? [];
+                  const usages = parModele.get(modele.id) ?? [];
                   const alertes = avertissements(modele);
                   const type = typeDepuisChemin(modele.chemin_prefab ?? "");
                   const confirme = aSupprimer === modele.id;

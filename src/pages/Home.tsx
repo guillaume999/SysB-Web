@@ -28,6 +28,13 @@ export default function Home() {
         hint: "Les prefabs du jeu déclarés ici, un par modèle 3D utilisable.",
       },
       {
+        cle: "ressources",
+        to: "/ressources",
+        collection: "ressources",
+        label: "Ressources",
+        hint: "Le vocabulaire du jeu, cité par tous les coûts et productions.",
+      },
+      {
         cle: "tuiles",
         to: "/tuiles",
         collection: "tuiles",

@@ -1,0 +1,64 @@
+/**
+ * Le vocabulaire des ressources du jeu.
+ *
+ * Une dizaine de records, saisis une fois. Partout ailleurs — coûts, productions,
+ * consommations — une ressource est désignée par son `code`, jamais par un texte
+ * libre : les formulaires n'offrent que des listes alimentées par cette collection,
+ * pour qu'il soit impossible d'écrire un code que le jeu ne connaîtra pas.
+ *
+ * Déclaré en `type` et non en `interface` : le SDK PocketBase attend un
+ * `RecordModel` indexable, auquel une interface n'est pas assignable.
+ */
+
+import { pb } from "@/lib/pb";
+
+export const COLLECTION_RESSOURCES = "ressources";
+
+/**
+ * - `stock` : s'accumule et se dépense (bois, or, viande).
+ * - `flux` : n'existe qu'en débit, ne s'accumule pas (énergie, eau courante).
+ * - `population` : cas particulier, se mobilise et se libère plutôt que se consommer.
+ */
+export type GenreRessource = "stock" | "flux" | "population";
+
+export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[] = [
+  { valeur: "stock", libelle: "stock", aide: "s'accumule et se dépense" },
+  { valeur: "flux", libelle: "flux", aide: "n'existe qu'en débit, ne s'accumule pas" },
+  { valeur: "population", libelle: "population", aide: "se mobilise et se libère" },
+];
+
+export type Ressource = {
+  id: string;
+  collectionId: string;
+  collectionName: string;
+  code: string;
+  nom: string;
+  genre: GenreRessource | "";
+  ordre: number;
+  /** Chemin de la vignette sous `Assets/Resources/`, ex. `Icones/ble`. Vide pour l'instant. */
+  chemin_icone: string;
+  created: string;
+  updated: string;
+};
+
+export interface ValeursRessource {
+  code: string;
+  nom: string;
+  genre: GenreRessource;
+  ordre: number;
+  chemin_icone: string;
+}
+
+export function loadRessources(): Promise<Ressource[]> {
+  return pb.collection(COLLECTION_RESSOURCES).getFullList<Ressource>({ sort: "ordre,nom" });
+}
+
+/** Libellé lisible d'un code, avec repli sur le code quand la ressource a disparu. */
+export function libelleRessource(ressources: Ressource[], code: string): string {
+  return ressources.find((r) => r.code === code)?.nom || code;
+}
+
+/** Vrai si le code n'existe plus dans le vocabulaire — à signaler dans les écrans. */
+export function codeInconnu(ressources: Ressource[], code: string): boolean {
+  return code !== "" && !ressources.some((r) => r.code === code);
+}

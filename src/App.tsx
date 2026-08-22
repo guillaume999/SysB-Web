@@ -4,6 +4,7 @@ import CollectionPage from "@/pages/CollectionPage";
 import Home from "@/pages/Home";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
+import Ressources from "@/pages/Ressources";
 import Tuiles from "@/pages/Tuiles";
 import { useAuth } from "@/lib/auth";
 
@@ -25,6 +26,7 @@ export default function App() {
         <Route path="/" element={<Home />} />
         <Route path="/3dmodeltuile" element={<Modeles3D />} />
         <Route path="/tuiles" element={<Tuiles />} />
+        <Route path="/ressources" element={<Ressources />} />
         <Route path="/c/:name" element={<CollectionPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
