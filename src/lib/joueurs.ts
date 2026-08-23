@@ -1,23 +1,33 @@
 /**
  * Les comptes joueurs — la collection d'authentification `users` de PocketBase.
  *
- * Le site les lit et les corrige ; il ne les crée pas : un compte naît dans le jeu,
- * à l'inscription. Deux champs seulement sont modifiables ici, le pseudo et l'email,
- * plus la remise à zéro du mot de passe quand un joueur a perdu le sien.
+ * Le site sait maintenant faire trois choses de plus que lire : **créer** un compte,
+ * corriger sa fiche (pseudo, email, mot de passe) et **changer son rôle**.
  *
- * Le **rôle** n'est volontairement pas éditable depuis cet écran : il ouvre l'écriture
- * sur tout le contenu du jeu, donc il se change à la main dans l'admin PocketBase
- * (pb-sysb.physiooffice.com/_/), là où le geste est délibéré.
+ * Ce qu'il ne fait toujours pas : **supprimer** un compte. La règle `delete` de la
+ * collection est `id = @request.auth.id` — même un admin ne peut effacer que le sien —
+ * et c'est voulu : un compte effacé laisserait ses plateaux orphelins. Ça se fait à la
+ * main dans l'admin PocketBase, après avoir regardé ce qui lui appartient.
  *
- * Côté serveur, ces écritures ne passent que grâce au **manage rule** de la collection
- * `users` (`@request.auth.role = "admin"`) : sans lui, PocketBase exige `oldPassword`
- * pour changer un mot de passe et refuse le changement d'email d'un autre compte.
+ * Côté serveur, trois règles rendent tout ça possible. Les toucher casse cet écran :
+ *
+ * - **manage rule** = `@request.auth.role = "admin"` : sans elle, PocketBase exige
+ *   `oldPassword` pour changer un mot de passe et refuse le changement d'email d'un
+ *   autre compte.
+ * - **create rule** = `@request.body.role:isset = false || @request.auth.role = "admin"` :
+ *   la première branche est l'inscription depuis le jeu (personne ne peut se donner un
+ *   rôle en s'inscrivant), la seconde laisse un admin poser le rôle à la création.
+ * - **update rule** = `@request.auth.role = "admin" || (id = @request.auth.id && @request.body.role:isset = false)` :
+ *   un admin écrit tout, un joueur ne modifie que lui-même et jamais son rôle.
  */
 
 import { pb } from "@/lib/pb";
 import type { Role } from "@/lib/auth";
 
 export const COLLECTION_JOUEURS = "users";
+
+/** PocketBase refuse plus court, et son message d'erreur est peu parlant. */
+export const LONGUEUR_MOT_DE_PASSE = 8;
 
 /**
  * Déclaré en `type` et non en `interface` : le SDK PocketBase attend un `RecordModel`
@@ -39,7 +49,8 @@ export type Joueur = {
 export interface ValeursJoueur {
   pseudo: string;
   email: string;
-  /** Vide = on ne touche pas au mot de passe existant. */
+  role: Role;
+  /** À la création : obligatoire. En modification : vide = on n'y touche pas. */
   motDePasse: string;
 }
 
@@ -49,12 +60,61 @@ export const ROLES: { valeur: Role; libelle: string; aide: string }[] = [
   { valeur: "tester", libelle: "testeur", aide: "compte de test, mêmes droits qu'un joueur" },
 ];
 
+export const ROLE_PAR_DEFAUT: Role = "player";
+
 export function libelleRole(role: Role | ""): string {
   return ROLES.find((r) => r.valeur === role)?.libelle || role || "?";
 }
 
 export function loadJoueurs(): Promise<Joueur[]> {
   return pb.collection(COLLECTION_JOUEURS).getFullList<Joueur>({ sort: "-created" });
+}
+
+/**
+ * Crée un compte depuis le site.
+ *
+ * Le compte naît **vérifié** : il n'y a pas de mail de confirmation à cliquer puisque
+ * c'est l'admin qui saisit l'adresse et transmet le mot de passe. Le badge
+ * « non vérifié » de la liste reste ainsi réservé aux inscriptions faites dans le jeu.
+ *
+ * `verified` est un champ système : PocketBase ne le laisse écrire qu'au superuser ou
+ * à qui satisfait la *manage rule*. On tente donc de le poser dès la création, et si le
+ * serveur le refuse **sur ce champ précis**, on recrée sans lui puis on le pose par un
+ * `update` — chemin qui, lui, passe à coup sûr par la manage rule. Toute autre erreur
+ * (email déjà pris, mot de passe trop court…) remonte telle quelle à l'appelant.
+ */
+export async function creerJoueur(valeurs: ValeursJoueur): Promise<{ id: string; verifie: boolean }> {
+  const base = {
+    email: valeurs.email.trim(),
+    password: valeurs.motDePasse,
+    passwordConfirm: valeurs.motDePasse,
+    pseudo: valeurs.pseudo.trim(),
+    role: valeurs.role,
+    emailVisibility: false,
+  };
+
+  try {
+    const cree = await pb.collection(COLLECTION_JOUEURS).create({ ...base, verified: true });
+    return { id: cree.id, verifie: true };
+  } catch (e) {
+    if (!erreurPorteSur(e, "verified")) throw e;
+
+    const cree = await pb.collection(COLLECTION_JOUEURS).create(base);
+    try {
+      await pb.collection(COLLECTION_JOUEURS).update(cree.id, { verified: true });
+      return { id: cree.id, verifie: true };
+    } catch {
+      // Le compte existe et il est utilisable : autant le signaler « non vérifié »
+      // plutôt que de faire échouer une création qui a bel et bien eu lieu.
+      return { id: cree.id, verifie: false };
+    }
+  }
+}
+
+/** Vrai si l'erreur PocketBase est une erreur de validation portant sur ce champ. */
+function erreurPorteSur(e: unknown, champ: string): boolean {
+  const err = e as { response?: { data?: Record<string, unknown> } };
+  return Boolean(err.response?.data && champ in err.response.data);
 }
 
 /**
@@ -70,6 +130,8 @@ export async function enregistrerJoueur(joueur: Joueur, valeurs: ValeursJoueur):
   const email = valeurs.email.trim();
   if (email.toLowerCase() !== (joueur.email ?? "").toLowerCase()) data.email = email;
 
+  if (valeurs.role !== joueur.role) data.role = valeurs.role;
+
   if (valeurs.motDePasse !== "") {
     data.password = valeurs.motDePasse;
     data.passwordConfirm = valeurs.motDePasse;
@@ -77,6 +139,21 @@ export async function enregistrerJoueur(joueur: Joueur, valeurs: ValeursJoueur):
 
   if (Object.keys(data).length === 0) return;
   await pb.collection(COLLECTION_JOUEURS).update(joueur.id, data);
+}
+
+/** Le geste rapide de la liste : donner ou retirer le rôle admin sans ouvrir la fiche. */
+export async function changerRole(joueur: Joueur, role: Role): Promise<void> {
+  if (role === joueur.role) return;
+  await pb.collection(COLLECTION_JOUEURS).update(joueur.id, { role });
+}
+
+/**
+ * Un admin ne doit pas pouvoir se retirer son propre rôle : il perdrait l'accès au site
+ * dans la seconde, et s'il est le dernier admin plus personne ne pourrait le lui rendre
+ * autrement que par l'admin PocketBase.
+ */
+export function peutChangerLeRole(joueur: Joueur, moiId: string | undefined): boolean {
+  return joueur.id !== moiId;
 }
 
 /** Date PocketBase (`2026-08-22 19:04:11.123Z`) en date lisible, sans dépendance. */

@@ -1,23 +1,36 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
-import { useAuth } from "@/lib/auth";
+import { useAuth, type Role } from "@/lib/auth";
 import { messageErreur } from "@/lib/pb";
 import {
+  changerRole,
   correspond,
+  creerJoueur,
   dateLisible,
   enregistrerJoueur,
   libelleRole,
   loadJoueurs,
+  peutChangerLeRole,
+  LONGUEUR_MOT_DE_PASSE,
+  ROLES,
+  ROLE_PAR_DEFAUT,
   type Joueur,
   type ValeursJoueur,
 } from "@/lib/joueurs";
 
 /**
- * Les comptes joueurs : la liste, et une fenêtre pour corriger une fiche.
+ * Les comptes joueurs : la liste, la création d'un compte, et une fiche pour corriger
+ * un compte existant ou changer son rôle.
  *
- * Pas de bouton « Nouveau » — un compte naît dans le jeu, à l'inscription — et pas de
- * changement de rôle : donner « admin » ouvre l'écriture sur tout le contenu, donc ça
- * se fait à la main dans l'admin PocketBase.
+ * Deux chemins pour le rôle, volontairement : la **bascule admin** dans la ligne, pour
+ * le geste courant (promouvoir quelqu'un, le rétrograder), et le **menu déroulant** de
+ * la fiche, seul endroit d'où l'on atteint « testeur ».
+ *
+ * Toute confirmation se fait **en HTML dans le tableau**, jamais par `window.confirm` :
+ * une popup native gèle l'automatisation du navigateur.
+ *
+ * Pas de suppression : elle laisserait des plateaux orphelins, et la règle `delete` de
+ * PocketBase l'interdit de toute façon à un admin sur le compte d'un autre.
  */
 export default function Joueurs() {
   const { user, signOut } = useAuth();
@@ -27,10 +40,15 @@ export default function Joueurs() {
   const [erreur, setErreur] = useState<string | null>(null);
   const [recherche, setRecherche] = useState("");
 
-  const [dialog, setDialog] = useState<{ joueur: Joueur } | null>(null);
+  /** `joueur: null` = fenêtre de création. */
+  const [dialog, setDialog] = useState<{ joueur: Joueur | null } | null>(null);
   const [saving, setSaving] = useState(false);
   const [erreurDialog, setErreurDialog] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  /** La bascule admin en attente de confirmation, dans la ligne du joueur visé. */
+  const [bascule, setBascule] = useState<{ joueur: Joueur; vers: Role } | null>(null);
+  const [basculeEnCours, setBasculeEnCours] = useState(false);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -53,12 +71,32 @@ export default function Joueurs() {
     [joueurs, recherche],
   );
 
+  const ouvrir = (joueur: Joueur | null) => {
+    setErreurDialog(null);
+    setMessage(null);
+    setBascule(null);
+    setDialog({ joueur });
+  };
+
   const enregistrer = async (valeurs: ValeursJoueur) => {
     if (!dialog) return;
     setSaving(true);
     setErreurDialog(null);
     try {
       const cible = dialog.joueur;
+
+      if (cible === null) {
+        const { verifie } = await creerJoueur(valeurs);
+        setDialog(null);
+        setMessage(
+          `Compte créé pour ${valeurs.pseudo.trim() || valeurs.email.trim()} (${libelleRole(valeurs.role)}). ` +
+            `Transmets-lui son mot de passe : il n'est plus lisible ensuite.` +
+            (verifie ? "" : " Le compte est resté « non vérifié » — sans conséquence pour se connecter."),
+        );
+        await charger();
+        return;
+      }
+
       const motDePasseChange = valeurs.motDePasse !== "";
       await enregistrerJoueur(cible, valeurs);
       setDialog(null);
@@ -83,25 +121,53 @@ export default function Joueurs() {
     }
   };
 
+  const appliquerBascule = async () => {
+    if (!bascule) return;
+    setBasculeEnCours(true);
+    setErreur(null);
+    try {
+      await changerRole(bascule.joueur, bascule.vers);
+      const qui = bascule.joueur.pseudo?.trim() || bascule.joueur.email;
+      setMessage(
+        bascule.vers === "admin"
+          ? `${qui} est maintenant admin : il peut ouvrir ce site et écrire tout le contenu du jeu.`
+          : `${qui} n'est plus admin. Sa session sur ce site tombera à son prochain chargement de page.`,
+      );
+      setBascule(null);
+      await charger();
+    } catch (e) {
+      setErreur(messageErreur(e, "Changement de rôle refusé."));
+    } finally {
+      setBasculeEnCours(false);
+    }
+  };
+
   return (
     <div>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold text-white">Joueurs</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Les comptes du jeu. On ne les crée pas ici — un compte naît à l'inscription, dans le
-            jeu — mais on peut corriger un pseudo, réparer un email et redonner un mot de passe à
-            quelqu'un qui a perdu le sien.
+            Les comptes du jeu. On peut en créer un ici, corriger un pseudo, réparer un email,
+            redonner un mot de passe à quelqu'un qui a perdu le sien, et donner ou retirer le rôle
+            admin.
           </p>
         </div>
         <div className="flex gap-2">
           <button className="btn-ghost" onClick={() => void charger()}>
             Recharger
           </button>
+          <button className="btn-primary" onClick={() => ouvrir(null)}>
+            Nouveau joueur
+          </button>
         </div>
       </header>
 
       <Aide titre="Ce que cet écran change, et ce qu'il ne change pas">
+        <Terme nom="créer un compte">
+          Le compte naît utilisable et « vérifié » : pas de mail de confirmation à cliquer. C'est
+          toi qui choisis le mot de passe et qui le transmets — il n'est plus lisible après.
+        </Terme>
         <Terme nom="pseudo">
           Le nom affiché en jeu. Se corrige sans conséquence : rien d'autre n'y fait référence.
         </Terme>
@@ -113,14 +179,23 @@ export default function Joueurs() {
           Se remplace sans connaître l'ancien, mais ne se lit pas — PocketBase n'en garde qu'une
           empreinte. Le joueur est déconnecté de ses appareils et doit ressaisir le nouveau.
         </Terme>
-        <Terme nom="rôle">
-          Volontairement non modifiable ici. « admin » donne le droit d'écrire tout le contenu du
-          jeu et d'ouvrir ce site : ça se change à la main dans l'admin PocketBase, sur
-          pb-sysb.physiooffice.com/_/.
+        <Terme nom="rôle admin">
+          Donne le droit d'ouvrir ce site et d'écrire tout le contenu du jeu : catalogue, plateaux
+          modèles, comptes. À ne confier qu'à quelqu'un qui doit vraiment y toucher. Le retirer
+          coupe cet accès dès le prochain chargement de page, sans rien casser côté jeu.
+        </Terme>
+        <Terme nom="testeur">
+          Un joueur ordinaire côté droits — l'étiquette sert juste à repérer les comptes d'essai.
+          Elle se pose depuis la fiche, pas depuis la liste.
+        </Terme>
+        <Terme nom="ton propre compte">
+          Tu ne peux pas te retirer ton rôle admin : tu perdrais l'accès à ce site sur-le-champ, et
+          s'il ne reste aucun autre admin, plus personne ne pourrait te le rendre autrement que
+          dans l'admin PocketBase.
         </Terme>
         <Terme nom="suppression">
-          Absente elle aussi : supprimer un compte laisserait ses plateaux orphelins. À faire dans
-          l'admin PocketBase, après avoir regardé ce qui lui appartient.
+          Absente : supprimer un compte laisserait ses plateaux orphelins. À faire dans l'admin
+          PocketBase, après avoir regardé ce qui lui appartient.
         </Terme>
       </Aide>
 
@@ -173,7 +248,7 @@ export default function Joueurs() {
                 <th className="px-3 py-2 font-medium">email</th>
                 <th className="w-24 px-3 py-2 font-medium">rôle</th>
                 <th className="w-28 px-3 py-2 font-medium">inscrit le</th>
-                <th className="w-28 px-3 py-2" />
+                <th className="w-52 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -192,53 +267,28 @@ export default function Joueurs() {
                 </tr>
               )}
               {!chargement &&
-                visibles.map((j) => (
-                  <tr key={j.id} className="border-b border-edge/60 last:border-0 hover:bg-ink/40">
-                    <td className="px-3 py-2 text-slate-200">
-                      {j.pseudo?.trim() || <span className="text-slate-600">sans pseudo</span>}
-                      {j.id === user?.id && (
-                        <span className="ml-2 text-[10px] uppercase text-slate-500">toi</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-slate-400">
-                      <span className="font-mono text-xs">{j.email || "—"}</span>
-                      {!j.verified && (
-                        <span
-                          className="ml-2 rounded border border-amber-900/60 px-1.5 py-0.5 text-[10px] uppercase text-amber-400"
-                          title="Email jamais confirmé par un clic dans le mail de vérification."
-                        >
-                          non vérifié
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`rounded border px-1.5 py-0.5 text-[10px] uppercase ${
-                          j.role === "admin"
-                            ? "border-accent/60 text-accent"
-                            : "border-edge text-slate-400"
-                        }`}
-                      >
-                        {libelleRole(j.role)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-xs text-slate-500">
-                      {dateLisible(j.created)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        className="text-xs text-accent hover:underline"
-                        onClick={() => {
-                          setErreurDialog(null);
-                          setMessage(null);
-                          setDialog({ joueur: j });
-                        }}
-                      >
-                        Modifier
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                visibles.map((j) => {
+                  const cestMoi = j.id === user?.id;
+                  const estAdmin = j.role === "admin";
+                  const confirme = bascule?.joueur.id === j.id;
+                  return (
+                    <LigneJoueur
+                      key={j.id}
+                      joueur={j}
+                      cestMoi={cestMoi}
+                      estAdmin={estAdmin}
+                      peutBasculer={peutChangerLeRole(j, user?.id)}
+                      confirme={confirme ? bascule : null}
+                      basculeEnCours={basculeEnCours}
+                      onModifier={() => ouvrir(j)}
+                      onDemanderBascule={() =>
+                        setBascule({ joueur: j, vers: estAdmin ? ROLE_PAR_DEFAUT : "admin" })
+                      }
+                      onAnnulerBascule={() => setBascule(null)}
+                      onConfirmerBascule={() => void appliquerBascule()}
+                    />
+                  );
+                })}
             </tbody>
           </table>
         </div>
@@ -247,7 +297,7 @@ export default function Joueurs() {
       {dialog && (
         <JoueurDialog
           joueur={dialog.joueur}
-          cestMoi={dialog.joueur.id === user?.id}
+          cestMoi={dialog.joueur?.id === user?.id}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}
@@ -258,7 +308,123 @@ export default function Joueurs() {
   );
 }
 
-/** Formulaire court : il vit dans le même fichier plutôt que d'ouvrir un module pour trois champs. */
+/**
+ * Une ligne, et la ligne de confirmation qui se déplie sous elle quand on demande une
+ * bascule de rôle. Deux `<tr>` renvoyés d'un bloc : d'où le fragment.
+ */
+function LigneJoueur({
+  joueur,
+  cestMoi,
+  estAdmin,
+  peutBasculer,
+  confirme,
+  basculeEnCours,
+  onModifier,
+  onDemanderBascule,
+  onAnnulerBascule,
+  onConfirmerBascule,
+}: {
+  joueur: Joueur;
+  cestMoi: boolean;
+  estAdmin: boolean;
+  peutBasculer: boolean;
+  confirme: { joueur: Joueur; vers: Role } | null;
+  basculeEnCours: boolean;
+  onModifier: () => void;
+  onDemanderBascule: () => void;
+  onAnnulerBascule: () => void;
+  onConfirmerBascule: () => void;
+}) {
+  const qui = joueur.pseudo?.trim() || joueur.email || joueur.id;
+
+  return (
+    <>
+      <tr className="border-b border-edge/60 last:border-0 hover:bg-ink/40">
+        <td className="px-3 py-2 text-slate-200">
+          {joueur.pseudo?.trim() || <span className="text-slate-600">sans pseudo</span>}
+          {cestMoi && <span className="ml-2 text-[10px] uppercase text-slate-500">toi</span>}
+        </td>
+        <td className="px-3 py-2 text-slate-400">
+          <span className="font-mono text-xs">{joueur.email || "—"}</span>
+          {!joueur.verified && (
+            <span
+              className="ml-2 rounded border border-amber-900/60 px-1.5 py-0.5 text-[10px] uppercase text-amber-400"
+              title="Email jamais confirmé par un clic dans le mail de vérification."
+            >
+              non vérifié
+            </span>
+          )}
+        </td>
+        <td className="px-3 py-2">
+          <span
+            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase ${
+              estAdmin ? "border-accent/60 text-accent" : "border-edge text-slate-400"
+            }`}
+          >
+            {libelleRole(joueur.role)}
+          </span>
+        </td>
+        <td className="px-3 py-2 tabular-nums text-xs text-slate-500">
+          {dateLisible(joueur.created)}
+        </td>
+        <td className="px-3 py-2 text-right">
+          <div className="flex items-center justify-end gap-3">
+            {peutBasculer && !confirme && (
+              <button
+                className="text-xs text-slate-400 hover:text-white hover:underline"
+                onClick={onDemanderBascule}
+              >
+                {estAdmin ? "Retirer admin" : "Donner admin"}
+              </button>
+            )}
+            <button className="text-xs text-accent hover:underline" onClick={onModifier}>
+              Modifier
+            </button>
+          </div>
+        </td>
+      </tr>
+
+      {confirme && (
+        <tr className="border-b border-edge/60 bg-ink/60">
+          <td colSpan={5} className="px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="text-sm text-slate-300">
+                {confirme.vers === "admin" ? (
+                  <>
+                    Donner le rôle <strong className="text-accent">admin</strong> à {qui} ? Il
+                    pourra ouvrir ce site et écrire tout le contenu du jeu.
+                  </>
+                ) : (
+                  <>
+                    Retirer le rôle admin à {qui} ? Il redevient un joueur ordinaire et perd
+                    l'accès à ce site.
+                  </>
+                )}
+              </span>
+              <span className="flex gap-2">
+                <button className="btn-ghost" onClick={onAnnulerBascule} disabled={basculeEnCours}>
+                  Annuler
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={onConfirmerBascule}
+                  disabled={basculeEnCours}
+                >
+                  {basculeEnCours ? "Un instant…" : "Confirmer"}
+                </button>
+              </span>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/**
+ * La fenêtre sert aux deux cas : `joueur === null` pour une création, sinon la fiche du
+ * compte. Elle vit dans le même fichier plutôt que d'ouvrir un module pour quatre champs.
+ */
 function JoueurDialog({
   joueur,
   cestMoi,
@@ -267,18 +433,22 @@ function JoueurDialog({
   onCancel,
   onSubmit,
 }: {
-  joueur: Joueur;
+  joueur: Joueur | null;
   cestMoi: boolean;
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
   onSubmit: (valeurs: ValeursJoueur) => void;
 }) {
-  const [pseudo, setPseudo] = useState(joueur.pseudo ?? "");
-  const [email, setEmail] = useState(joueur.email ?? "");
+  const creation = joueur === null;
+
+  const [pseudo, setPseudo] = useState(joueur?.pseudo ?? "");
+  const [email, setEmail] = useState(joueur?.email ?? "");
+  const [role, setRole] = useState<Role>((joueur?.role || ROLE_PAR_DEFAUT) as Role);
   const [motDePasse, setMotDePasse] = useState("");
   const [confirmation, setConfirmation] = useState("");
-  const [changeMotDePasse, setChangeMotDePasse] = useState(false);
+  // En création le mot de passe est obligatoire : la case est cochée et verrouillée.
+  const [changeMotDePasse, setChangeMotDePasse] = useState(creation);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
@@ -287,12 +457,18 @@ function JoueurDialog({
   }, [onCancel]);
 
   const emailNet = email.trim();
-  const emailChange = emailNet.toLowerCase() !== (joueur.email ?? "").toLowerCase();
+  const emailChange = !creation && emailNet.toLowerCase() !== (joueur?.email ?? "").toLowerCase();
   const emailInvalide = emailNet !== "" && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailNet);
-  const motDePasseCourt = changeMotDePasse && motDePasse.length > 0 && motDePasse.length < 8;
+  const motDePasseCourt =
+    changeMotDePasse && motDePasse.length > 0 && motDePasse.length < LONGUEUR_MOT_DE_PASSE;
   const motDePasseDifferent = changeMotDePasse && confirmation !== motDePasse;
+  const roleChange = !creation && role !== joueur?.role;
   const rienAFaire =
-    pseudo.trim() === (joueur.pseudo ?? "") && !emailChange && !(changeMotDePasse && motDePasse !== "");
+    !creation &&
+    pseudo.trim() === (joueur?.pseudo ?? "") &&
+    !emailChange &&
+    !roleChange &&
+    !(changeMotDePasse && motDePasse !== "");
 
   const bloque =
     saving ||
@@ -312,15 +488,24 @@ function JoueurDialog({
           onSubmit({
             pseudo: pseudo.trim(),
             email: emailNet,
+            role,
             motDePasse: changeMotDePasse ? motDePasse : "",
           });
         }}
         className="card w-full max-w-lg p-5 shadow-2xl"
       >
-        <h2 className="text-lg font-semibold text-white">Fiche du joueur</h2>
+        <h2 className="text-lg font-semibold text-white">
+          {creation ? "Nouveau joueur" : "Fiche du joueur"}
+        </h2>
         <p className="mt-1 text-xs text-slate-500">
-          Compte créé le {dateLisible(joueur.created)} ·{" "}
-          <span className="font-mono">{joueur.id}</span>
+          {creation ? (
+            "Le compte sera utilisable tout de suite, sans mail de confirmation."
+          ) : (
+            <>
+              Compte créé le {dateLisible(joueur.created)} ·{" "}
+              <span className="font-mono">{joueur.id}</span>
+            </>
+          )}
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -357,26 +542,54 @@ function JoueurDialog({
           </div>
         </div>
 
-        <div className="mt-4 rounded border border-edge bg-ink/40 p-3">
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
-            <input
-              type="checkbox"
-              className="h-4 w-4 accent-accent"
-              checked={changeMotDePasse}
-              onChange={(e) => {
-                setChangeMotDePasse(e.target.checked);
-                setMotDePasse("");
-                setConfirmation("");
-              }}
-            />
-            Donner un nouveau mot de passe
+        <div className="mt-4">
+          <label className="label" htmlFor="joueur-role">
+            Rôle
           </label>
+          <select
+            id="joueur-role"
+            className="input"
+            value={role}
+            onChange={(e) => setRole(e.target.value as Role)}
+            disabled={cestMoi}
+          >
+            {ROLES.map((r) => (
+              <option key={r.valeur} value={r.valeur}>
+                {r.libelle} — {r.aide}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-slate-500">
+            {cestMoi
+              ? "C'est ton propre compte : ton rôle n'est pas modifiable ici, tu perdrais l'accès au site."
+              : "« admin » ouvre ce site et l'écriture de tout le contenu du jeu."}
+          </p>
+        </div>
+
+        <div className="mt-4 rounded border border-edge bg-ink/40 p-3">
+          {creation ? (
+            <p className="text-sm text-slate-300">Mot de passe de départ</p>
+          ) : (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-accent"
+                checked={changeMotDePasse}
+                onChange={(e) => {
+                  setChangeMotDePasse(e.target.checked);
+                  setMotDePasse("");
+                  setConfirmation("");
+                }}
+              />
+              Donner un nouveau mot de passe
+            </label>
+          )}
 
           {changeMotDePasse && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="label" htmlFor="joueur-mdp">
-                  Nouveau mot de passe
+                  {creation ? "Mot de passe" : "Nouveau mot de passe"}
                 </label>
                 <input
                   id="joueur-mdp"
@@ -385,7 +598,7 @@ function JoueurDialog({
                   value={motDePasse}
                   onChange={(e) => setMotDePasse(e.target.value)}
                   autoComplete="new-password"
-                  placeholder="8 caractères minimum"
+                  placeholder={`${LONGUEUR_MOT_DE_PASSE} caractères minimum`}
                 />
               </div>
               <div>
@@ -402,14 +615,23 @@ function JoueurDialog({
                 />
               </div>
               <p className="text-xs text-slate-500 sm:col-span-2">
-                {cestMoi
-                  ? "C'est ton propre compte : tu seras déconnecté du site aussitôt enregistré."
-                  : "Le joueur sera déconnecté du jeu et devra saisir ce mot de passe — pense à le lui transmettre, il ne sera plus lisible ensuite."}
+                {creation
+                  ? "Note-le avant d'enregistrer : il ne sera plus lisible ensuite, et c'est à toi de le transmettre au joueur."
+                  : cestMoi
+                    ? "C'est ton propre compte : tu seras déconnecté du site aussitôt enregistré."
+                    : "Le joueur sera déconnecté du jeu et devra saisir ce mot de passe — pense à le lui transmettre, il ne sera plus lisible ensuite."}
               </p>
             </div>
           )}
         </div>
 
+        {roleChange && (
+          <p className="mt-4 rounded border border-amber-900/60 bg-amber-950/30 p-2 text-sm text-amber-300">
+            {role === "admin"
+              ? "Le rôle passe à « admin » : ce compte pourra ouvrir ce site et écrire tout le contenu du jeu."
+              : `Le rôle passe à « ${libelleRole(role)} » : ce compte perdra l'accès à ce site.`}
+          </p>
+        )}
         {emailChange && (
           <p className="mt-4 rounded border border-amber-900/60 bg-amber-950/30 p-2 text-sm text-amber-300">
             L'email change : le compte repassera en « non vérifié » et la connexion se fera
@@ -423,7 +645,7 @@ function JoueurDialog({
         )}
         {motDePasseCourt && (
           <p className="mt-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
-            PocketBase demande au moins 8 caractères.
+            PocketBase demande au moins {LONGUEUR_MOT_DE_PASSE} caractères.
           </p>
         )}
         {!motDePasseCourt && motDePasseDifferent && (
@@ -442,7 +664,7 @@ function JoueurDialog({
             Annuler
           </button>
           <button type="submit" className="btn-primary" disabled={bloque}>
-            {saving ? "Enregistrement…" : "Enregistrer"}
+            {saving ? "Enregistrement…" : creation ? "Créer le compte" : "Enregistrer"}
           </button>
         </div>
       </form>
