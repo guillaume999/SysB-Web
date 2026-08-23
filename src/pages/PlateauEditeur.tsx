@@ -24,6 +24,7 @@ import {
   type SourcePlateau,
 } from "@/lib/plateaux";
 import { casesCouvertes, loadTuiles, type Tuile } from "@/lib/tuiles";
+import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
 
 /** Au-delà, le SVG commence à ramer, et le plateau devient difficile à jouer sur mobile. */
 const SEUIL_LENT = 2500;
@@ -54,6 +55,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
 
   const [plateau, setPlateau] = useState<Plateau | null>(null);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
+  const [ressources, setRessources] = useState<Ressource[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -86,9 +88,10 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     setChargement(true);
     setErreur(null);
     try {
-      const [p, t] = await Promise.all([loadPlateau(collection, id), loadTuiles()]);
+      const [p, t, r] = await Promise.all([loadPlateau(collection, id), loadTuiles(), loadRessources()]);
       setPlateau(p);
       setTuiles(t);
+      setRessources(r);
       setNom(p.nom ?? "");
       setType(p.typeOfPlateau);
       setLargeur(p.largeur);
@@ -172,6 +175,39 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     });
     setModifie(true);
   };
+
+  /**
+   * Ecrit une quantite dans le coffre de la case selectionnee.
+   *
+   * C'est ce qui permet de **doter un plateau de depart** : sans un stock pose a
+   * la main dans le modele, un nouveau joueur n'a rien, donc ne peut rien
+   * construire, donc ne produira jamais rien. La copie du modele vers le plateau
+   * du joueur conserve ce stock — seuls les horodatages sont remis a l'heure.
+   *
+   * `quantite <= 0` retire la ligne : un zero qui traine dans le json ne veut
+   * rien dire et ferait croire a une ressource geree.
+   */
+  const majStock = (code: string, quantite: number) => {
+    if (!selection || !code) return;
+    const actuel = etatSelection?.stock ?? {};
+    const stock = { ...actuel };
+    if (quantite > 0) stock[code] = Math.floor(quantite);
+    else delete stock[code];
+    majEtat({ stock });
+  };
+
+  /**
+   * Seules les ressources de genre `stock` s'entreposent. Un `flux` n'existe
+   * qu'en debit et une `population` se mobilise : les proposer ici laisserait
+   * saisir une dotation que le jeu ne saurait pas depenser.
+   */
+  const ressourcesStockables = useMemo(
+    () =>
+      ressources
+        .filter((r) => r.genre === "stock")
+        .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0) || a.code.localeCompare(b.code)),
+    [ressources],
+  );
 
   const retirerEtat = (x: number, z: number) => {
     setEtats((e) => e.filter((s) => !(s.x === x && s.z === z)));
@@ -537,23 +573,65 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                       />
                       bâtiment actif
                     </label>
+                    <div className="space-y-1 border-t border-edge pt-2">
+                      <p className="label">Coffre de départ</p>
+
+                      {Object.entries(etatSelection?.stock ?? {}).map(([code, q]) => (
+                        <div key={code} className="flex items-center gap-2">
+                          <span className="flex-1 truncate text-slate-300">
+                            {libelleRessource(ressources, code)}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            className="input h-8 w-20 py-0"
+                            value={q}
+                            onChange={(e) => majStock(code, Number(e.target.value))}
+                          />
+                          <button
+                            className="text-slate-500 hover:text-red-400"
+                            title="retirer cette ressource du coffre"
+                            onClick={() => majStock(code, 0)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+
+                      {/*
+                        Une liste, jamais une saisie libre : un code invente ici
+                        serait ecrit tel quel dans le json et le jeu ne saurait
+                        pas quoi en faire.
+                      */}
+                      <select
+                        className="input h-8 w-full py-0"
+                        value=""
+                        onChange={(e) => majStock(e.target.value, 1)}
+                      >
+                        <option value="">ajouter une ressource…</option>
+                        {ressourcesStockables
+                          .filter((r) => !(r.code in (etatSelection?.stock ?? {})))
+                          .map((r) => (
+                            <option key={r.code} value={r.code}>
+                              {r.nom}
+                            </option>
+                          ))}
+                      </select>
+
+                      {ressourcesStockables.length === 0 && (
+                        <p className="text-[11px] text-slate-600">
+                          Aucune ressource de genre « stock » déclarée.
+                        </p>
+                      )}
+                    </div>
+
                     {etatSelection && (
-                      <>
-                        {Object.keys(etatSelection.stock).length > 0 && (
-                          <p className="text-slate-500">
-                            stock :{" "}
-                            {Object.entries(etatSelection.stock)
-                              .map(([r, q]) => `${q} ${r}`)
-                              .join(", ")}
-                          </p>
-                        )}
-                        <button
-                          className="text-slate-500 hover:text-red-400"
-                          onClick={() => retirerEtat(selection.x, selection.z)}
-                        >
-                          retirer l'état de cette case
-                        </button>
-                      </>
+                      <button
+                        className="text-slate-500 hover:text-red-400"
+                        onClick={() => retirerEtat(selection.x, selection.z)}
+                      >
+                        retirer l'état de cette case
+                      </button>
                     )}
                   </>
                 )}
