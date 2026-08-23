@@ -8,6 +8,7 @@ import type { Ressource } from "@/lib/ressources";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
+  contrainteDe,
   couleurAuto,
   logistiqueDe,
   niveauVide,
@@ -77,6 +78,19 @@ export default function TuileDialog({
   const [apresDestruction, setApresDestruction] = useState<string>(
     String(tuile?.tileId_apres_destruction ?? 0),
   );
+  const [indestructible, setIndestructible] = useState(tuile?.indestructible ?? false);
+  const [nonRemplacable, setNonRemplacable] = useState(tuile?.non_remplacable ?? false);
+
+  /**
+   * Les deux cases decrivent trois etats qui s'excluent : cocher l'une decoche
+   * l'autre, decocher les deux rend la tuile destructible. On evite ainsi l'etat
+   * absurde &laquo; peut etre modifiee ET ne peut pas etre modifiee &raquo;.
+   */
+  const contrainte = contrainteDe({ indestructible, non_remplacable: nonRemplacable });
+  const poserContrainte = (voulue: "destructible" | "indestructible" | "figee") => {
+    setIndestructible(voulue !== "destructible");
+    setNonRemplacable(voulue === "figee");
+  };
 
   const [placement, setPlacement] = useState<ReglePlacement[]>(tuile ? placementDe(tuile) : []);
   const [niveaux, setNiveaux] = useState<Niveau[]>(tuile ? niveauxDe(tuile) : [niveauVide(1)]);
@@ -132,6 +146,8 @@ export default function TuileDialog({
       couleur: couleur.trim(),
       actif,
       tileId_apres_destruction: Number(apresDestruction) || 0,
+      indestructible,
+      non_remplacable: nonRemplacable,
       placement,
       // Renumerotation de securite : la position et le champ `niveau` restent d'accord.
       niveaux: niveaux.map((n, i) => ({ ...n, niveau: i + 1 })),
@@ -207,6 +223,17 @@ export default function TuileDialog({
                   &laquo; case vide &raquo; laisse un trou ; sinon choisis la tuile de repli, en
                   general le sol d'origine. C'est le <strong>type</strong> qui decide : l'instance
                   posee sur le plateau ne memorise rien.
+                </Terme>
+                <Terme nom="ne peut pas etre detruite">
+                  Le joueur n'a pas de bouton &laquo; detruire &raquo; sur cette tuile, mais il
+                  peut encore poser autre chose a sa place : la nouvelle construction remplace
+                  l'ancienne sans passer par la case vide. Le champ &laquo; apres destruction
+                  &raquo; devient sans objet, il se grise.
+                </Terme>
+                <Terme nom="ni detruite ni modifiee">
+                  Le cran au-dessus : la case est verrouillee pour de bon. Rien ne l'enleve, rien
+                  ne la remplace. C'est ce qu'il faut pour un decor impose par le plateau modele —
+                  un relief, une bordure — que le joueur ne doit pas pouvoir contourner.
                 </Terme>
               </Aide>
 
@@ -348,9 +375,15 @@ export default function TuileDialog({
                 </label>
                 <select
                   id="tuile-destruction"
-                  className="input"
+                  className="input disabled:opacity-40"
                   value={apresDestruction}
                   onChange={(e) => setApresDestruction(e.target.value)}
+                  disabled={indestructible}
+                  title={
+                    indestructible
+                      ? "Sans objet : cette tuile ne peut pas etre detruite."
+                      : undefined
+                  }
                 >
                   <option value="0">case vide</option>
                   {tuiles
@@ -365,6 +398,47 @@ export default function TuileDialog({
                   Ce que la case redevient quand le joueur detruit cette tuile. Une seule couche :
                   c'est le type de tuile qui decide, l'instance ne memorise rien.
                 </p>
+
+                <div className="mt-3 space-y-2 rounded border border-edge bg-ink/40 p-3">
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-accent"
+                      checked={contrainte === "indestructible"}
+                      onChange={(e) =>
+                        poserContrainte(e.target.checked ? "indestructible" : "destructible")
+                      }
+                    />
+                    <span>
+                      Ne peut pas etre detruite, mais peut etre modifiee
+                      <span className="block text-xs text-slate-500">
+                        Pas de bouton &laquo; detruire &raquo; ; le joueur peut encore poser une
+                        autre tuile a la place.
+                      </span>
+                    </span>
+                  </label>
+
+                  <label className="flex cursor-pointer items-start gap-2 text-sm text-slate-300">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-accent"
+                      checked={contrainte === "figee"}
+                      onChange={(e) => poserContrainte(e.target.checked ? "figee" : "destructible")}
+                    />
+                    <span>
+                      Ne peut etre ni detruite ni modifiee
+                      <span className="block text-xs text-slate-500">
+                        La case est verrouillee : rien ne l'enleve, rien ne la remplace.
+                      </span>
+                    </span>
+                  </label>
+
+                  <p className="text-xs text-slate-500">
+                    {contrainte === "destructible"
+                      ? "Aucune des deux : la tuile se detruit normalement et laisse ce qui est choisi ci-dessus."
+                      : "Les deux cas s'excluent : cocher l'un decoche l'autre. Decoche les deux pour rendre la tuile destructible."}
+                  </p>
+                </div>
               </div>
 
               <div>

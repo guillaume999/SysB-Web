@@ -227,6 +227,20 @@ export type Tuile = {
    * `0` = case vide, la meme convention que dans `tilesBase64`.
    */
   tileId_apres_destruction: number;
+  /**
+   * `true` = le joueur ne peut pas detruire cette tuile. Le champ
+   * `tileId_apres_destruction` devient alors sans objet.
+   */
+  indestructible: boolean;
+  /**
+   * `true` = on ne peut pas non plus poser une autre tuile a sa place.
+   * N'a de sens qu'avec `indestructible` : c'est le cran au-dessus.
+   *
+   * Les deux sont **negatifs** a dessein : un booleen PocketBase vaut `false`
+   * par defaut, donc toutes les tuiles deja en base restent destructibles et
+   * remplacables sans migration.
+   */
+  non_remplacable: boolean;
   placement: ReglePlacement[] | null;
   niveaux: Niveau[] | null;
   logistique: Logistique | null;
@@ -246,6 +260,8 @@ export interface ValeursTuile {
   couleur: string;
   actif: boolean;
   tileId_apres_destruction: number;
+  indestructible: boolean;
+  non_remplacable: boolean;
   placement: ReglePlacement[];
   niveaux: Niveau[];
   logistique: Logistique | null;
@@ -295,6 +311,21 @@ export function niveauxDe(tuile: Tuile): Niveau[] {
       stock_max: n.production?.stock_max ?? 0,
     },
   }));
+}
+
+/**
+ * Les trois etats possibles d'une tuile face au joueur qui veut liberer la case.
+ * Une seule fonction pour que la liste, le formulaire et le jeu disent la meme
+ * chose a partir des deux booleens.
+ */
+export type Contrainte = "destructible" | "indestructible" | "figee";
+
+export function contrainteDe(tuile: {
+  indestructible?: boolean;
+  non_remplacable?: boolean;
+}): Contrainte {
+  if (!tuile.indestructible) return "destructible";
+  return tuile.non_remplacable ? "figee" : "indestructible";
 }
 
 export function logistiqueDe(tuile: Tuile): Logistique | null {
