@@ -241,6 +241,19 @@ export type Tuile = {
    * remplacables sans migration.
    */
   non_remplacable: boolean;
+  /**
+   * Combien d'exemplaires sont **offerts**.
+   *
+   * Tant que le joueur en possède **moins de N sur ce plateau**, la pose au
+   * palier 1 ne coûte rien. `0` = jamais gratuit.
+   *
+   * ⚠️ C'est le compte du **moment**, pas un historique : détruire son dernier
+   * entrepôt rend le suivant à nouveau gratuit. C'est voulu — la règle est un
+   * filet de sécurité (« il faut toujours un entrepôt »), pas une promotion de
+   * bienvenue. Sans ce ré-armement, un joueur qui démolit son unique entrepôt
+   * resterait bloqué définitivement.
+   */
+  premiers_gratuits: number;
   placement: ReglePlacement[] | null;
   niveaux: Niveau[] | null;
   logistique: Logistique | null;
@@ -262,6 +275,7 @@ export interface ValeursTuile {
   tileId_apres_destruction: number;
   indestructible: boolean;
   non_remplacable: boolean;
+  premiers_gratuits: number;
   placement: ReglePlacement[];
   niveaux: Niveau[];
   logistique: Logistique | null;

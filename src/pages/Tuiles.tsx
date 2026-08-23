@@ -213,6 +213,14 @@ export default function Tuiles() {
                             brouillon
                           </span>
                         )}
+                        {tuile.premiers_gratuits > 0 && (
+                          <span
+                            className="ml-2 rounded border border-emerald-500/40 px-1.5 py-0.5 text-[10px] uppercase text-emerald-400"
+                            title={`Les ${tuile.premiers_gratuits} premier(s) sont offerts tant que le joueur en possede moins.`}
+                          >
+                            {tuile.premiers_gratuits} offert{tuile.premiers_gratuits > 1 ? "s" : ""}
+                          </span>
+                        )}
                         {logistique && (
                           <span className="ml-2 rounded border border-accent/40 px-1.5 py-0.5 text-[10px] uppercase text-accent">
                             {logistique.role}
