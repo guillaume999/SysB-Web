@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Aide, { Terme } from "@/components/Aide";
+import AmorcageEditeur from "@/components/AmorcageEditeur";
 import GrillePlateau, { couleurTuile } from "@/components/GrillePlateau";
 import { messageErreur, pb } from "@/lib/pb";
 import {
   COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
   TILE_VIDE,
+  amorcageDe,
+  amorcageNettoye,
+  amorcageVide,
   casesDansRayon,
   cleCase,
   decoderTiles,
@@ -19,6 +23,7 @@ import {
   loadPlateau,
   nettoyerEtats,
   redimensionner,
+  type Amorcage,
   type EtatCase,
   type Plateau,
   type SourcePlateau,
@@ -66,6 +71,11 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   const [hauteur, setHauteur] = useState(0);
   const [actif, setActif] = useState(false);
 
+  // ⚠️ `templates` seulement. Un plateau de joueur n'a pas d'amorcage : il l'a
+  // deja consomme a sa creation. L'editer la n'aurait aucun effet, et laisser le
+  // panneau visible ferait croire le contraire.
+  const [amorcage, setAmorcage] = useState<Amorcage>(amorcageVide());
+
   // Le contenu
   const [octets, setOctets] = useState<Uint8Array>(new Uint8Array(0));
   const [etats, setEtats] = useState<EtatCase[]>([]);
@@ -97,6 +107,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
       setLargeur(p.largeur);
       setHauteur(p.hauteur);
       setActif(Boolean(p.actif));
+      setAmorcage(amorcageDe(p));
       setOctets(decoderTiles(p));
       setEtats(etatsDe(p));
       setModifie(false);
@@ -229,7 +240,12 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
         tilesBase64: encoderTiles(octets),
         etats: propres,
       };
-      if (estModele) corps.actif = actif;
+      if (estModele) {
+        corps.actif = actif;
+        // Les lignes vides sont ecartees a l'envoi : le jeu les ignorerait de
+        // toute facon, autant ne pas laisser croire qu'elles agissent.
+        corps.amorcage = amorcageNettoye(amorcage);
+      }
       await pb.collection(collection).update(plateau.id, corps);
       setEtats(propres);
       setModifie(false);
@@ -380,6 +396,27 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
           )}
         </div>
 
+        {estModele && (
+          <div className="mt-4 rounded border border-edge p-3">
+            <p className="label mb-0">Amorçage — comment une partie démarre ici</p>
+            <p className="mt-0.5 mb-3 text-[11px] text-slate-500">
+              Ces réglages appartiennent au <strong>modèle</strong>, pas aux tuiles : le même
+              entrepôt doit pouvoir être offert sur un plateau de débutant et payant sur un
+              plateau difficile, sans créer deux tuiles. C&apos;est pour ça que le champ
+              &laquo; Exemplaires offerts &raquo; a quitté le catalogue pour arriver ici.
+            </p>
+            <AmorcageEditeur
+              amorcage={amorcage}
+              tuiles={palette}
+              ressources={ressources}
+              onChange={(a) => {
+                setAmorcage(a);
+                setModifie(true);
+              }}
+            />
+          </div>
+        )}
+
         <Aide titre="Ce que fait l'éditeur">
           <Terme nom="peindre">
             Choisis une tuile dans la palette et clique, ou glisse pour peindre plusieurs cases.
@@ -405,6 +442,12 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             Les cases sont conservées <strong>par coordonnées</strong>, pas par position dans le
             tableau : réduire la largeur perd la colonne de droite, pas tout le plateau. Ce qui
             sort du cadre est perdu, états compris.
+          </Terme>
+          <Terme nom="amorçage">
+            Sur un <strong>modèle</strong> seulement : les ressources de départ et les bâtiments
+            offerts. Les ressources atterrissent dans les entrepôts du plateau à sa création ;
+            les trois modes de gratuité ne diffèrent que sur ce qui arrive quand le joueur
+            détruit un exemplaire offert.
           </Terme>
           <Terme nom="états">
             Le point blanc marque une case qui retient quelque chose — un niveau, un stock, un

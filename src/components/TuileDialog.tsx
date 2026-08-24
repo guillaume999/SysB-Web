@@ -78,9 +78,6 @@ export default function TuileDialog({
   const [apresDestruction, setApresDestruction] = useState<string>(
     String(tuile?.tileId_apres_destruction ?? 0),
   );
-  const [premiersGratuits, setPremiersGratuits] = useState<string>(
-    String(tuile?.premiers_gratuits ?? 0),
-  );
   const [indestructible, setIndestructible] = useState(tuile?.indestructible ?? false);
   const [nonRemplacable, setNonRemplacable] = useState(tuile?.non_remplacable ?? false);
 
@@ -149,7 +146,6 @@ export default function TuileDialog({
       couleur: couleur.trim(),
       actif,
       tileId_apres_destruction: Number(apresDestruction) || 0,
-      premiers_gratuits: Math.max(0, Math.floor(Number(premiersGratuits) || 0)),
       indestructible,
       non_remplacable: nonRemplacable,
       placement,
@@ -445,29 +441,14 @@ export default function TuileDialog({
                 </div>
               </div>
 
-              <div>
-                <label className="label" htmlFor="tuile-gratuits">
-                  Exemplaires offerts
-                </label>
-                <input
-                  id="tuile-gratuits"
-                  type="number"
-                  min={0}
-                  className="input w-28"
-                  value={premiersGratuits}
-                  onChange={(e) => setPremiersGratuits(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  Tant que le joueur en possede <strong>moins que ce nombre</strong> sur un plateau,
-                  la pose ne lui coute rien. <strong>0</strong> = jamais gratuit.
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  C&apos;est le compte du moment, pas un historique : detruire son dernier entrepot
-                  rend le suivant a nouveau gratuit. Un filet de securite, pas une promotion de
-                  bienvenue &mdash; sans lui, un joueur qui demolit son unique entrepot resterait
-                  bloque. Seule la <strong>pose</strong> est offerte ; ameliorer se paie.
-                </p>
-              </div>
+              {/*
+                Le champ « Exemplaires offerts » a ete RETIRE le 2026-08-24. La
+                gratuite de demarrage ne depend plus de la tuile mais du MODELE
+                DE PLATEAU : une tuile est une entree de catalogue reutilisable
+                par plusieurs scenarios, et le meme entrepot doit pouvoir etre
+                offert sur un plateau et payant sur un autre. Ca se regle
+                maintenant dans l'onglet « Amorcage » de l'editeur de plateau.
+              */}
 
               <div>
                 <label className="label" htmlFor="tuile-description">

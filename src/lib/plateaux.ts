@@ -39,6 +39,99 @@ export interface EtatCase {
   t: number;
 }
 
+// --- Amorcage : comment une partie demarre ----------------------------------
+//
+// ⚠️ Porte par le MODELE de plateau, pas par la tuile. Decide le 2026-08-24 :
+// une tuile est une entree de CATALOGUE, generique et reutilisable par
+// plusieurs scenarios ; combien d'exemplaires sont offerts au demarrage est une
+// propriete du SCENARIO. Le meme entrepot doit pouvoir etre offert sur un
+// plateau de debutant et payant sur un plateau difficile, sans creer deux
+// tuiles. `tuiles.premiers_gratuits` a ete supprime en consequence.
+//
+// Pendant exact de `SysB.Backend.Amorcage` cote Unity : memes champs, memes
+// noms. **Renommer d'un cote sans l'autre casse le jeu en silence** — le modele
+// se chargerait, avec des regles vides.
+
+/** Les trois modes ne different que sur une question : que se passe-t-il si le joueur DETRUIT un exemplaire offert ? */
+export type ModeGratuite = "sous_minimum" | "borne" | "cadeau";
+
+export const MODES_GRATUITE: { valeur: ModeGratuite; libelle: string; aide: string }[] = [
+  {
+    valeur: "sous_minimum",
+    libelle: "filet de sécurité",
+    aide:
+      "Tant que le joueur en possède moins de N, la pose est offerte. Détruire le dernier " +
+      "ré-arme la gratuité — c'est ce qui évite qu'un joueur ayant démoli son unique entrepôt " +
+      "reste bloqué pour de bon.",
+  },
+  {
+    valeur: "borne",
+    libelle: "filet + plafond",
+    aide:
+      "Comme le filet, plus un maximum : au-delà de M exemplaires, la pose est carrément " +
+      "interdite. (Un plafond seul, sans gratuité, se dit déjà avec la règle de placement " +
+      "« limite » sur la tuile.)",
+  },
+  {
+    valeur: "cadeau",
+    libelle: "cadeau de bienvenue",
+    aide:
+      "Les N premières poses de la partie sont offertes, une fois pour toutes. Détruire ne rend " +
+      "PAS le cadeau. ⚠️ Un joueur qui démolit tout reste sans filet.",
+  },
+];
+
+export interface RessourceDepart {
+  ressource: string;
+  quantite: number;
+}
+
+export interface RegleGratuite {
+  tileId: number;
+  mode: ModeGratuite;
+  min: number;
+  /** Plafond du mode « borne ». 0 = aucun plafond. */
+  max: number;
+}
+
+export interface Amorcage {
+  ressources_depart: RessourceDepart[];
+  gratuites: RegleGratuite[];
+}
+
+export function amorcageVide(): Amorcage {
+  return { ressources_depart: [], gratuites: [] };
+}
+
+/**
+ * Lit le champ `amorcage` d'un record. **Tolerant par construction** : un champ
+ * jamais rempli revient `null` de PocketBase, et une saisie abimee ne doit pas
+ * empecher d'ouvrir le plateau — elle doit pouvoir se reparer a l'ecran.
+ */
+export function amorcageDe(plateau: Plateau | null | undefined): Amorcage {
+  const a = plateau?.amorcage;
+  if (!a || typeof a !== "object") return amorcageVide();
+  return {
+    ressources_depart: Array.isArray(a.ressources_depart) ? a.ressources_depart : [],
+    gratuites: Array.isArray(a.gratuites) ? a.gratuites : [],
+  };
+}
+
+/**
+ * Ecarte les lignes vides avant l'envoi : une ressource sans code, une quantite
+ * nulle, une regle sans tuile ou a `min` nul ne veulent rien dire. Le jeu les
+ * ignorerait de toute facon (`Amorcage.RegleDe` exige `min > 0`) — autant ne pas
+ * les stocker, plutot que de laisser croire qu'elles agissent.
+ */
+export function amorcageNettoye(a: Amorcage): Amorcage {
+  return {
+    ressources_depart: (a.ressources_depart ?? []).filter(
+      (r) => r.ressource !== "" && r.quantite > 0,
+    ),
+    gratuites: (a.gratuites ?? []).filter((g) => g.tileId > 0 && g.min > 0),
+  };
+}
+
 export type Plateau = {
   id: string;
   collectionId: string;
@@ -51,6 +144,8 @@ export type Plateau = {
   etats: EtatCase[] | null;
   /** `templates` seulement. */
   actif?: boolean;
+  /** `templates` seulement : comment une partie demarre sur ce modele. */
+  amorcage?: Amorcage | null;
   /** `plateaux` seulement. */
   ownerId?: string;
   created: string;
@@ -66,6 +161,7 @@ export interface ValeursPlateau {
   tilesBase64: string;
   etats: EtatCase[];
   actif?: boolean;
+  amorcage?: Amorcage;
   ownerId?: string;
 }
 
