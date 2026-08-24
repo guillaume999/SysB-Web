@@ -20,6 +20,12 @@ const PAGES = [
   { to: "/joueurs", label: "Joueurs" },
 ];
 
+/**
+ * Les écrans qui ne pilotent aucune collection. Séparés des six autres dans la
+ * barre : ici on lit, on n'écrit pas dans la base.
+ */
+const DOCUMENTS = [{ to: "/conception", label: "Conception" }];
+
 const lienClasses = ({ isActive }: { isActive: boolean }) =>
   `block rounded px-3 py-2 text-sm transition-colors ${
     isActive ? "bg-accent/15 text-white" : "text-slate-300 hover:bg-ink hover:text-white"
@@ -50,6 +56,18 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </div>
 
+          <div className="mt-4 border-t border-edge pt-3">
+            <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-600">
+              Documentation
+            </p>
+            <div className="space-y-0.5">
+              {DOCUMENTS.map((page) => (
+                <NavLink key={page.to} to={page.to} className={lienClasses}>
+                  {page.label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         </nav>
 
         <div className="border-t border-edge p-3 text-xs">
@@ -77,7 +95,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             defaultValue=""
           >
             <option value="">Aller à…</option>
-            {PAGES.map((page) => (
+            {[...PAGES, ...DOCUMENTS].map((page) => (
               <option key={page.to} value={page.to}>
                 {page.label}
               </option>

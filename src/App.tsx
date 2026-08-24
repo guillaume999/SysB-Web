@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "@/components/Layout";
 import Home from "@/pages/Home";
@@ -9,6 +10,12 @@ import PlateauEditeur from "@/pages/PlateauEditeur";
 import Ressources from "@/pages/Ressources";
 import Tuiles from "@/pages/Tuiles";
 import { useAuth } from "@/lib/auth";
+
+/**
+ * Le document de conception pèse ~115 Ko de texte inliné au build : chargé à la
+ * demande, il ne ralentit pas l'ouverture des six écrans de contenu.
+ */
+const Conception = lazy(() => import("@/pages/Conception"));
 
 export default function App() {
   const { user, loading } = useAuth();
@@ -33,7 +40,15 @@ export default function App() {
         <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />
         <Route path="/plateaux" element={<ListePlateaux source="plateaux" />} />
         <Route path="/plateaux/:id" element={<PlateauEditeur source="plateaux" />} />
-      <Route path="/joueurs" element={<Joueurs />} />
+        <Route path="/joueurs" element={<Joueurs />} />
+        <Route
+          path="/conception"
+          element={
+            <Suspense fallback={<p className="text-sm text-slate-500">Chargement du document…</p>}>
+              <Conception />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
