@@ -128,24 +128,43 @@ export interface Niveau {
  * Toutes les règles doivent être vraies (ET simple). Un champ `groupe` pourra
  * être ajouté plus tard pour les OU sans invalider une seule règle déjà saisie.
  *
+ * Depuis le 2026-08-25, **proximité, exclusion et support citent une LISTE de
+ * tuiles** (`tileIds`), pas une seule. Le sens est « n'importe laquelle » :
+ * - proximité : au moins N tuiles à portée, toutes tuiles listées confondues ;
+ * - exclusion : aucune tuile listée à portée ;
+ * - support : la case porte l'une des tuiles listées.
+ * `tileId` (au singulier) est l'ancien champ : `placementDe()` le replie dans
+ * `tileIds` à la lecture, et `placementPourEnregistrer()` le réécrit encore
+ * (= la première tuile de la liste) pour qu'un build du jeu antérieur à cette
+ * date continue de lire quelque chose.
+ *
  * `rayon` absent ou `null` = tout le plateau. **Ne jamais utiliser 0 pour ça** :
  * 0 a déjà un sens légitime, la case elle-même.
  */
 export type TypeRegle = "proximite" | "exclusion" | "support" | "limite";
 
 export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[] = [
-  { valeur: "proximite", libelle: "proximité", aide: "au moins N tuiles d'un id donné à portée" },
-  { valeur: "exclusion", libelle: "exclusion", aide: "aucune tuile de cet id à portée" },
-  { valeur: "support", libelle: "support", aide: "la case elle-même doit porter un de ces ids" },
+  { valeur: "proximite", libelle: "proximité", aide: "au moins N tuiles parmi celles cochées, à portée" },
+  { valeur: "exclusion", libelle: "exclusion", aide: "aucune des tuiles cochées à portée" },
+  { valeur: "support", libelle: "support", aide: "la case elle-même doit porter une des tuiles cochées" },
   { valeur: "limite", libelle: "limite", aide: "nombre maximum d'exemplaires" },
 ];
 
+/** Les règles qui citent des tuiles — `limite` n'en cite aucune. */
+export const REGLES_A_TUILES: readonly TypeRegle[] = ["proximite", "exclusion", "support"];
+
 export interface ReglePlacement {
   regle: TypeRegle;
-  /** `proximite`, `exclusion` */
-  tileId?: number;
-  /** `support` */
+  /**
+   * `proximite`, `exclusion`, `support` : les tuiles citées, « n'importe laquelle ».
+   * Toujours présent après `placementDe()`.
+   */
   tileIds?: number[];
+  /**
+   * Ancien champ (une seule tuile pour proximité / exclusion). Lu pour migrer,
+   * réécrit pour la compatibilité — jamais édité par le formulaire.
+   */
+  tileId?: number;
   /** Distance hexagonale. `null` = tout le plateau. */
   rayon?: number | null;
   /** `proximite` */
@@ -158,9 +177,9 @@ export interface ReglePlacement {
 export function regleVide(regle: TypeRegle): ReglePlacement {
   switch (regle) {
     case "proximite":
-      return { regle, tileId: 0, rayon: 2, min: 1 };
+      return { regle, tileIds: [], rayon: 2, min: 1 };
     case "exclusion":
-      return { regle, tileId: 0, rayon: 2 };
+      return { regle, tileIds: [], rayon: 2 };
     case "support":
       return { regle, tileIds: [] };
     case "limite":
@@ -293,7 +312,45 @@ export function logistiqueVide(role: RoleLogistique): Logistique {
  * du code n'ait jamais à se demander si une liste existe.
  */
 export function placementDe(tuile: Tuile): ReglePlacement[] {
-  return Array.isArray(tuile.placement) ? tuile.placement : [];
+  const brutes = Array.isArray(tuile.placement) ? tuile.placement : [];
+  return brutes.filter((r) => r && r.regle).map(normaliserRegle);
+}
+
+/**
+ * Replie l'ancien `tileId` unique dans `tileIds`, et garantit la liste pour les
+ * trois règles qui citent des tuiles. Le formulaire ne voit ainsi qu'une forme.
+ */
+export function normaliserRegle(r: ReglePlacement): ReglePlacement {
+  if (!REGLES_A_TUILES.includes(r.regle)) return { ...r, tileIds: undefined, tileId: undefined };
+  const liste = Array.isArray(r.tileIds) ? r.tileIds.filter((id) => id > 0) : [];
+  if (liste.length === 0 && r.tileId && r.tileId > 0) liste.push(r.tileId);
+  return { ...r, tileIds: Array.from(new Set(liste)), tileId: undefined };
+}
+
+/** Vrai si la règle cite au moins une tuile — ou n'en a pas besoin (`limite`). */
+export function regleComplete(r: ReglePlacement): boolean {
+  return !REGLES_A_TUILES.includes(r.regle) || (r.tileIds?.length ?? 0) > 0;
+}
+
+/**
+ * Ce qui part en base. `tileId` est réémis (= première tuile citée) pour qu'un
+ * build du jeu qui ne connaît pas encore `tileIds` sur proximité / exclusion
+ * lise au moins la première. À retirer quand plus aucun build ancien ne tourne.
+ */
+export function placementPourEnregistrer(regles: ReglePlacement[]): ReglePlacement[] {
+  return regles.map((r) => {
+    const n = normaliserRegle(r);
+    const sortie: ReglePlacement = { ...n };
+    if (!REGLES_A_TUILES.includes(n.regle)) {
+      delete sortie.tileIds;
+      delete sortie.tileId;
+    } else if (n.regle === "support") {
+      delete sortie.tileId;
+    } else {
+      sortie.tileId = n.tileIds?.[0] ?? 0;
+    }
+    return sortie;
+  });
 }
 
 export function niveauxDe(tuile: Tuile): Niveau[] {

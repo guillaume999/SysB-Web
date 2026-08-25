@@ -14,6 +14,7 @@ import {
   niveauVide,
   niveauxDe,
   placementDe,
+  placementPourEnregistrer,
   prochainTileId,
   type Logistique,
   type Niveau,
@@ -148,7 +149,8 @@ export default function TuileDialog({
       tileId_apres_destruction: Number(apresDestruction) || 0,
       indestructible,
       non_remplacable: nonRemplacable,
-      placement,
+      // Forme canonique + `tileId` de compatibilite pour les builds anciens.
+      placement: placementPourEnregistrer(placement),
       // Renumerotation de securite : la position et le champ `niveau` restent d'accord.
       niveaux: niveaux.map((n, i) => ({ ...n, niveau: i + 1 })),
       logistique,

@@ -1082,6 +1082,8 @@ const LIGNEES: { nom: string; vie: number[] }[] = [
   { nom: "Croire", vie: [1, 1, 1, 1, 1, 1, 1] },
   { nom: "Savoir & santé", vie: [0, 0, 1, 1, 1, 1, 1] },
   { nom: "Stocker & acheminer", vie: [1, 1, 1, 1, 1, 1, 1] },
+  { nom: "Mode & Art", vie: [1, 1, 1, 1, 1, 1, 1] },
+  { nom: "Sport", vie: [1, 1, 1, 1, 1, 1, 1] },
 ];
 
 function Lignees() {
@@ -1090,10 +1092,10 @@ function Lignees() {
 
   return (
     <svg
-      viewBox="0 0 820 470"
+      viewBox="0 0 820 536"
       className="h-auto w-full"
       role="img"
-      aria-label="Onze lignées de bâtiments suivies sur sept âges : deux naissent à l'âge 2, une à l'âge 3, la filière de la mer s'éteint à l'âge 5, la filière de l'alcool saute l'âge 6."
+      aria-label="Treize lignées de bâtiments suivies sur sept âges : deux naissent à l'âge 2, une à l'âge 3, la filière de la mer s'éteint à l'âge 5, la filière de l'alcool saute l'âge 6."
     >
       {[0, 1, 2, 3, 4, 5, 6].map((age) => (
         <text key={age} x={x(age)} y={44} textAnchor="middle" fontSize={10} fontWeight={600} fill="currentColor" opacity={0.55}>
@@ -1153,10 +1155,10 @@ function Lignees() {
         );
       })}
 
-      <text x={214} y={438} fontSize={9} fill="currentColor" opacity={0.5}>
+      <text x={214} y={504} fontSize={9} fill="currentColor" opacity={0.5}>
         ● lignée vivante ⬡ premier bâtiment de la lignée ○ pas encore ✕ filière éteinte
       </text>
-      <text x={214} y={454} fontSize={9} fill={SCI} opacity={0.75}>
+      <text x={214} y={520} fontSize={9} fill={SCI} opacity={0.75}>
         Le pointillé marque le seuil de l'orbite : c'est là que la mer meurt et que l'alcool change de client.
       </text>
     </svg>
@@ -1317,7 +1319,7 @@ export const SCHEMAS: Record<string, Fiche> = {
   lignees: {
     dessin: <Lignees />,
     legende:
-      "Onze fonctions suivies sur sept âges. Ce que le tableau ne montre pas d'un coup d'œil : deux lignées naissent seulement à l'âge 2, une à l'âge 3, la filière de la mer meurt à l'âge 5, et celle de l'alcool saute l'âge 6 — elle ne disparaît pas, elle change de client.",
+      "Treize fonctions suivies sur sept âges. Ce que le tableau ne montre pas d'un coup d'œil : deux lignées naissent seulement à l'âge 2, une à l'âge 3, la filière de la mer meurt à l'âge 5, et celle de l'alcool saute l'âge 6 — elle ne disparaît pas, elle change de client. Mode & Art et Sport, les deux dernières, ne produisent que de la satisfaction et ne meurent jamais.",
   },
   "verrous-ages": {
     dessin: <VerrousAges />,

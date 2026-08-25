@@ -2002,7 +2002,7 @@ colonne, et de voir du premier coup d'œil ce qui manque à une colonie.
 | **Habitat & Gouvernance** | combien de gens vivent là, et le plafond démographique | la population plafonne, l'âge suivant reste fermé |
 | **Vivres** | nourrir, sans quoi le rendement au travail s'effondre | grève, puis perte de population |
 | **Matériaux** | extraire et transformer la matière à bâtir | plus rien ne se construit |
-| **Confort & Croyance** | productivité (+25 % à +50 %) et jauge d'Esprit | production molle, voie Archéomage fermée |
+| **Confort & Croyance** | productivité (+25 % à +50 %), jauge d'Esprit — et, par la mode, l'art et le sport, la satisfaction | production molle, voie Archéomage fermée, colonie morose |
 | **Services & Savoir** | santé, éducation, qualifications | les métiers avancés restent inaccessibles |
 | **Logistique** | stocker, acheminer, et à partir de l'âge 5 expédier | tout est produit et rien n'arrive |
 
@@ -2068,6 +2068,8 @@ pas des valeurs définitives.
 | Cuve Artisanale (Casserie) | 12 bois | 2 | 3 baies · 1 miel | 2 bière de baies → +10 % vitesse des colons |
 | Séchoir en Bois | 10 bois | 1 | 3 feuilles de tabac | 2 tabac séché → réduit le risque de mutinerie |
 | Autel en Pierre (Petit Temple) | 15 pierre · 10 bois · 2 bière | 1 | 1 bière | 2 Foi → **débloque la jauge d'Esprit** |
+| Atelier de Parures | 10 bois · 5 pierre | 1 | 1 baies (teinture) | 2 parures → **+5 satisfaction** · *le premier pas de la Mode* |
+| Terrain de Jeux | 8 bois | — | — | **+5 satisfaction** · un seul par secteur · *le premier pas du Sport* |
 
 ### 30.5 Logistique
 
@@ -2122,6 +2124,8 @@ qui donne son prix au dispensaire de l'âge 3.
 |---|---|---|---|---|
 | Brasserie Artisanale | 30 briques · 10 planches | 3 | 4 blé · 2 miel | 3 bière |
 | Chapelle de Pierre | 40 briques · 10 planches | 2 | 1 bière | 4 Foi |
+| Tisserand | 25 briques · 10 planches | 3 | 3 laine | 2 vêtements de laine → **+10 satisfaction** · +1 logé par Maison en Brique |
+| Champ de Tir & Lice | 20 briques · 15 planches | 2 | 1 bière | **+8 satisfaction** · les recrues partent formées *(effet au front, plus tard)* |
 
 ### 31.5 Logistique
 
@@ -2180,6 +2184,8 @@ qui donne son prix au dispensaire de l'âge 3.
 | Teinturerie | 50 briques · 10 verre | 4 | 3 laine · 2 charbon | 3 teinture |
 | Atelier Textile | 60 briques · 15 outils | 5 | 3 laine · 2 teinture | 4 vêtements sur-mesure → **+limite de population par immeuble** |
 | Temple Urbain | 90 briques · 20 verre · 5 or | 4 | 2 rhum | 8 Foi |
+| Salle des Fêtes & Théâtre | 60 briques · 15 verre | 4 | 1 rhum · 1 papier | spectacles → **+12 satisfaction** · *l'Art rejoint la Mode* |
+| Gymnase & Hippodrome | 70 briques · 20 fer | 4 | 2 pain | **+10 satisfaction** · santé : −10 % de perte de population |
 
 ### 32.5 Services & Savoir
 
@@ -2242,6 +2248,8 @@ qui donne son prix au dispensaire de l'âge 3.
 |---|---|---|---|---|
 | Distillerie de Whisky | 120 acier · 30 verre | 6 | 8 céréales · 2 vapeur | 8 alcool fort |
 | Grande Cathédrale | 200 briques · 80 acier · 10 or | 6 | 2 alcool fort | 14 Foi |
+| Maison de Couture & Opéra | 120 acier · 40 verre | 6 | 3 vêtements sur-mesure · 2 teinture | 4 tenues de prestige → **+15 satisfaction** · +limite de population par Résidence |
+| Stade Ouvrier | 200 acier · 60 poutrelles | 8 | 2 vapeur · 3 conserves | **+15 satisfaction** · **+10 % de rendement des ouvriers** |
 
 ### 33.5 Services & Savoir
 
@@ -2295,20 +2303,27 @@ bâtiments.*
 | Usine d'Hydrazine | 220 béton · 80 titane | 10 | 4 plastique · électricité | 5 hydrazine — **le carburant des Portes** |
 | Site de Fouilles Archéologiques | 180 béton · 60 machines | 8 | — | 3 reliques · *case de ruines* |
 
-### 34.4 Services & Savoir
+### 34.4 Confort & Croyance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Galerie d'Art & Studio de Design | 220 béton · 80 verre · 20 électronique | 8 | électricité · 2 papier | **+18 satisfaction** · +10 % de Focale Arcanique |
+| Complexe Olympique | 300 béton · 100 acier | 10 | électricité · 4 nutriments enrichis | **+18 satisfaction** · les recrues Génétiques partent avec +5 % de PV |
+
+### 34.5 Services & Savoir
 
 | Bâtiment | Coût | Travaillants | Consomme | Produit |
 |---|---|---|---|---|
 | Institut de Recherche | 260 béton · 80 verre · 40 électronique | 12 | 2 papier · électricité | points de recherche des 3 axes |
 
-### 34.5 Logistique & Espace
+### 34.6 Logistique & Espace
 
 | Bâtiment | Coût | Travaillants | Consomme | Produit |
 |---|---|---|---|---|
 | Complexe de Lancement & Astroport V2 *(Science)* | 400 béton · 200 titane · 80 électronique | 20 | hydrazine · comburant O2 | **augmente le débit et le volume expédiables vers le front** · satellites |
 | Entrepôt Sous Pression | 200 béton · 80 titane | 4 | électricité | 12 000 de stockage |
 
-### 34.6 Les bâtiments d'axe — ce que chacun ouvre sur le front
+### 34.7 Les bâtiments d'axe — ce que chacun ouvre sur le front
 
 | Axe | Bâtiment | Consomme | Effet sur le champ de bataille |
 |---|---|---|---|
@@ -2362,6 +2377,8 @@ bâtiments.*
 | Grand Nexus de Croyance | 500 alliage · 100 or · 60 reliques | 14 | Foi élevée | **mana transférable directement au Héros** sur le front |
 | Laboratoire de Pointe | 480 alliage · 200 composants quantiques | 18 | énergie | recherche de palier 6 des 3 axes |
 | Cité Universitaire | 400 alliage · 160 papier | 12 | énergie | **débloque la qualification « Chercheur »** |
+| Atelier Holographique | 400 alliage · 120 composants quantiques | 8 | énergie | mode et art projetés, sans matière → **+25 satisfaction** · *compense la population réduite par l'automatisation* |
+| Arène à Gravité Variable | 500 alliage · 150 titane | 12 | énergie | **+25 satisfaction** · entraînement des bataillons mutants : +10 % d'armure biologique |
 
 ### 35.5 Logistique
 
@@ -2414,6 +2431,8 @@ la Porte.*
 | Distillerie Quantique | 600 alliage · 300 composants quantiques | 16 | fruits mutés · chimie lourde | 8 Nectar d'Ambroisie → **+50 % de vitesse de recherche · régénération accélérée des Héros sur le front** |
 | Laboratoire de Néo-Tabac Synaptique | 550 alliage · 250 composants · essence mystique | 14 | tabac génétiquement modifié · essence mystique | 6 néo-tabac → **augmente la puissance des sorts lancés depuis la planète vers le Plateau** |
 | Sanctuaire des Filaments | alliages or/silicium · noyaux d'énergie · reliques archéologiques | 20 | Foi maximale | **−30 % sur le coût d'ouverture des Portes vers les zones de guerre** |
+| Sculpteur de Corps (Esthétique Transhumaine) | 700 alliage · 300 composants quantiques | 14 | matière exotique · Nectar d'Ambroisie | **+30 satisfaction** · prestige des Archontes : −10 % de coût FA des sorts |
+| Colisée Orbital | 900 alliage · 400 composants quantiques | 18 | énergie · nutriments quantiques | **+30 satisfaction** · simule le front : les unités expédiées partent avec un palier d'expérience |
 
 ### 36.5 Services & Savoir
 
@@ -2456,6 +2475,8 @@ C'est la lecture verticale du catalogue : on suit une colonne de besoin, pas un 
 | **Croire** | Autel en Pierre | Chapelle de Pierre | Temple Urbain | Grande Cathédrale | Observatoire Runique · Sanctuaire de Porte | Grand Nexus de Croyance | Sanctuaire des Filaments |
 | **Savoir & santé** | — | — | Dispensaire · École | Hôpital · Lycée Technique | Institut de Recherche | Laboratoire de Pointe · Cité Universitaire | Télépathie Synthétique · Processeurs Quantiques |
 | **Stocker & acheminer** | Entrepôt en Bois | Entrepôt en Brique · Marché | Entrepôt Urbain | Gare & Réseau Ferré | Astroport V2 · Entrepôt Sous Pression | Entrepôt Orbital · Chantier Naval | Injecteur de Porte · Entrepôt à Stase |
+| **Mode & Art** | Atelier de Parures | Tisserand | Atelier Textile · Salle des Fêtes | Maison de Couture & Opéra | Galerie d'Art & Studio de Design | Atelier Holographique | Sculpteur de Corps |
+| **Sport** | Terrain de Jeux | Champ de Tir & Lice | Gymnase & Hippodrome | Stade Ouvrier | Complexe Olympique | Arène à Gravité Variable | Colisée Orbital |
 
 ### 37.1 Les quatre choses que ce tableau raconte
 
@@ -2476,6 +2497,13 @@ presque rien à optimiser, seulement à survivre.
 **Deux lignées ne s'arrêtent jamais.** **Habitat** et **Gouvernance** ont une entrée aux sept
 âges, parce que ce sont elles qui portent le plafond de tout le reste. Une colonie qui néglige la
 gouvernance plafonne, quels que soient ses gisements.
+
+**Deux lignées ne servent qu'à plaire — et c'est leur force.** **Mode & Art** et **Sport**
+n'extraient rien, ne transforment rien d'indispensable : elles ne produisent que de la
+satisfaction. C'est ce qui les rend précieuses à l'âge 6, quand l'automatisation vide les
+habitats et que la Focale n'a plus personne pour la générer. Et à partir de l'âge 5, le Sport
+cesse d'être un loisir : ses bâtiments préparent les recrues avant qu'elles ne passent la Porte —
+c'est la troisième lignée, après Enivrer et Croire, à changer de client pour servir le front.
 
 ---
 
