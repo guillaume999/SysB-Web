@@ -52,6 +52,18 @@
 27. Arbre des bâtiments (infrastructure & production)
 28. Matrice d'équilibrage économie / combat
 
+**PARTIE VIII — CATALOGUE DES BÂTIMENTS, ÂGE PAR ÂGE**
+29. Comment lire ce catalogue
+30. Âge 1 — L'Âge des Pionniers
+31. Âge 2 — Le Secteur Artisanal
+32. Âge 3 — La Société Urbaine
+33. Âge 4 — L'Ère Industrielle
+34. Âge 5 — L'Ère Spatiale Primordiale
+35. Âge 6 — La Métropole Spatiale
+36. Âge 7 — La Cité Spatiale Transhumaine
+37. Les lignées — ce que chaque bâtiment devient
+38. Les verrous — ce qu'un âge doit au précédent
+
 **ANNEXES**
 - Annexe A — Provenance des sources
 - Annexe B — Divergences entre versions
@@ -73,6 +85,8 @@ téléportrices** :
 - **Le Champ de bataille (Tactique/Action)** :
   Envoi de ressources, d'unités et d'unités spéciales via les Portes pour conquérir
   le Plateau de l'Univers.
+
+<!-- schema: boucle-jeu -->
 
 ---
 
@@ -344,6 +358,11 @@ Schéma global :
 ---
 
 ## 7. Tableau récapitulatif des 7 paliers d'évolution
+
+<!-- schema: paliers-evolution -->
+
+> Le détail des bâtiments de chaque âge, leurs lignées et les verrous entre âges sont en
+> **Partie VIII** (§29 à §38).
 
 ```
 +--------+----------------------------+-------------------------------+-------------------------------------------------------------------------+
@@ -717,6 +736,8 @@ et élargit les capacités de projection sur le champ de bataille.
 
 ## 13. Catalogue complet des 35 unités (structure 7 paliers)
 
+<!-- schema: familles-unites -->
+
 ### 🔮 Pures Archéomages (5 unités)
 
 - **Inquisiteur Runique (P1)** : infanterie de détection et tirs magiques de base.
@@ -809,6 +830,8 @@ d'avantages croisés strictement séparée en trois branches : **Science, Géné
 et Archéomages**.
 
 **[BOUCLE DE PROGRESSION & SUPÉRIORITÉ]**
+
+<!-- schema: triangulation -->
 
 ```
 Science ---> Génétique ---> Archéomages ---> Science
@@ -906,6 +929,8 @@ dans l'efficacité des unités.
 ---
 
 ## 17. Synthèse générale de la progression par palier (1 à 6)
+
+<!-- schema: matrice-combat -->
 
 ```
 +------+-------------------+-----------------------+-----------------------+-----------------------+-----------------------+
@@ -1825,6 +1850,8 @@ contre la Science et complique la progression des unités biologiques de la Gén
 
 ## 24. Synthèses de l'influence des biomes
 
+<!-- schema: biomes -->
+
 **Synthèse longue**
 
 ```
@@ -1877,6 +1904,8 @@ contre la Science et complique la progression des unités biologiques de la Gén
 - **< 10 % — Révolte** : arrêt total du recrutement, perte de 2 % PV max/tour sur l'infanterie.
 
 ## 27. Arbre des bâtiments (infrastructure & production)
+
+<!-- schema: arbre-batiments -->
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -1945,6 +1974,538 @@ contre la Science et complique la progression des unités biologiques de la Gén
 |              | rendement exponentiel.   | (coût FA élevé).         | satisfaction en Focale (FA).    |
 +--------------+--------------------------+--------------------------+---------------------------------+
 ```
+
+---
+---
+
+# PARTIE VIII — CATALOGUE DES BÂTIMENTS, ÂGE PAR ÂGE
+
+## 29. Comment lire ce catalogue
+
+### 29.1 Deux économies, deux catalogues
+
+⚠️ **À ne pas confondre avec la Partie VII.** L'arbre des bâtiments du §27 est l'**économie de
+guerre** : ce qu'on bâtit sur une case conquise du Plateau de l'Univers, avec trois ressources
+abstraites (Main-d'Œuvre, Focale Arcanique, Alimentation) et un seul but, produire des unités.
+
+Cette Partie VIII est l'**économie longue** : ce qu'on bâtit sur une planète, avec des ressources
+concrètes (bois, brique, acier, titane…), sur sept âges. C'est elle qui alimente la première.
+Les deux se rencontrent au palier 5, quand la planète commence à expédier par les Portes.
+
+### 29.2 Les six familles, présentes à tous les âges
+
+Chaque âge décline les mêmes six familles. C'est ce qui permet de comparer deux âges colonne par
+colonne, et de voir du premier coup d'œil ce qui manque à une colonie.
+
+| Famille | Ce qu'elle règle | Si elle manque |
+|---|---|---|
+| **Habitat & Gouvernance** | combien de gens vivent là, et le plafond démographique | la population plafonne, l'âge suivant reste fermé |
+| **Vivres** | nourrir, sans quoi le rendement au travail s'effondre | grève, puis perte de population |
+| **Matériaux** | extraire et transformer la matière à bâtir | plus rien ne se construit |
+| **Confort & Croyance** | productivité (+25 % à +50 %) et jauge d'Esprit | production molle, voie Archéomage fermée |
+| **Services & Savoir** | santé, éducation, qualifications | les métiers avancés restent inaccessibles |
+| **Logistique** | stocker, acheminer, et à partir de l'âge 5 expédier | tout est produit et rien n'arrive |
+
+### 29.3 Ce que porte chaque fiche
+
+Le modèle de données est celui du §2.3 — nom, coût de construction, travaillants requis,
+ressources consommées, ressources produites, conditions. Les tableaux ci-dessous portent les
+cinq premières colonnes ; **ce que devient un bâtiment à l'âge suivant est au §37**, pour ne pas
+raconter deux fois la même chose.
+
+Les coûts sont donnés en unités relatives, calibrées sur la Cabane de Pêcheur du §6.1
+(15 bois, 5 pierre, 2 pionniers, 4 poissons). Ce sont des ordres de grandeur à équilibrer en jeu,
+pas des valeurs définitives.
+
+### 29.4 Trois règles qui traversent les sept âges
+
+1. **Un bâtiment ne se remplace pas tout seul.** Monter d'âge n'efface rien : la Hutte du
+   Bûcheron continue de produire à l'âge 4, elle est simplement dépassée par la Scierie.
+   Ce qui force la mise à niveau, c'est le coût des bâtiments de l'âge courant, pas une
+   obsolescence automatique.
+2. **Chaque âge ferme une porte et en ouvre une autre.** La filière poisson s'éteint quand
+   l'hydroponie arrive ; la filière bois s'éteint quand l'acier remplace la charpente. Voir §37.
+3. **Un âge se débloque par un bâtiment, pas par un compteur.** Ce n'est pas « 500 briques » qui
+   ouvre l'âge 3, c'est d'avoir bâti la Verrerie et l'École. Les verrous sont au §38.
+
+---
+
+## 30. Âge 1 — L'Âge des Pionniers
+
+*Habitat : cabane en bois / tente de colon. On survit sur ce que la case donne.*
+
+<!-- schema: flux-age-1 -->
+
+### 30.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Tente de Colon | 8 bois | — | — | loge 2 pionniers |
+| Cabane en Bois | 20 bois · 5 pierre | — | — | loge 4 pionniers |
+| Feu de Camp (Place du Village) | 5 bois · 5 pierre | — | 2 bois | +10 satisfaction · un seul par secteur |
+
+### 30.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Campement de Chasse | 12 bois | 3 | — | 5 gibier · *case de forêt ou de plaine* |
+| Cabane de Pêcheur | 15 bois · 5 pierre | 2 | — | 4 poisson frais · *case côtière ou de rivière* |
+| Rucher & Cueillette | 8 bois | 1 | — | 3 baies · 2 miel · *case de forêt* |
+| Puits Communal | 10 pierre | 1 | — | eau potable à 3 cases · *nappe* |
+
+### 30.3 Matériaux
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Hutte du Bûcheron | 10 bois | 2 | — | 6 bois brut · *case boisée* |
+| Carrière à Ciel Ouvert | 15 bois | 3 | — | 5 pierre · *case rocheuse* |
+| Fosse d'Argile | 10 bois | 2 | — | 4 argile · *berge de rivière* |
+
+### 30.4 Confort & Croyance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Cuve Artisanale (Casserie) | 12 bois | 2 | 3 baies · 1 miel | 2 bière de baies → +10 % vitesse des colons |
+| Séchoir en Bois | 10 bois | 1 | 3 feuilles de tabac | 2 tabac séché → réduit le risque de mutinerie |
+| Autel en Pierre (Petit Temple) | 15 pierre · 10 bois · 2 bière | 1 | 1 bière | 2 Foi → **débloque la jauge d'Esprit** |
+
+### 30.5 Logistique
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Entrepôt en Bois | 20 bois | 1 | — | 200 de stockage à 4 cases |
+
+> **Le filet de sécurité.** Sans entrepôt à portée, aucun producteur ne fonctionne : c'est la
+> première chose que la colonie doit avoir, et la raison pour laquelle les tout premiers
+> bâtiments sont gratuits à l'amorçage.
+
+**Services & Savoir : rien.** L'âge 1 n'a ni école ni soin — c'est ce qui le rend fragile, et ce
+qui donne son prix au dispensaire de l'âge 3.
+
+---
+
+## 31. Âge 2 — Le Secteur Artisanal
+
+*Habitat : maison en brique. La colonie cesse de cueillir et commence à transformer.*
+
+<!-- schema: flux-age-2 -->
+
+### 31.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Maison en Brique | 30 briques · 10 bois | — | — | loge 8 colons |
+| Hôtel de Ville | 60 briques · 20 planches · 10 outils | 3 | 1 pain | plafond démographique +1 palier · ouvre un second secteur |
+
+### 31.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Champ de Blé | 15 planches | 3 | — | 8 blé · *case fertile* |
+| Moulin du Meunier | 25 planches · 10 pierre | 2 | 6 blé | 4 farine · *case ventée* |
+| Bergerie | 25 planches | 3 | 4 blé | 3 bétail · 2 laine |
+| Séchoir à Poisson | 10 briques · 5 outils | 2 | 4 poisson frais | 4 poisson sec (se conserve) |
+
+### 31.3 Matériaux
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Scierie | 25 bois · 15 briques | 3 | 6 bois brut | 4 planches |
+| Four à Briques | 20 pierre · 15 bois | 3 | 4 argile · 2 bois | 6 briques |
+| Charbonnière | 15 bois | 2 | 5 bois | 3 charbon de bois |
+| Mine de Fer | 30 briques · 10 planches | 4 | — | 4 minerai de fer · *gisement* |
+| Forge du Village | 30 briques · 10 planches | 3 | 3 minerai · 2 charbon | 3 outils en fer |
+
+### 31.4 Confort & Croyance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Brasserie Artisanale | 30 briques · 10 planches | 3 | 4 blé · 2 miel | 3 bière |
+| Chapelle de Pierre | 40 briques · 10 planches | 2 | 1 bière | 4 Foi |
+
+### 31.5 Logistique
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Entrepôt en Brique | 35 briques | 2 | — | 600 de stockage à 6 cases |
+| Marché du Village | 30 briques · 15 planches | 4 | — | distribue les vivres à 4 cases · +15 satisfaction |
+
+> **L'âge du goulot.** Tout l'âge 2 tient sur deux bâtiments : le **Four à Briques** et la
+> **Forge**. La brique conditionne chaque construction suivante, l'outil en fer conditionne
+> chaque évolution. Une colonie qui les bâtit tard perd deux âges.
+
+---
+
+## 32. Âge 3 — La Société Urbaine
+
+*Habitat : immeuble en brique. La densité explose, le confort devient un levier de production.*
+
+<!-- schema: flux-age-3 -->
+
+### 32.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Immeuble en Brique | 80 briques · 20 planches · 10 verre | — | — | loge 24 citadins |
+| Centre Administratif | 120 briques · 40 outils · 10 papier | 6 | 2 pain · 1 papier | plafond +1 palier · gère 4 secteurs |
+
+### 32.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Boulangerie | 50 briques · 10 outils | 4 | 4 farine · 1 charbon | 6 pain |
+| Abattoir | 45 briques · 15 outils | 4 | 3 bétail | 4 viande crue |
+| Boucherie | 50 briques · 10 verre | 3 | 4 viande crue | 5 viande préparée |
+| Conserverie | 60 briques · 20 nickel | 5 | 4 poisson · 2 nickel | 6 conserves → **−15 % de consommation globale de nourriture** |
+
+### 32.3 Matériaux
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Verrerie | 50 briques · 10 charbon | 3 | 3 pierre · 2 charbon | 4 verre |
+| Papeterie | 45 briques · 10 outils | 3 | 4 bois | 3 papier |
+| Mine de Silicium & Nickel | 70 briques · 20 outils | 6 | — | 4 silicium · 3 nickel · *gisement* |
+| Fonderie Avancée | 90 briques · 30 fer · 10 verre | 6 | 4 silicium · 3 nickel | 3 composants électroniques primaires |
+| Usine Chimique | 100 briques · 30 fer · 20 verre | 6 | eau · 4 charbon | 4 comburant O2 → **les premières fusées de reconnaissance** |
+
+### 32.4 Confort & Croyance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Champ de Canne à Sucre | 25 planches | 3 | — | 8 canne · *case chaude* |
+| Raffinerie de Sucre | 55 briques · 15 outils | 4 | 6 canne | 4 sucre |
+| Distillerie de Rhum | 50 briques · 20 fer · 10 silicium | 12 | 10 sucre · 2 bois · 1 alcool | 8 rhum raffiné · *canne sur le secteur + réseau d'eau* |
+| Taverne | 45 briques · 10 verre | 3 | 3 rhum | **+20 % d'efficacité dans les usines lourdes** |
+| Manufacture de Tabac | 55 briques · 10 outils | 5 | 4 tabac séché | 3 cigares → **+15 % de points de recherche** |
+| Teinturerie | 50 briques · 10 verre | 4 | 3 laine · 2 charbon | 3 teinture |
+| Atelier Textile | 60 briques · 15 outils | 5 | 3 laine · 2 teinture | 4 vêtements sur-mesure → **+limite de population par immeuble** |
+| Temple Urbain | 90 briques · 20 verre · 5 or | 4 | 2 rhum | 8 Foi |
+
+### 32.5 Services & Savoir
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Dispensaire | 70 briques · 20 fer · 10 papier | 4 | 2 conserves | santé · réduit la perte de population |
+| École Communale | 65 briques · 15 fer · 10 papier | 3 | 1 papier | **débloque la qualification « Technicien »** |
+
+### 32.6 Logistique
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Entrepôt Urbain | 60 briques · 20 fer | 2 | — | 1 500 de stockage à 8 cases |
+
+> **L'âge charnière.** C'est ici que le confort cesse d'être un bonus : la Taverne et la
+> Manufacture de Tabac rendent plus que ce qu'elles coûtent. Et c'est ici que la planète produit
+> pour la première fois quelque chose qui ne sert pas à elle-même — le **comburant O2**.
+
+---
+
+## 33. Âge 4 — L'Ère Industrielle
+
+*Habitat : cité ouvrière et résidence en acier. L'énergie entre dans l'équation.*
+
+<!-- schema: flux-age-4 -->
+
+### 33.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Cité Ouvrière | 60 acier · 100 briques | — | — | loge 60 ouvriers |
+| Résidence en Acier | 100 acier · 40 verre | — | — | loge 90 · +satisfaction |
+| Mairie Industrielle | 200 acier · 60 verre · 20 papier | 10 | 2 vapeur | plafond +1 palier · gère 8 secteurs |
+
+### 33.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Ferme Mécanisée | 90 acier · 30 machines | 6 | 2 carburant | 16 blé (double le champ, moitié moins d'ouvriers) |
+| Silo & Minoterie Industrielle | 110 acier · 20 machines | 6 | 12 blé | 10 farine |
+| Flotte de Pêche Industrielle | 130 acier · 40 machines | 8 | 3 carburant | 14 poisson · *port* |
+
+### 33.3 Matériaux & Énergie
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Mine de Charbon | 80 briques · 40 acier | 8 | — | 8 charbon minéral · *gisement* |
+| Puits de Pétrole | 120 acier · 30 machines | 8 | — | 6 pétrole · *gisement* |
+| Haut-Fourneau | 150 briques · 60 fer | 10 | 6 minerai · 5 charbon minéral | 6 acier |
+| Aciérie & Laminoir | 180 acier · 40 machines | 10 | 6 acier | 4 poutrelles |
+| Raffinerie Pétrochimique | 200 acier · 60 machines | 12 | 6 pétrole | 4 plastique · 2 carburant |
+| Atelier de Machines-Outils | 160 acier · 40 composants | 10 | 4 acier · 2 composants | 4 machines |
+| Centrale à Vapeur | 140 acier · 30 machines | 8 | 5 charbon minéral · eau | 10 vapeur (énergie) |
+| Château d'Eau & Réseau | 100 briques · 60 acier | 4 | — | eau sous pression à 6 cases |
+| Mine d'Or | 130 acier · 40 machines | 8 | — | 3 or · *gisement* |
+
+### 33.4 Confort & Croyance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Distillerie de Whisky | 120 acier · 30 verre | 6 | 8 céréales · 2 vapeur | 8 alcool fort |
+| Grande Cathédrale | 200 briques · 80 acier · 10 or | 6 | 2 alcool fort | 14 Foi |
+
+### 33.5 Services & Savoir
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Hôpital | 150 acier · 60 verre · 20 plastique | 8 | 3 conserves · 1 vapeur | santé avancée · +espérance de vie |
+| Lycée Technique | 140 acier · 40 papier | 6 | 2 papier | **débloque la qualification « Ingénieur »** |
+
+### 33.6 Logistique
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Gare & Réseau Ferré | 180 acier · 60 poutrelles | 8 | 2 charbon minéral | relie 3 secteurs · **+50 % de débit d'entrepôt** |
+| Entrepôt Industriel | 120 acier | 3 | — | 4 000 de stockage |
+
+> **La bascule invisible.** À partir de l'âge 4, un bâtiment sans **énergie** ne tourne pas : la
+> vapeur devient un intrant au même titre que le minerai. C'est le premier âge où la colonie
+> peut être riche en matière et bloquée quand même.
+
+---
+
+## 34. Âge 5 — L'Ère Spatiale Primordiale
+
+*Habitat : complexe résidentiel béton et verre. **Le seuil de l'orbite** : la colonie cesse de
+produire pour elle seule. C'est aussi le premier âge où les trois axes ont leurs propres
+bâtiments.*
+
+<!-- schema: flux-age-5 -->
+
+### 34.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Complexe Résidentiel Béton/Verre | 200 béton · 80 verre | — | électricité | loge 150 |
+| Conseil Colonial | 300 béton · 100 électronique | 12 | électricité | plafond +1 palier · gère 16 secteurs |
+
+### 34.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Serre d'Adaptation Xéno-Botanique *(Génétique)* | 280 béton · 100 verre | 10 | eau · électricité | 20 nutriments enrichis — **nourrit l'âge 5 sans surface agricole** |
+
+### 34.3 Matériaux & Énergie
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Cimenterie | 160 acier · 40 machines | 8 | 6 pierre · 3 charbon | 8 béton |
+| Raffinerie de Titane | 240 béton · 100 acier | 12 | 6 minerai rare | 4 titane |
+| Usine d'Électronique | 200 béton · 60 silicium · 40 or | 10 | 6 silicium · 2 or | 5 électronique |
+| Centrale Électrique | 250 béton · 100 acier | 10 | 8 pétrole | 20 électricité |
+| Usine d'Hydrazine | 220 béton · 80 titane | 10 | 4 plastique · électricité | 5 hydrazine — **le carburant des Portes** |
+| Site de Fouilles Archéologiques | 180 béton · 60 machines | 8 | — | 3 reliques · *case de ruines* |
+
+### 34.4 Services & Savoir
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Institut de Recherche | 260 béton · 80 verre · 40 électronique | 12 | 2 papier · électricité | points de recherche des 3 axes |
+
+### 34.5 Logistique & Espace
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Complexe de Lancement & Astroport V2 *(Science)* | 400 béton · 200 titane · 80 électronique | 20 | hydrazine · comburant O2 | **augmente le débit et le volume expédiables vers le front** · satellites |
+| Entrepôt Sous Pression | 200 béton · 80 titane | 4 | électricité | 12 000 de stockage |
+
+### 34.6 Les bâtiments d'axe — ce que chacun ouvre sur le front
+
+| Axe | Bâtiment | Consomme | Effet sur le champ de bataille |
+|---|---|---|---|
+| **Science** | Fonderie d'Armement de Précision | fer · nickel · silicium | canons orbitaux, boucliers de siège — équipements militaires avancés |
+| **Science** | Astroport V2 *(ci-dessus)* | hydrazine · O2 | plus de tonnage par Porte et par tour |
+| **Génétique** | Cocon de Muta-Culture Spatiale | légumes · alcool raffiné · silicium | bataillons mutants résistants aux biomes extrêmes |
+| **Génétique** | Serre Xéno-Botanique *(ci-dessus)* | eau · électricité | de quoi nourrir une population qui n'a plus de champs |
+| **Archéomages** | Observatoire Runique Orbital | alcool raffiné · reliques · pierre | cartographie du Plateau · sort **« Siphon astral »** pour le Héros |
+| **Archéomages** | Sanctuaire de Stabilisation de Porte | Foi | **−30 % de carburant** sur chaque envoi vers le front |
+
+> **Le vrai seuil.** Les six bâtiments d'axe ne rendent rien à la planète : ils ne servent qu'au
+> Plateau. Une colonie peut atteindre l'âge 5 et n'en bâtir aucun — elle sera riche et sans
+> aucun poids sur la guerre.
+
+---
+
+## 35. Âge 6 — La Métropole Spatiale
+
+*Habitat : arcologie. L'automatisation rompt le lien entre production et population.*
+
+<!-- schema: flux-age-6 -->
+
+### 35.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Arcologie | 500 béton · 200 alliage · 100 verre | — | énergie | loge 600 |
+| Habitat Modulable Avancé | 400 alliage · 150 composants quantiques | — | énergie | loge 400 · s'étend sans nouvelle case |
+| Sénat Métropolitain | 600 alliage · 200 composants quantiques | 16 | énergie | plafond +1 palier · gère la planète entière |
+
+### 35.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Ferme Hydroponique | 350 alliage · 150 verre | 10 | eau · énergie | 30 légumes — **indépendante du biome** |
+| Complexe Médical Génétique | 420 alliage · 180 composants | 14 | nutriments enrichis | santé transhumaine · population résistante au vide |
+
+### 35.3 Matériaux & Énergie
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Fonderie d'Alliages Rares | 450 béton · 200 titane | 18 | titane · nickel · or | 6 alliage nickel-titane |
+| Usine Quantique | 500 alliage · 200 électronique | 20 | silicium · or · énergie | 4 composants quantiques |
+| Réacteur à Fusion Spatiale | 700 alliage · 400 composants quantiques | 22 | — | 80 énergie — **double l'énergie des bâtiments spatiaux** |
+| Extracteur Orbital (Mine Interplanétaire) | 600 alliage · 300 titane | 24 | carburant | minerais rares · *nécessite un astroport* |
+
+### 35.4 Confort, Croyance & Savoir
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Grand Nexus de Croyance | 500 alliage · 100 or · 60 reliques | 14 | Foi élevée | **mana transférable directement au Héros** sur le front |
+| Laboratoire de Pointe | 480 alliage · 200 composants quantiques | 18 | énergie | recherche de palier 6 des 3 axes |
+| Cité Universitaire | 400 alliage · 160 papier | 12 | énergie | **débloque la qualification « Chercheur »** |
+
+### 35.5 Logistique
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Chaîne Automatisée | 400 alliage · 150 composants quantiques | 6 | énergie | **−60 % de travaillants requis** dans tout le secteur |
+| Chantier Naval Orbital | 800 alliage · 300 titane · 200 composants | 26 | énergie · alliage | vaisseaux et stations |
+| Entrepôt Orbital | 400 alliage | 5 | énergie | 40 000 de stockage |
+
+> **Ce que change l'automatisation.** Jusqu'ici, produire plus voulait dire loger plus de monde.
+> La Chaîne Automatisée casse cette règle : à l'âge 6, une planète peut être une usine avec peu
+> d'habitants — et devient alors très vulnérable côté satisfaction, qui n'a plus de population
+> pour générer de la Focale.
+
+---
+
+## 36. Âge 7 — La Cité Spatiale Transhumaine
+
+*Habitat : cité-dôme intelligente et habitat orbital. Tout converge vers une seule sortie :
+la Porte.*
+
+<!-- schema: flux-age-7 -->
+
+### 36.1 Habitat & Gouvernance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Cité-Dôme Intelligente | 800 alliage · 400 composants quantiques · 100 matière exotique | — | énergie · nutriments quantiques | loge 2 000 |
+| Habitat Orbital | 1 000 alliage · 500 composants quantiques | — | énergie | loge 1 500 · hors surface planétaire |
+| Conseil Transhumain | 900 alliage · 400 composants quantiques | 20 | énergie | plafond maximal · gouverne plusieurs planètes |
+| Dôme à Atmosphère Contrôlée | 600 alliage · 300 composants | 20 | énergie | **évite la dégénérescence cellulaire des citoyens** |
+
+### 36.2 Vivres
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Ferme Hydroponique Automatisée | 500 alliage · 200 silicium · 100 puces biologiques | 8 | énergie | 40 nutriments quantiques |
+
+### 36.3 Matériaux & Énergie
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Collecteur de Noyaux d'Énergie Spatiale | 800 alliage · 400 titane | 24 | — | 6 noyaux d'énergie · *case de filament cosmique* |
+| Synthétiseur de Matière Exotique | 900 alliage · 500 composants quantiques · 200 noyaux | 28 | énergie massive | 4 matière exotique |
+
+### 36.4 Confort & Croyance
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Distillerie Quantique | 600 alliage · 300 composants quantiques | 16 | fruits mutés · chimie lourde | 8 Nectar d'Ambroisie → **+50 % de vitesse de recherche · régénération accélérée des Héros sur le front** |
+| Laboratoire de Néo-Tabac Synaptique | 550 alliage · 250 composants · essence mystique | 14 | tabac génétiquement modifié · essence mystique | 6 néo-tabac → **augmente la puissance des sorts lancés depuis la planète vers le Plateau** |
+| Sanctuaire des Filaments | alliages or/silicium · noyaux d'énergie · reliques archéologiques | 20 | Foi maximale | **−30 % sur le coût d'ouverture des Portes vers les zones de guerre** |
+
+### 36.5 Services & Savoir
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Réseau de Télépathie Synthétique | 700 alliage · 400 composants quantiques | 18 | énergie | coordination instantanée · +satisfaction de masse |
+| Processeurs Quantiques Municipaux | 750 alliage · 450 composants quantiques | 16 | énergie | optimise toutes les chaînes de la planète |
+
+### 36.6 Logistique & Portes
+
+| Bâtiment | Coût | Travaillants | Consomme | Produit |
+|---|---|---|---|---|
+| Grand Astroport Transhumain | 1 200 alliage · 600 composants quantiques | 30 | hydrazine · O2 | tonnage maximal vers l'orbite |
+| **Injecteur de Porte Spatiale** | 200 alliage Ni-Ti · 100 composants quantiques · 50 noyaux d'énergie | 5 Généticiens Supérieurs · 5 Archéomages | 20 hydrazine · 10 comburant O2 · 5 Nectar d'Ambroisie / cycle | **flux de téléportation — envoie directement unités lourdes et armes spéciales sur le Plateau** · *astroport à proximité + réseau d'énergie* |
+| Entrepôt à Champ de Stase | 600 alliage · 200 matière exotique | 6 | énergie | 100 000 de stockage · aucune perte |
+
+> **L'âge 7 ne se garde pas pour soi.** Ses trois productions les plus chères — Nectar,
+> Néo-Tabac, matière exotique — n'améliorent presque rien sur la planète : elles agissent sur le
+> champ de bataille. Une colonie de palier 7 est une **batterie**, pas une ville.
+
+---
+
+## 37. Les lignées — ce que chaque bâtiment devient
+
+Une **lignée** est une même fonction tenue d'un âge à l'autre par des bâtiments différents.
+C'est la lecture verticale du catalogue : on suit une colonne de besoin, pas un âge.
+
+<!-- schema: lignees -->
+
+| Lignée | Âge 1 | Âge 2 | Âge 3 | Âge 4 | Âge 5 | Âge 6 | Âge 7 |
+|---|---|---|---|---|---|---|---|
+| **Habitat** | Cabane en Bois | Maison en Brique | Immeuble | Résidence en Acier | Complexe Béton/Verre | Arcologie | Cité-Dôme · Habitat Orbital |
+| **Gouvernance** | Place du Village | Hôtel de Ville | Centre Administratif | Mairie Industrielle | Conseil Colonial | Sénat Métropolitain | Conseil Transhumain |
+| **Bâtir** | Carrière à Ciel Ouvert | Four à Briques | Verrerie | Haut-Fourneau *(acier)* | Cimenterie *(béton)* | Fonderie d'Alliages Rares | Synthétiseur de Matière Exotique |
+| **Outiller** | — | Forge du Village | Fonderie Avancée | Atelier de Machines-Outils | Usine d'Électronique | Usine Quantique | Processeurs Quantiques |
+| **Énergie** | — | Charbonnière | *(charbon de bois)* | Centrale à Vapeur | Centrale Électrique | Réacteur à Fusion Spatiale | Collecteur de Noyaux d'Énergie |
+| **Nourrir — la terre** | Campement de Chasse | Champ de Blé · Bergerie | Boulangerie · Boucherie | Ferme Mécanisée | Serre Xéno-Botanique | Ferme Hydroponique | Ferme Hydroponique Automatisée |
+| **Nourrir — la mer** | Cabane de Pêcheur | Séchoir à Poisson | Conserverie | Flotte de Pêche Industrielle | **✕ éteinte** | — | — |
+| **Enivrer** | Cuve Artisanale | Brasserie Artisanale | Distillerie de Rhum | Distillerie de Whisky | *le rhum part vers le Cocon et l'Observatoire* | — | Distillerie Quantique *(Nectar d'Ambroisie)* |
+| **Croire** | Autel en Pierre | Chapelle de Pierre | Temple Urbain | Grande Cathédrale | Observatoire Runique · Sanctuaire de Porte | Grand Nexus de Croyance | Sanctuaire des Filaments |
+| **Savoir & santé** | — | — | Dispensaire · École | Hôpital · Lycée Technique | Institut de Recherche | Laboratoire de Pointe · Cité Universitaire | Télépathie Synthétique · Processeurs Quantiques |
+| **Stocker & acheminer** | Entrepôt en Bois | Entrepôt en Brique · Marché | Entrepôt Urbain | Gare & Réseau Ferré | Astroport V2 · Entrepôt Sous Pression | Entrepôt Orbital · Chantier Naval | Injecteur de Porte · Entrepôt à Stase |
+
+### 37.1 Les quatre choses que ce tableau raconte
+
+**Une lignée peut mourir.** La filière **mer** s'éteint à l'âge 5 : l'hydroponie nourrit mieux,
+partout, sans dépendre d'une case côtière. Le joueur qui a bâti sa colonie autour d'un port doit
+alors la reconvertir — c'est un vrai coût, pas une formalité. C'est la seule lignée qui disparaît
+complètement, et c'est voulu : il en faut au moins une pour que le joueur sente que le temps passe.
+
+**Une lignée peut dormir.** La filière **enivrer** ne disparaît pas à l'âge 5 et 6, elle **change
+de client** : le rhum raffiné cesse d'aller à la Taverne pour alimenter le Cocon de Muta-Culture
+et l'Observatoire Runique. Le même bâtiment sert soudain la guerre au lieu de servir la ville.
+Elle revient au grand jour à l'âge 7 avec la Distillerie Quantique.
+
+**Une lignée peut naître tard.** **Savoir & santé** n'existe pas avant l'âge 3, **Outiller** et
+**Énergie** pas avant l'âge 2. C'est ce qui rend les deux premiers âges rudes et courts : il n'y a
+presque rien à optimiser, seulement à survivre.
+
+**Deux lignées ne s'arrêtent jamais.** **Habitat** et **Gouvernance** ont une entrée aux sept
+âges, parce que ce sont elles qui portent le plafond de tout le reste. Une colonie qui néglige la
+gouvernance plafonne, quels que soient ses gisements.
+
+---
+
+## 38. Les verrous — ce qu'un âge doit au précédent
+
+Un âge ne s'ouvre pas sur un compteur de ressources. Il s'ouvre quand deux choses sont vraies :
+le **matériau clé** de l'âge suivant est produit, et le **bâtiment de gouvernance** est monté.
+
+<!-- schema: verrous-ages -->
+
+| Passage | Matériau clé à produire | Bâtiment qui ouvre | Ce qui bloque en pratique |
+|---|---|---|---|
+| **1 → 2** | brique · outil en fer | Hôtel de Ville | Sans argile sur le secteur, pas de brique : la colonie doit s'étendre avant de monter. |
+| **2 → 3** | verre · papier | Centre Administratif | Le papier vient du bois : la Papeterie entre en concurrence directe avec la Scierie. |
+| **3 → 4** | acier · machines | Mairie Industrielle | L'acier demande du **charbon minéral**, pas du charbon de bois — c'est un gisement, et toutes les planètes n'en ont pas. |
+| **4 → 5** | béton · électronique | Conseil Colonial | L'électronique demande **or et silicium**, deux gisements distincts : la première fois qu'un âge exige deux mines différentes. |
+| **5 → 6** | alliage nickel-titane · composants quantiques | Sénat Métropolitain | L'alliage demande du **titane**, tiré d'un minerai rare souvent absent de la planète natale : il faut déjà l'Astroport et une seconde colonie. |
+| **6 → 7** | matière exotique · noyaux d'énergie spatiale | Conseil Transhumain | Les noyaux ne se récoltent que sur une **case de filament cosmique** — c'est-à-dire sur le Plateau de l'Univers. |
+
+### 38.1 Le verrou qui referme la boucle
+
+Le passage **6 → 7** est le seul qui ne se franchit pas sur la planète.
+
+Les noyaux d'énergie spatiale viennent des filaments de la Toile cosmique, qui sont des cases du
+champ de bataille. Autrement dit : **il faut avoir conquis pour atteindre l'âge 7**, et il faut
+l'âge 5 pour pouvoir conquérir quoi que ce soit. Les deux moitiés du jeu, qui n'étaient jusque-là
+qu'un aller-retour de ressources, deviennent une vraie dépendance mutuelle.
+
+C'est le seul endroit du système où la macro-gestion ne peut pas avancer seule. Le reste du temps,
+un joueur peut jouer « planète » ou « front » à sa guise — ici, il doit avoir fait les deux.
 
 ---
 ---

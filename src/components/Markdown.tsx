@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from "react";
+import { Schema } from "@/components/Schemas";
 
 /**
  * Un rendu Markdown minimal, écrit à la main.
@@ -18,7 +19,15 @@ import { Fragment, type ReactNode } from "react";
  * ⚠️ Les blocs ``` sont rendus tels quels dans un <pre> : c'est ce qui garde
  * lisibles les schémas ASCII et les tableaux dessinés à la main du document,
  * qui ne sont pas du Markdown mais du dessin.
+ *
+ * Une seule extension au Markdown : le marqueur `<!-- schema: cle -->` appelle
+ * un dessin SVG de `Schemas.tsx`. Si un bloc ``` le suit immédiatement, le
+ * schéma le remplace à l'écran et l'ASCII part sous un pli. Le marqueur reste
+ * un commentaire HTML : le fichier .md se lit sans perte dans n'importe quel
+ * autre lecteur.
  */
+
+const MARQUEUR_SCHEMA = /^\s*<!--\s*schema:\s*([a-z0-9-]+)\s*-->\s*$/;
 
 export interface Titre {
   id: string;
@@ -173,6 +182,35 @@ export default function Markdown({ source }: { source: string }) {
       continue;
     }
 
+    /* Marqueur de schéma — et le bloc ASCII qu'il remplace, s'il y en a un */
+    const schema = MARQUEUR_SCHEMA.exec(ligne);
+    if (schema) {
+      i += 1;
+      while (i < lignes.length && lignes[i].trim() === "") i += 1;
+
+      let origine: string | undefined;
+      if (i < lignes.length && /^\s*```/.test(lignes[i])) {
+        const contenu: string[] = [];
+        i += 1;
+        while (i < lignes.length && !/^\s*```/.test(lignes[i])) {
+          contenu.push(lignes[i]);
+          i += 1;
+        }
+        i += 1;
+        origine = contenu.join("\n");
+      }
+
+      blocs.push(<Schema key={`sc-${i}`} cle={schema[1]} origine={origine} />);
+      continue;
+    }
+
+    /* Tout autre commentaire HTML : invisible, comme dans un rendu Markdown normal */
+    if (/^\s*<!--/.test(ligne)) {
+      while (i < lignes.length && !/-->\s*$/.test(lignes[i])) i += 1;
+      i += 1;
+      continue;
+    }
+
     /* Bloc de code / schéma ASCII */
     if (/^\s*```/.test(ligne)) {
       const contenu: string[] = [];
@@ -322,7 +360,7 @@ export default function Markdown({ source }: { source: string }) {
     while (
       i < lignes.length &&
       lignes[i].trim() !== "" &&
-      !/^\s*(```|#{1,6}\s|>|\||---|\*\*\*|___)/.test(lignes[i]) &&
+      !/^\s*(```|#{1,6}\s|>|\||---|\*\*\*|___|<!--)/.test(lignes[i]) &&
       !/^\s*([-*+]|\d+\.)\s+/.test(lignes[i])
     ) {
       contenu.push(lignes[i].trim());
