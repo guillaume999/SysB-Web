@@ -18,14 +18,34 @@ export const COLLECTION_RESSOURCES = "ressources";
  * - `stock` : s'accumule et se dépense (bois, or, viande).
  * - `flux` : n'existe qu'en débit, ne s'accumule pas (énergie, eau courante).
  * - `population` : cas particulier, se mobilise et se libère plutôt que se consommer.
+ * - `indicateur` : **calculé, jamais transporté** (la satisfaction). Ajouté le
+ *   2026-08-26 sur la demande d'une « ressource utilisée comme indicateur » :
+ *   elle garde son nom, son icône et sa place dans la barre de ressources, mais
+ *   le genre marque qu'elle ne se stocke pas et ne monte dans aucune navette.
+ *
+ * ⚠️ **Deux genres ne voyagent jamais : `population` et `indicateur`.** Les
+ * listes d'approvisionnement les excluent — voir `RESSOURCES_TRANSPORTABLES`.
+ * Un habitant ne prend pas la navette, un pourcentage non plus.
  */
-export type GenreRessource = "stock" | "flux" | "population";
+export type GenreRessource = "stock" | "flux" | "population" | "indicateur";
 
 export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[] = [
   { valeur: "stock", libelle: "stock", aide: "s'accumule et se dépense" },
   { valeur: "flux", libelle: "flux", aide: "n'existe qu'en débit, ne s'accumule pas" },
   { valeur: "population", libelle: "population", aide: "se mobilise et se libère" },
+  {
+    valeur: "indicateur",
+    libelle: "indicateur",
+    aide: "calculé, jamais stocké ni transporté (la satisfaction)",
+  },
 ];
+
+/** Les genres qu'une navette peut porter. Ni les habitants, ni un pourcentage. */
+export const GENRES_TRANSPORTABLES: GenreRessource[] = ["stock", "flux"];
+
+export function estTransportable(r: { genre: GenreRessource | "" }): boolean {
+  return GENRES_TRANSPORTABLES.includes(r.genre as GenreRessource);
+}
 
 export type Ressource = {
   id: string;

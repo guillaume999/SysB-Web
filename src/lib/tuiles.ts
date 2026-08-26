@@ -253,6 +253,13 @@ export function placementPourEnregistrer(regles: ReglePlacement[]): ReglePlaceme
  * 2. **Deux modes de coût seulement.** Le troisième, `requis` (vérifié sans être
  *    prélevé), est **supprimé** : une seule tuile s'en servait, en doublon d'un
  *    `mobilisé` identique. Ne pas le réintroduire sans raison neuve.
+ *
+ *    ⚠️ Le 26/08 aussi, remarque de l'utilisateur : *« pendant qu'il tourne, ne
+ *    consomme pas mais occupe X de pop »*. Le mode n'est donc plus un menu
+ *    déroulant : **c'est la SECTION de l'écran qui le porte**. `paye` vit sous
+ *    « à la construction », `mobilise` sous « pendant qu'il tourne ». Un
+ *    ouvrier n'est pas dépensé à la construction, il est occupé tant que ça
+ *    tourne — l'écran doit le dire avant que l'utilisateur ait à le déduire.
  * 3. **La veille rend TOUT ce qui est mobilisé**, sans réglage par ligne. Le
  *    drapeau `libere_si_inactif` de l'ancien modèle a disparu avec lui.
  */
@@ -286,6 +293,24 @@ export interface LigneFlux {
   ressource: string;
   quantite: number;
   periode_s: number;
+  /**
+   * **Part de satisfaction**, en pourcentage, que cette consommation couvre —
+   * n'a de sens que si le palier déclare un `indicateur`.
+   *
+   * Modèle de l'utilisateur (26/08) :
+   * *« palier 1 : nourriture = 100 % satisfaction si qutt / periode suffisante.
+   * palier 2 : nourriture = 80 % + 10 % pierre + 10 % argile »*.
+   *
+   * La satisfaction obtenue est la **somme pondérée de ce qui est réellement
+   * couvert** : nourriture à moitié servie et le reste plein donne
+   * 40 + 10 + 10 = 60 %. Une ligne à `0` ne compte pas — c'est une
+   * consommation ordinaire.
+   */
+  part: number;
+}
+
+export function fluxVide(ressource: string): LigneFlux {
+  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT, part: 0 };
 }
 
 /**
@@ -298,32 +323,112 @@ export interface LigneFlux {
  */
 export interface Palier {
   niveau: number;
-  /** À la construction, une fois. */
+  /**
+   * Durée du chantier, en secondes. `0` = instantané.
+   *
+   * ⚠️ **Pas encore appliqué en jeu** : tout se construit instantanément, et
+   * `EtatCase` n'a aucun champ de fin de chantier — il n'a que `niveau`,
+   * `actif`, `stock` et `t`. Le champ est saisi et enregistré, mais l'écran le
+   * dit en orange dès qu'on met autre chose que zéro. Même traitement que
+   * `portee: "empire"` : un champ **pas encore branché** l'annonce, un champ
+   * **qui ment** ne dit rien. **Retirer l'avertissement avec le mécanisme, pas
+   * avant.**
+   */
+  duree_construction_s: number;
+  /**
+   * Ce que le palier demande en ressources. Le champ `mode` dit **quand** :
+   * `paye` à la construction, `mobilise` tant que ça tourne. Une seule liste en
+   * base, deux sections à l'écran.
+   */
   cout: LigneCout[];
-  /** Pendant qu'il tourne. Rien n'est prélevé quand il est en veille. */
+  /** Ce qu'il consomme pendant qu'il tourne. Rien n'est prélevé en veille. */
   utilisation: LigneFlux[];
+  /**
+   * Le code de la ressource de genre `indicateur` que ce palier **produit** —
+   * la satisfaction, typiquement. Vide = ce palier n'en produit aucune.
+   *
+   * Ce n'est pas une production ordinaire : sa valeur ne se saisit pas, elle se
+   * **calcule** à partir des `part` des consommations ci-dessus. C'est ce qui
+   * garantit qu'un logement bien nourri est satisfait sans qu'on ait à
+   * l'écrire deux fois.
+   */
+  indicateur: string;
+  /**
+   * **Efficacité minimale garantie**, en pourcentage. La production de cette
+   * tuile ne descend jamais en dessous, quelle que soit la satisfaction du
+   * plateau : `efficacité = max(satisfaction, plancher)`.
+   *
+   * ⚠️ **C'est le garde-fou contre la spirale**, et l'utilisateur a voulu qu'il
+   * se règle **tuile par tuile** plutôt que globalement. Un seul nombre couvre
+   * les deux besoins : `100` = insensible à la satisfaction (les fermes
+   * continuent de nourrir même quand tout va mal), `0` = totalement soumis.
+   *
+   * Sans plancher quelque part, la boucle est mortelle : moins de vivres →
+   * moins de satisfaction → les fermes produisent moins → encore moins de
+   * vivres. Le joueur qui revient après douze heures découvre l'effondrement
+   * déjà consommé. C'était déjà l'intention du ralenti du 25/08 : « personne ne
+   * s'éteint ».
+   */
+  plancher_efficacite: number;
+}
+
+/** Somme des parts de satisfaction d'un palier. Devrait faire 100. */
+export function totalParts(p: Palier): number {
+  return p.utilisation.reduce((n, l) => n + Math.max(0, l.part), 0);
+}
+
+/** Vrai si le palier produit un indicateur et déclare au moins une part. */
+export function produitUnIndicateur(p: Palier): boolean {
+  return p.indicateur !== "" && totalParts(p) > 0;
+}
+
+/** Ce qui est payé une fois, à la construction. */
+export function coutConstruction(p: Palier): LigneCout[] {
+  return p.cout.filter((l) => l.mode === "paye");
+}
+
+/** Vrai tant que les chantiers ne sont pas implémentés côté jeu. */
+export function chantierPasEncoreApplique(p: Palier): boolean {
+  return p.duree_construction_s > 0;
 }
 
 /** Période par défaut d'un flux, en secondes. Voir l'avertissement de `LigneFlux`. */
 export const PERIODE_PAR_DEFAUT = 120;
 
 export function palierVide(numero: number): Palier {
-  return { niveau: numero, cout: [], utilisation: [] };
+  return {
+    niveau: numero,
+    duree_construction_s: 0,
+    cout: [],
+    utilisation: [],
+    indicateur: "",
+    plancher_efficacite: 0,
+  };
 }
 
 /**
  * ⚠️ **La règle de veille, écrite à un seul endroit.** Mettre un bâtiment en
  * veille (`EtatCase.actif = false`) :
  *
- * - **rend tout ce qu'il mobilise** — les ouvriers d'abord ;
+ * - **rend tout ce qu'il mobilise** — la population d'abord : les ouvriers
+ *   repartent et redeviennent disponibles ailleurs ;
  * - **arrête sa consommation** : plus rien de son `utilisation` n'est prélevé ;
- * - **arrête sa production**.
+ * - **arrête sa production**, et ce n'est pas une règle de plus mais la
+ *   conséquence de la première. Mot de l'utilisateur le 26/08 : *« la mise en
+ *   veille libère la pop, si pas de pop pas de prod. »* Un bâtiment qui n'a
+ *   plus ses ouvriers ne produit pas — la production suit la main-d'œuvre, pas
+ *   le drapeau `actif`.
+ *
+ * ⚠️ **Corollaire à ne pas manquer côté jeu :** ce lien vaut aussi **hors
+ * veille**. Un bâtiment actif dont la population mobilisée n'est plus
+ * disponible ne produit pas non plus. Ce n'est donc pas `if (!actif) return;`
+ * qu'il faut écrire, mais un contrôle de la main-d'œuvre réellement mobilisée.
  *
  * Ce qui a été **payé** ne revient jamais, ni en veille ni à la destruction.
  *
- * C'est le joueur qui décide, et lui seul : la pénurie fait **ralentir** au
- * prorata (voir la satisfaction), elle n'éteint rien. Un problème, un
- * mécanisme.
+ * C'est le joueur qui décide de la veille, et lui seul : la pénurie de
+ * ressources fait **ralentir** au prorata (voir la satisfaction), elle n'éteint
+ * rien. Un problème, un mécanisme.
  */
 export function rendEnVeille(p: Palier): LigneCout[] {
   return p.cout.filter((l) => l.mode === "mobilise");
@@ -345,6 +450,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
   const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
   return {
     niveau: entier(o.niveau) || position,
+    duree_construction_s: Math.max(0, entier(o.duree_construction_s)),
     cout: Array.isArray(o.cout)
       ? o.cout.map((l) => ({
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
@@ -357,8 +463,11 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
+          part: Math.min(100, Math.max(0, entier(l?.part))),
         }))
       : [],
+    indicateur: typeof o.indicateur === "string" ? o.indicateur : "",
+    plancher_efficacite: Math.min(100, Math.max(0, entier(o.plancher_efficacite))),
   };
 }
 
@@ -370,8 +479,11 @@ export function normaliserPalier(n: unknown, position: number): Palier {
 export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
   return paliers.map((p, i) => ({
     niveau: i + 1,
+    duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
     cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
     utilisation: p.utilisation.filter((l) => l.ressource !== "" && l.quantite > 0),
+    indicateur: p.indicateur,
+    plancher_efficacite: Math.min(100, Math.max(0, Math.trunc(p.plancher_efficacite || 0))),
   }));
 }
 
@@ -381,6 +493,191 @@ export function formatDuree(secondes: number): string {
   if (secondes < 60) return `${secondes} s`;
   if (secondes < 3600) return `${Math.round(secondes / 60)} min`;
   return `${(secondes / 3600).toFixed(1).replace(".0", "")} h`;
+}
+
+// --- Stockage et approvisionnement ------------------------------------------
+
+/**
+ * Refait le 2026-08-26, dans son **propre onglet** — sorti de l'onglet Coût à la
+ * demande de l'utilisateur, où il avait d'abord été greffé ligne par ligne.
+ *
+ * Deux sujets voisins mais distincts :
+ *
+ * - **le stockage** : ce que la tuile peut garder, et combien ;
+ * - **l'approvisionnement** : par où ça entre et par où ça sort.
+ *
+ * ⚠️ **L'approvisionnement va dans les DEUX SENS**, et c'est le cas de
+ * l'entrepôt qui l'impose : il *ramasse* chez les producteurs autour de lui, et
+ * il *fournit* les consommateurs. Une seule règle avec un `sens` plutôt que deux
+ * listes séparées, pour que le même écran serve aux deux.
+ *
+ * Ce bloc remplace l'ancien champ `logistique` `{role, rayon, ressources, debit,
+ * capacite}`, où une tuile ne pouvait être QUE collecteur ou QUE consommateur.
+ * Le rôle a disparu : il se déduit des règles. Une tuile qui n'a que des règles
+ * `entrant` est un consommateur ; une tuile qui a les deux est un entrepôt.
+ */
+export type SensAppro = "entrant" | "sortant";
+
+export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] = [
+  { valeur: "entrant", libelle: "je reçois de", aide: "la ressource vient jusqu'ici" },
+  { valeur: "sortant", libelle: "je fournis", aide: "la ressource part d'ici" },
+];
+
+/** Qui est en face. `tout` = n'importe quelle tuile à portée qui a / veut la ressource. */
+export type CibleAppro = "tout" | "tuiles";
+
+export const CIBLES_APPRO: { valeur: CibleAppro; libelle: string }[] = [
+  { valeur: "tout", libelle: "n'importe quelle tuile" },
+  { valeur: "tuiles", libelle: "seulement ces tuiles" },
+];
+
+export interface RegleAppro {
+  sens: SensAppro;
+  cible: CibleAppro;
+  /** `cible: "tuiles"` — avec qui, précisément. */
+  tileIds: number[];
+  /**
+   * Le **rayon de récolte** (`entrant`) ou d'**envoi** (`sortant`), en distance
+   * hexagonale. ⚠️ `null` = **tout le plateau**. Jamais `0` pour ça : zéro a
+   * déjà le sens légitime de « la case elle-même ».
+   */
+  rayon: number | null;
+  /** ⚠️ **Liste vide = toutes les ressources.** Sinon, seulement celles-ci. */
+  ressources: string[];
+  /**
+   * Le débit, écrit en **navettes** : `navettes` trajets par `periode_s`,
+   * chacun portant `quantite`. Le débit réel est donc le produit
+   * `navettes × quantite` par période.
+   *
+   * ⚠️ **Les navettes restent une ANIMATION, pas une simulation.** On ne
+   * déplace aucun agent et on ne fait aucun pathfinding : la comptabilité est
+   * une multiplication d'entiers, ce qui garde la progression hors ligne
+   * calculable en forme fermée. Le nombre de navettes sert à *dessiner* le
+   * trafic — et à donner à l'utilisateur un réglage qu'il visualise mieux
+   * qu'un débit abstrait. Si la distance doit compter un jour, faire décroître
+   * le débit avec elle ; surtout pas introduire du déplacement réel.
+   */
+  debit: { navettes: number; quantite: number; periode_s: number };
+}
+
+/** Le débit réel d'une règle : navettes × quantité, par période. */
+export function debitParPeriode(r: RegleAppro): number {
+  return Math.max(0, r.debit.navettes) * Math.max(0, r.debit.quantite);
+}
+
+export function regleApproVide(sens: SensAppro): RegleAppro {
+  return {
+    sens,
+    cible: "tout",
+    tileIds: [],
+    // Recevoir suppose d'aller chercher, donc une portee ; fournir se fait a
+    // l'echelle du plateau, comme un entrepot qui dessert tout le monde.
+    rayon: sens === "entrant" ? 3 : null,
+    ressources: [],
+    debit: { navettes: 1, quantite: 10, periode_s: PERIODE_PAR_DEFAUT },
+  };
+}
+
+/**
+ * Ce que la tuile peut garder. ⚠️ **`ressources` vide = toutes les ressources**
+ * — même convention que les règles d'approvisionnement, pour qu'il n'y ait
+ * qu'une seule chose à retenir.
+ */
+export interface Stockage {
+  ressources: string[];
+  /** Capacité totale, toutes ressources confondues. `0` = ne stocke rien. */
+  capacite: number;
+}
+
+export interface Logistique {
+  stockage: Stockage;
+  appros: RegleAppro[];
+}
+
+export function logistiqueVide(): Logistique {
+  return { stockage: { ressources: [], capacite: 0 }, appros: [] };
+}
+
+export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
+  const l = (tuile.logistique ?? {}) as Partial<Logistique>;
+  const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
+  const codes = (v: unknown) =>
+    Array.isArray(v) ? Array.from(new Set(v.filter((c) => typeof c === "string" && c !== ""))) : [];
+  return {
+    stockage: {
+      ressources: codes(l.stockage?.ressources),
+      capacite: Math.max(0, entier(l.stockage?.capacite)),
+    },
+    appros: Array.isArray(l.appros)
+      ? l.appros.map((r) => ({
+          sens: r?.sens === "sortant" ? ("sortant" as const) : ("entrant" as const),
+          cible: r?.cible === "tuiles" ? ("tuiles" as const) : ("tout" as const),
+          tileIds: Array.isArray(r?.tileIds)
+            ? Array.from(new Set(r.tileIds.filter((n: unknown) => typeof n === "number")))
+            : [],
+          rayon: r?.rayon === null || r?.rayon === undefined ? null : Math.max(0, entier(r.rayon)),
+          ressources: codes(r?.ressources),
+          debit: {
+            navettes: Math.max(0, entier(r?.debit?.navettes) || 1),
+            quantite: Math.max(0, entier(r?.debit?.quantite)),
+            periode_s: Math.max(1, entier(r?.debit?.periode_s) || PERIODE_PAR_DEFAUT),
+          },
+        }))
+      : [],
+  };
+}
+
+/**
+ * Ce qui part en base. Une règle « seulement ces tuiles » sans aucune tuile
+ * cochée ne dit rien : on la jette plutôt que de laisser croire qu'elle
+ * achemine quelque chose.
+ */
+export function logistiquePourEnregistrer(l: Logistique): Logistique {
+  return {
+    stockage: { ...l.stockage, capacite: Math.max(0, Math.trunc(l.stockage.capacite || 0)) },
+    appros: l.appros.filter((r) => r.cible === "tout" || r.tileIds.length > 0),
+  };
+}
+
+/** Vrai si la règle ne dit rien d'utile — signalée en orange, ignorée en jeu. */
+export function regleApproUtile(r: RegleAppro): boolean {
+  if (r.cible === "tuiles" && r.tileIds.length === 0) return false;
+  return debitParPeriode(r) > 0;
+}
+
+/** La règle relue en français, telle qu'elle s'affiche sous chaque bloc. */
+export function decrireAppro(
+  r: RegleAppro,
+  nomTuile: (tileId: number) => string,
+  nomRessource: (code: string) => string,
+): string {
+  const quoi =
+    r.ressources.length === 0
+      ? "toutes les ressources"
+      : r.ressources.map((c) => nomRessource(c)).join(", ");
+  const qui =
+    r.cible === "tout"
+      ? "n'importe quelle tuile"
+      : r.tileIds.length === 0
+        ? "(aucune tuile cochée)"
+        : r.tileIds.map((id) => `« ${nomTuile(id)} »`).join(" ou ");
+  const ou =
+    r.rayon === null
+      ? "sur tout le plateau"
+      : `à ${r.rayon} case${r.rayon > 1 ? "s" : ""} (${casesCouvertes(r.rayon)} cases)`;
+  const combien =
+    `${r.debit.navettes} navette${r.debit.navettes > 1 ? "s" : ""} × ${r.debit.quantite} = ` +
+    `${debitParPeriode(r)} par ${formatDuree(r.debit.periode_s)}`;
+  return r.sens === "entrant"
+    ? `Récolte ${quoi} chez ${qui} ${ou} — ${combien}.`
+    : `Envoie ${quoi} vers ${qui} ${ou} — ${combien}.`;
+}
+
+/** Une tuile qui reçoit ET fournit : c'est ce qu'on appelle un entrepôt. */
+export function estEntrepot(l: Logistique): boolean {
+  return (
+    l.appros.some((r) => r.sens === "entrant") && l.appros.some((r) => r.sens === "sortant")
+  );
 }
 
 // --- Le record --------------------------------------------------------------
@@ -425,11 +722,8 @@ export type Tuile = {
   placement: ReglePlacement[] | null;
   /** Les paliers de coût. Reconstruits depuis le 26/08 — voir `Palier`. */
   niveaux: Palier[] | null;
-  /*
-   * ⚠️ `logistique` existe encore comme colonne json sur la collection, mais
-   * elle est VIDE et ce type ne la declare pas. La redeclarer, c'est se
-   * redonner le droit de la lire a moitie.
-   */
+  /** Stockage et approvisionnement. Refaits le 26/08 — voir `Logistique`. */
+  logistique: Logistique | null;
   created: string;
   updated: string;
   expand?: { modele?: Modele3D };
@@ -438,10 +732,10 @@ export type Tuile = {
 /**
  * Ce que le formulaire renvoie — l'identite, et rien d'autre.
  *
- * ⚠️ `logistique` n'y est **volontairement pas** : une cle absente n'est pas
- * envoyee a PocketBase, donc le champ reste vide tant que son ecran n'existe
- * pas. `placement` et `niveaux` y sont revenus le 26/08, quand leurs onglets
- * ont ete refaits.
+ * Les quatre champs json — `placement`, `niveaux`, `logistique` — y sont tous
+ * revenus le 26/08, au fur et a mesure que leurs onglets ont ete refaits. Une
+ * cle absente d'ici n'est pas envoyee a PocketBase : c'est ce qui a garde les
+ * champs intacts pendant la remise a zero.
  */
 export interface ValeursTuile {
   tileId: number;
@@ -457,6 +751,7 @@ export interface ValeursTuile {
   non_remplacable: boolean;
   placement: ReglePlacement[];
   niveaux: Palier[];
+  logistique: Logistique;
 }
 
 // --- Destruction -------------------------------------------------------------

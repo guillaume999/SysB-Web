@@ -8,8 +8,10 @@ import {
   COLLECTION_TUILES,
   contrainteDe,
   couleurDe,
+  estEntrepot,
   formatDuree,
   loadTuiles,
+  logistiqueDe,
   paliersDe,
   placementDe,
   tuilesCitant,
@@ -124,6 +126,31 @@ const COLONNES: ColonneAuChoix[] = [
     libelle: "consommation nv.1",
     rendu: (ctx) => resumePalier1(ctx).conso || <span className="text-slate-600">aucune</span>,
     valeur: (ctx) => resumePalier1(ctx).conso,
+  },
+  {
+    cle: "logistique",
+    libelle: "stock & appro",
+    etroite: true,
+    rendu: ({ tuile }) => {
+      const l = logistiqueDe(tuile);
+      const bouts: string[] = [];
+      if (estEntrepot(l)) bouts.push("entrepôt");
+      else {
+        if (l.appros.some((r) => r.sens === "entrant")) bouts.push("reçoit");
+        if (l.appros.some((r) => r.sens === "sortant")) bouts.push("fournit");
+      }
+      if (l.stockage.capacite > 0) bouts.push(`stock ${l.stockage.capacite}`);
+      return bouts.length === 0 ? RIEN : bouts.join(" · ");
+    },
+    // Les tuiles sans logistique se rangent APRES : trier sur cette colonne
+    // sert a trouver les entrepots, pas les 200 autres.
+    valeur: ({ tuile }) => {
+      const l = logistiqueDe(tuile);
+      if (estEntrepot(l)) return "1 entrepot";
+      if (l.appros.length > 0) return "2 appro";
+      if (l.stockage.capacite > 0) return "3 stock";
+      return "\uffff";
+    },
   },
   {
     cle: "regles",
