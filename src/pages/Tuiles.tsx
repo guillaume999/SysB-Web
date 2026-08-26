@@ -291,6 +291,27 @@ export default function Tuiles() {
     return liste;
   }, [tuiles, triCle, triSens, colonne, contexte]);
 
+  /**
+   * Le compte du catalogue. Le total seul ne dit pas grand-chose : une tuile en
+   * brouillon n'est pas jouable, et une tuile `space` ne sortira jamais sur un
+   * plateau au sol. On decompose donc, plutot que d'afficher un nombre qui
+   * rassure a tort.
+   */
+  const compte = useMemo(() => {
+    const actives = tuiles.filter((t) => t.actif).length;
+    const ground = tuiles.filter((t) => t.typeOfPlateau === "ground").length;
+    const space = tuiles.filter((t) => t.typeOfPlateau === "space").length;
+    return {
+      total: tuiles.length,
+      actives,
+      brouillons: tuiles.length - actives,
+      ground,
+      space,
+      /** Ni ground ni space : une saisie a reprendre, elle ne se posera nulle part. */
+      sansType: tuiles.length - ground - space,
+    };
+  }, [tuiles]);
+
   /** La fleche de tri, ou rien si ce n'est pas la colonne classante. */
   const fleche = (cle: string) =>
     triCle === cle ? <span className="ml-1 text-accent">{triSens === "asc" ? "▲" : "▼"}</span> : null;
@@ -345,7 +366,17 @@ export default function Tuiles() {
     <div>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">Tuiles</h1>
+          <h1 className="flex items-baseline gap-2 text-xl font-semibold text-white">
+            Tuiles
+            {!chargement && (
+              <span
+                className="rounded border border-edge px-1.5 py-0.5 font-mono text-xs tabular-nums text-slate-400"
+                title="Nombre de tuiles au catalogue"
+              >
+                {compte.total}
+              </span>
+            )}
+          </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Une tuile, c'est un modele declare dans{" "}
             <Link to="/3dmodeltuile" className="text-accent hover:underline">
@@ -402,6 +433,24 @@ export default function Tuiles() {
             commence par l'onglet Ressources
           </Link>
           , sinon les couts et les productions n'auront rien a proposer.
+        </p>
+      )}
+
+      {/* Le detail du compte : au-dessus du tableau, parce qu'il decrit ce que
+          le tableau contient — pas un reglage, une lecture. */}
+      {!chargement && tuiles.length > 0 && (
+        <p className="mb-2 text-xs text-slate-500">
+          <span className="tabular-nums text-slate-300">{compte.total}</span> tuile
+          {compte.total > 1 ? "s" : ""} au catalogue —{" "}
+          <span className="tabular-nums text-slate-300">{compte.actives}</span> active
+          {compte.actives > 1 ? "s" : ""}, {compte.brouillons} brouillon
+          {compte.brouillons > 1 ? "s" : ""}
+          {" · "}
+          <span className="tabular-nums text-slate-300">{compte.ground}</span> ground,{" "}
+          <span className="tabular-nums text-slate-300">{compte.space}</span> space
+          {compte.sansType > 0 && (
+            <span className="text-amber-400"> · {compte.sansType} sans type de plateau</span>
+          )}
         </p>
       )}
 
