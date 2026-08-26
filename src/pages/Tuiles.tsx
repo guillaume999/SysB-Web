@@ -8,6 +8,7 @@ import {
   COLLECTION_TUILES,
   contrainteDe,
   couleurDe,
+  estCommun,
   estEntrepot,
   formatDuree,
   loadTuiles,
@@ -141,6 +142,9 @@ const COLONNES: ColonneAuChoix[] = [
       }
       if (l.stockage.length > 0)
         bouts.push(`stock ${l.stockage.reduce((n, x) => n + Math.max(0, x.max), 0)}`);
+      // Le stock commun change ce que le chiffre au-dessus veut dire : ce n'est
+      // plus le coffre d'un bâtiment, c'est sa part du coffre de tout le type.
+      if (estCommun(l)) bouts.push("commun");
       return bouts.length === 0 ? RIEN : bouts.join(" · ");
     },
     // Les tuiles sans logistique se rangent APRES : trier sur cette colonne

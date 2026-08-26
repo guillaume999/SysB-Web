@@ -355,19 +355,21 @@ export const TRANCHES_PAR_DEFAUT: Tranche[] = [
 /**
  * ⚠️ **QUAND l'indicateur est lu**, question posée par l'utilisateur le 26/08 :
  * *« ça prendra l'indice de la période d'avant pour calculer le rendement ? »*.
- * Oui, et ce n'est pas un confort.
  *
- * La boucle est circulaire : l'habitation consomme la nourriture → produit la
- * satisfaction → la satisfaction freine la ferme → la ferme produit la
- * nourriture. Résoudre tout dans le même tick demanderait un point fixe à
- * chaque passe, et la résolution hors ligne (rejouer 300 ticks d'un coup au
- * réveil) ne coïnciderait plus avec le jeu en direct.
+ * La boucle **a l'air** circulaire : l'habitation consomme la nourriture →
+ * produit la satisfaction → la satisfaction freine la ferme → la ferme produit
+ * la nourriture. Mais elle se défait par l'**ordre**, parce que la consommation
+ * ne dépend d'aucun indicateur. Dans une passe du moteur :
  *
- * Donc : on produit avec la valeur **figée à la fin du tick précédent**, puis on
- * recalcule l'indicateur en fin de tick pour le suivant. Un tick de retard,
- * invisible à 120 s.
+ * 1. toutes les tuiles consomment — chacune mémorise sa satisfaction ;
+ * 2. on calcule les indicateurs du plateau ;
+ * 3. toutes les tuiles produisent, avec la valeur qu'on vient d'établir.
+ *
+ * Pas de période précédente, donc — ce serait moins bon : une nuit sans vivres
+ * résolue en une seule passe produirait à plein régime, puisque personne
+ * n'aurait eu le temps d'avoir faim.
  */
-export const INDICE_LU = "valeur de l'indicateur figée à la fin de la période précédente";
+export const INDICE_LU = "après la consommation de la passe, avant la production";
 
 /**
  * Valeur d'un indicateur avant qu'une seule habitation existe. **100, pas 0** :
@@ -852,10 +854,34 @@ export const TOUTES_RESSOURCES = "*";
 export interface Logistique {
   stockage: LigneStockage[];
   appros: RegleAppro[];
+  /**
+   * **Les tuiles de ce type ne forment qu'UN seul stock.** Demandé par
+   * l'utilisateur le 26/08 : *« je veux que les entrepôts tout soit en commun !
+   * leur stock égale 1 stock, seulement leur nombre augmente la quantité du
+   * stock ! »*
+   *
+   * - la **capacité** du commun est la SOMME des plafonds des instances posées ;
+   * - n'importe quelle instance donne accès à **tout** le commun — l'entrepôt
+   *   devient un point d'accès, il n'est plus un contenant ;
+   * - le **débit** n'est PAS mis en commun : chacune garde ses navettes et son
+   *   rayon. Trois entrepôts ramassent trois fois plus vite.
+   *
+   * ⚠️ Le commun est **par type**, jamais global : deux types cochés font deux
+   * bourses distinctes.
+   */
+  stock_commun: boolean;
 }
 
 export function logistiqueVide(): Logistique {
-  return { stockage: [], appros: [] };
+  return { stockage: [], appros: [], stock_commun: false };
+}
+
+/**
+ * Vrai si ce type partage un stock. Cocher la case sans déclarer le moindre
+ * plafond ne veut rien dire — il n'y aurait aucun volume à mettre en commun.
+ */
+export function estCommun(l: Logistique): boolean {
+  return l.stock_commun && l.stockage.some((x) => x.max > 0);
 }
 
 /**
@@ -884,6 +910,7 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
   const codes = (v: unknown) =>
     Array.isArray(v) ? Array.from(new Set(v.filter((c) => typeof c === "string" && c !== ""))) : [];
   return {
+    stock_commun: l.stock_commun === true,
     stockage: Array.isArray(l.stockage)
       ? l.stockage
           .filter((x) => x && typeof x.ressource === "string" && x.ressource !== "")
@@ -930,6 +957,10 @@ export function logistiquePourEnregistrer(l: Logistique): Logistique {
     // croire que la ressource est stockee.
     stockage: l.stockage.filter((x) => x.ressource !== "" && x.max > 0),
     appros: l.appros.filter((r) => r.cible === "tout" || r.tileIds.length > 0),
+    // On garde la case cochée telle quelle : la décocher toute seule parce
+    // qu'aucun plafond n'est encore saisi ferait perdre le réglage entre deux
+    // enregistrements, sans rien dire.
+    stock_commun: l.stock_commun === true,
   };
 }
 

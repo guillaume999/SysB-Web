@@ -2,7 +2,13 @@ import { useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
 import ChoixRessources from "@/components/ChoixRessources";
 import ChoixTuiles from "@/components/ChoixTuiles";
-import { estTransportable, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
+import {
+  estMobilise,
+  estTransportable,
+  libelleRessource,
+  parAlphabet,
+  type Ressource,
+} from "@/lib/ressources";
 import {
   CIBLES_APPRO,
   SENS_APPRO,
@@ -83,7 +89,7 @@ export default function TuileStockage({
   const citables = tuiles.filter((t) => t.id !== tuileCourante);
 
   /**
-   * ⚠️ **Deux genres ne montent dans aucune navette** : `population` et
+   * ⚠️ **Deux genres ne montent dans aucune navette** : `mobilise` et
    * `indicateur`. Un habitant ne se transporte pas — il est mobilisable la ou
    * il est loge — et un pourcentage encore moins. Les exclure de la LISTE est
    * plus sur que de le verifier apres coup : ce qui n'est pas proposable ne
@@ -94,11 +100,24 @@ export default function TuileStockage({
    * pas une promesse, c'est une impossibilite.
    */
   const transportables = parAlphabet(ressources.filter(estTransportable));
-  /** Le stockage accepte la population (c'est un logement), jamais un indicateur. */
+  /** Le stockage accepte le genre `mobilise` (c'est un logement), jamais un indicateur. */
   const stockables = parAlphabet(ressources.filter((r) => r.genre !== "indicateur"));
   const toutes = maxToutesRessources(logistique);
   const nominatives = lignesNominatives(logistique);
   const aToutes = logistique.stockage.some((x) => x.ressource === TOUTES_RESSOURCES);
+
+  /**
+   * Les lignes qui font de cette tuile un LOGEMENT.
+   *
+   * ⚠️ Une ligne nommée seulement : le volume partagé « toutes les ressources »
+   * ne loge personne — un entrepôt de 500 n'est pas une ville de 500 habitants.
+   */
+  const placesLogees = logistique.stockage.filter(
+    (x) =>
+      x.max > 0 &&
+      x.ressource !== TOUTES_RESSOURCES &&
+      estMobilise(ressources.find((r) => r.code === x.ressource)),
+  );
 
   const [filtre, setFiltre] = useState("");
   const q = filtre.trim().toLowerCase();
@@ -140,8 +159,22 @@ export default function TuileStockage({
             ramasser quoi que ce soit.
           </Terme>
           <Terme nom="loger de la population">
-            Un logement, c'est une tuile qui stocke la ressource <strong>population</strong> :
-            coche-la, mets 12, et voilà douze habitants logés.
+            Un logement, c'est une tuile qui stocke une ressource de genre{" "}
+            <strong>mobilisé</strong> — la population : coche-la, mets 12, et voilà douze
+            habitants logés.
+            <br />
+            ⚠️ <strong>Le logement EST la capacité.</strong> Les habitants sont là dès la pose, à
+            hauteur de ce plafond — il n'y a aucune ligne de production à saisir pour les faire
+            apparaître, et rien ne les fait naître ni mourir. Le jeu ne fait que lire ce nombre, à
+            chaque fois qu'il en a besoin.
+            <br />
+            ⚠️ <strong>Le stockage appartient à la tuile, pas au palier.</strong> Améliorer un
+            bâtiment ne change donc pas le nombre de places : il faut une autre tuile pour loger
+            plus.
+            <br />
+            ⚠️ <strong>Une tuile en veille ne loge personne</strong>, exactement comme une usine en
+            veille ne retient plus ses ouvriers. Éteindre une maison rend ses habitants
+            indisponibles.
             <br />
             ⚠️ <strong>Ce nombre ne varie jamais</strong>, et pas par convention : la population ne
             figure dans <em>aucune</em> liste d'approvisionnement. Rien ne peut la récolter, rien
@@ -266,6 +299,20 @@ export default function TuileStockage({
             </div>
           )}
 
+          {/* ⚠️ Une ligne de population n'est pas un stockage comme un autre :
+              c'est ce qui FAIT le logement. On le dit en clair, sinon l'admin
+              cherche une ligne de production « habitants » qui n'existe pas. */}
+          {placesLogees.length > 0 && (
+            <p className="mt-2 rounded border border-accent/40 bg-accent/5 p-2 text-[11px] leading-tight text-accent">
+              Cette tuile <strong>loge</strong>{" "}
+              {placesLogees
+                .map((x) => `${x.max} ${nomRessource(x.ressource)}`)
+                .join(", ")}{" "}
+              dès qu'elle est posée. Ce nombre ne varie jamais : la population ne se produit pas,
+              ne voyage pas, et se libère quand la tuile est détruite ou mise en veille.
+            </p>
+          )}
+
           <p className="mt-2 text-[11px] text-slate-500">
             {logistique.stockage.length === 0 ? (
               "Cette tuile ne stocke rien : ce qu'elle produit doit partir tout de suite."
@@ -297,6 +344,51 @@ export default function TuileStockage({
             )}
           </p>
         </div>
+
+        {/* ── Le stock commun ────────────────────────────────────────── */}
+        <label
+          className={`mt-2 flex cursor-pointer items-start gap-2 rounded border px-2 py-1.5 ${
+            logistique.stock_commun
+              ? "border-accent/40 bg-accent/5"
+              : "border-line/60 hover:bg-ink"
+          }`}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5 h-3.5 w-3.5 accent-accent"
+            checked={logistique.stock_commun}
+            onChange={(e) => onChange({ ...logistique, stock_commun: e.target.checked })}
+          />
+          <span className="text-xs">
+            <span className="text-slate-200">
+              Toutes les tuiles de ce type partagent un seul stock
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+              Leur nombre n&rsquo;augmente que la quantité stockable : deux bâtiments réglés à{" "}
+              {toutes > 0 ? toutes : 500} font un coffre de{" "}
+              {(toutes > 0 ? toutes : 500) * 2}. N&rsquo;importe lequel donne accès à{" "}
+              <strong>tout</strong> le stock — un consommateur voisin d&rsquo;un seul d&rsquo;entre
+              eux atteint ce qui a été ramassé à l&rsquo;autre bout du plateau.
+            </span>
+            <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+              Le débit, lui, n&rsquo;est pas mis en commun : chacun garde ses navettes et son
+              rayon. Trois entrepôts ramassent trois fois plus vite, et couvrent trois zones.
+            </span>
+            {logistique.stock_commun && logistique.stockage.length === 0 && (
+              <span className="mt-0.5 block text-[11px] leading-tight text-amber-400">
+                ⚠️ Aucun plafond n&rsquo;est saisi : il n&rsquo;y a pour l&rsquo;instant aucun
+                volume à mettre en commun.
+              </span>
+            )}
+            {logistique.stock_commun && (
+              <span className="mt-0.5 block text-[11px] leading-tight text-slate-500">
+                ⚠️ Détruire une de ces tuiles ne perd pas ce qu&rsquo;elle portait — la
+                marchandise est remise chez les autres. Seul le surplus qui ne tient plus est
+                perdu, et le jeu le dit avant de confirmer.
+              </span>
+            )}
+          </span>
+        </label>
       </div>
 
       {/* ── L'approvisionnement ──────────────────────────────────────── */}
@@ -550,6 +642,15 @@ export default function TuileStockage({
                       La population et les indicateurs ne sont pas proposés : ils ne se
                       transportent pas.
                     </p>
+                    {regle.sens === "entrant" && (
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        « N&rsquo;importe quelle tuile » veut dire « je ne nomme personne »,
+                        pas « chez tout le monde » : on ne prend jamais une ressource chez
+                        une tuile qui la consomme. Le garde-manger d&rsquo;un habitat ou
+                        d&rsquo;un abattoir n&rsquo;est pas une source — mais ce que
+                        l&rsquo;abattoir fabrique, si.
+                      </p>
+                    )}
                   </div>
 
                   <p

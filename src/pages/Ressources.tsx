@@ -283,9 +283,19 @@ function RessourceDialog({
             N'existe qu'en debit et ne s'accumule pas : energie, eau courante. Un bilan, pas un
             coffre.
           </Terme>
-          <Terme nom="genre, population">
-            Se mobilise et se libere plutot que se consommer. C'est ce qui permet a un batiment
-            d'occuper des habitants et de les rendre quand il est detruit.
+          <Terme nom="genre, mobilise">
+            S'occupe et se rend, au lieu de se depenser : c'est ce qui permet a un batiment
+            d'occuper 6 habitants et de les rendre quand on l'eteint ou qu'on le detruit. La
+            population est le premier cas, mais le genre decrit le MECANISME, pas le sujet.
+            <br />
+            ⚠️ Une ressource de ce genre ne se produit pas et ne voyage pas : elle se declare en
+            PLACES, dans le tableau de stockage d'une tuile. Une tuile qui stocke 12 population
+            loge 12 habitants, presents des la pose. C'est pour ca qu'elle n'est proposee ni dans
+            la liste « produit » d'un palier, ni dans les regles d'approvisionnement.
+            <br />
+            ⚠️ Il s'appelait <code>population</code> jusqu'au 26/08. Les ressources deja saisies
+            sont relues sans rien changer, mais l'option <code>mobilise</code> doit exister dans le
+            champ <code>genre</code> cote PocketBase, sinon l'enregistrement echoue en 400.
           </Terme>
           <Terme nom="ordre d'affichage">
             L'ordre des listes, ici et dans les formulaires de tuiles. Laisse des trous (10, 20,

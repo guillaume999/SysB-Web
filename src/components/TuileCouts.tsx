@@ -62,8 +62,16 @@ export default function TuileCouts({
     onChange(paliers.filter((_, i) => i !== index).map((p, i) => ({ ...p, niveau: i + 1 })));
 
   const nomRessource = (code: string) => libelleRessource(ressources, code);
-  /** Ce qu'une tuile peut fabriquer : tout sauf la population, indicateurs compris. */
-  const productibles = parAlphabet(ressources.filter((r) => r.genre !== "population"));
+  /**
+   * Ce qu'une tuile peut fabriquer : tout sauf le genre `mobilise`, indicateurs
+   * compris.
+   *
+   * ⚠️ Une ressource `mobilise` (la population) ne se PRODUIT pas : elle se
+   * déclare en places dans l'onglet *Stock & appro*, et le jeu lit ce plafond.
+   * L'offrir ici donnerait une ligne qui remplit un coffre que personne ne lit —
+   * les habitants disparaîtraient sans un mot.
+   */
+  const productibles = parAlphabet(ressources.filter((r) => r.genre !== "mobilise"));
   const indicateurs = parAlphabet(ressources.filter((r) => r.genre === "indicateur"));
 
   /** Remplace les lignes d'UN mode, en gardant celles de l'autre. */

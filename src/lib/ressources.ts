@@ -17,22 +17,40 @@ export const COLLECTION_RESSOURCES = "ressources";
 /**
  * - `stock` : s'accumule et se dépense (bois, or, viande).
  * - `flux` : n'existe qu'en débit, ne s'accumule pas (énergie, eau courante).
- * - `population` : cas particulier, se mobilise et se libère plutôt que se consommer.
+ * - `mobilise` : **se mobilise et se libère**, jamais consommé. La population
+ *   en est le premier cas — un bâtiment occupe 6 habitants et les rend quand on
+ *   l'éteint ou qu'on le détruit.
  * - `indicateur` : **calculé, jamais transporté** (la satisfaction). Ajouté le
  *   2026-08-26 sur la demande d'une « ressource utilisée comme indicateur » :
  *   elle garde son nom, son icône et sa place dans la barre de ressources, mais
  *   le genre marque qu'elle ne se stocke pas et ne monte dans aucune navette.
  *
- * ⚠️ **Deux genres ne voyagent jamais : `population` et `indicateur`.** Les
- * listes d'approvisionnement les excluent — voir `RESSOURCES_TRANSPORTABLES`.
- * Un habitant ne prend pas la navette, un pourcentage non plus.
+ * ⚠️ **`mobilise` s'appelait `population` jusqu'au 2026-08-26.** Le genre décrit
+ * un MÉCANISME, pas un sujet : il vaut pour tout ce qui s'occupe et se rend, pas
+ * seulement pour des habitants. Les records saisis avant sont normalisés à la
+ * lecture (`normaliserGenre`), donc rien à migrer côté données côté écran —
+ * mais l'option du champ `select` doit exister dans PocketBase, sinon
+ * l'enregistrement renvoie 400.
+ *
+ * ⚠️ **Un genre `mobilise` ne se déclare PAS en production : il se déclare en
+ * STOCKAGE.** Une tuile qui stocke 12 population loge 12 habitants, présents dès
+ * la pose. Le jeu lit ce plafond (`Tresorerie.Places`), il ne remplit aucun
+ * coffre.
+ *
+ * ⚠️ **Deux genres ne voyagent jamais : `mobilise` et `indicateur`.** Les listes
+ * d'approvisionnement les excluent — voir `GENRES_TRANSPORTABLES`. Un habitant
+ * ne prend pas la navette, un pourcentage non plus.
  */
-export type GenreRessource = "stock" | "flux" | "population" | "indicateur";
+export type GenreRessource = "stock" | "flux" | "mobilise" | "indicateur";
 
 export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[] = [
   { valeur: "stock", libelle: "stock", aide: "s'accumule et se dépense" },
   { valeur: "flux", libelle: "flux", aide: "n'existe qu'en débit, ne s'accumule pas" },
-  { valeur: "population", libelle: "population", aide: "se mobilise et se libère" },
+  {
+    valeur: "mobilise",
+    libelle: "mobilisé",
+    aide: "s'occupe et se rend ; déclaré en places, jamais produit ni transporté",
+  },
   {
     valeur: "indicateur",
     libelle: "indicateur",
@@ -40,11 +58,32 @@ export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[]
   },
 ];
 
+/** L'ancien nom du genre `mobilise`, encore accepté en lecture. */
+export const GENRE_MOBILISE_AVANT_2608 = "population";
+
+/**
+ * Ramène un genre lu en base à sa forme actuelle.
+ *
+ * ⚠️ Une ressource saisie avant le 2026-08-26 porte `population`. Sans cette
+ * traduction elle retomberait dans le cas « stock ordinaire » : les habitants
+ * deviendraient transportables, les entrepôts se mettraient à les drainer, et le
+ * bug ne se verrait qu'au moment où la barre affiche un nombre qui bouge.
+ */
+export function normaliserGenre(genre: string): GenreRessource | "" {
+  if (genre === GENRE_MOBILISE_AVANT_2608) return "mobilise";
+  return (genre ?? "") as GenreRessource | "";
+}
+
 /** Les genres qu'une navette peut porter. Ni les habitants, ni un pourcentage. */
 export const GENRES_TRANSPORTABLES: GenreRessource[] = ["stock", "flux"];
 
 export function estTransportable(r: { genre: GenreRessource | "" }): boolean {
   return GENRES_TRANSPORTABLES.includes(r.genre as GenreRessource);
+}
+
+/** True si cette ressource s'occupe et se rend au lieu de se dépenser. */
+export function estMobilise(r: { genre: GenreRessource | "" } | undefined): boolean {
+  return r?.genre === "mobilise";
 }
 
 export type Ressource = {
@@ -70,7 +109,12 @@ export interface ValeursRessource {
 }
 
 export function loadRessources(): Promise<Ressource[]> {
-  return pb.collection(COLLECTION_RESSOURCES).getFullList<Ressource>({ sort: "ordre,nom" });
+  return pb
+    .collection(COLLECTION_RESSOURCES)
+    .getFullList<Ressource>({ sort: "ordre,nom" })
+    // Le genre est normalisé ICI et nulle part ailleurs : tout le reste du site
+    // peut alors comparer à "mobilise" sans se demander de quand date le record.
+    .then((liste) => liste.map((r) => ({ ...r, genre: normaliserGenre(r.genre) })));
 }
 
 /**
