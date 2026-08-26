@@ -292,10 +292,6 @@ function RessourceDialog({
             PLACES, dans le tableau de stockage d'une tuile. Une tuile qui stocke 12 population
             loge 12 habitants, presents des la pose. C'est pour ca qu'elle n'est proposee ni dans
             la liste « produit » d'un palier, ni dans les regles d'approvisionnement.
-            <br />
-            ⚠️ Il s'appelait <code>population</code> jusqu'au 26/08. Les ressources deja saisies
-            sont relues sans rien changer, mais l'option <code>mobilise</code> doit exister dans le
-            champ <code>genre</code> cote PocketBase, sinon l'enregistrement echoue en 400.
           </Terme>
           <Terme nom="ordre d'affichage">
             L'ordre des listes, ici et dans les formulaires de tuiles. Laisse des trous (10, 20,

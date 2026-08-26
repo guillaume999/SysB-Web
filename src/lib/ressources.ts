@@ -25,12 +25,10 @@ export const COLLECTION_RESSOURCES = "ressources";
  *   elle garde son nom, son icône et sa place dans la barre de ressources, mais
  *   le genre marque qu'elle ne se stocke pas et ne monte dans aucune navette.
  *
- * ⚠️ **`mobilise` s'appelait `population` jusqu'au 2026-08-26.** Le genre décrit
- * un MÉCANISME, pas un sujet : il vaut pour tout ce qui s'occupe et se rend, pas
- * seulement pour des habitants. Les records saisis avant sont normalisés à la
- * lecture (`normaliserGenre`), donc rien à migrer côté données côté écran —
- * mais l'option du champ `select` doit exister dans PocketBase, sinon
- * l'enregistrement renvoie 400.
+ * ⚠️ **Le genre décrit un MÉCANISME, pas un sujet** : `mobilise` vaut pour tout
+ * ce qui s'occupe et se rend, pas seulement pour des habitants. (Il s'appelait
+ * `population` jusqu'au 2026-08-26 ; base et code ont été migrés le jour même,
+ * il ne reste aucune trace de l'ancien nom nulle part.)
  *
  * ⚠️ **Un genre `mobilise` ne se déclare PAS en production : il se déclare en
  * STOCKAGE.** Une tuile qui stocke 12 population loge 12 habitants, présents dès
@@ -57,22 +55,6 @@ export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[]
     aide: "calculé, jamais stocké ni transporté (la satisfaction)",
   },
 ];
-
-/** L'ancien nom du genre `mobilise`, encore accepté en lecture. */
-export const GENRE_MOBILISE_AVANT_2608 = "population";
-
-/**
- * Ramène un genre lu en base à sa forme actuelle.
- *
- * ⚠️ Une ressource saisie avant le 2026-08-26 porte `population`. Sans cette
- * traduction elle retomberait dans le cas « stock ordinaire » : les habitants
- * deviendraient transportables, les entrepôts se mettraient à les drainer, et le
- * bug ne se verrait qu'au moment où la barre affiche un nombre qui bouge.
- */
-export function normaliserGenre(genre: string): GenreRessource | "" {
-  if (genre === GENRE_MOBILISE_AVANT_2608) return "mobilise";
-  return (genre ?? "") as GenreRessource | "";
-}
 
 /** Les genres qu'une navette peut porter. Ni les habitants, ni un pourcentage. */
 export const GENRES_TRANSPORTABLES: GenreRessource[] = ["stock", "flux"];
@@ -109,12 +91,7 @@ export interface ValeursRessource {
 }
 
 export function loadRessources(): Promise<Ressource[]> {
-  return pb
-    .collection(COLLECTION_RESSOURCES)
-    .getFullList<Ressource>({ sort: "ordre,nom" })
-    // Le genre est normalisé ICI et nulle part ailleurs : tout le reste du site
-    // peut alors comparer à "mobilise" sans se demander de quand date le record.
-    .then((liste) => liste.map((r) => ({ ...r, genre: normaliserGenre(r.genre) })));
+  return pb.collection(COLLECTION_RESSOURCES).getFullList<Ressource>({ sort: "ordre,nom" });
 }
 
 /**
