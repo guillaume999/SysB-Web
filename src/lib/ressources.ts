@@ -73,6 +73,24 @@ export function loadRessources(): Promise<Ressource[]> {
   return pb.collection(COLLECTION_RESSOURCES).getFullList<Ressource>({ sort: "ordre,nom" });
 }
 
+/**
+ * Les ressources **par ordre alphabétique**, pour toutes les listes où l'on
+ * CHERCHE une ressource : menus déroulants, cases à cocher, tableau de
+ * stockage.
+ *
+ * ⚠️ À ne pas confondre avec le tri de `loadRessources()`, qui suit le champ
+ * `ordre` : celui-là est l'ordre d'affichage **en jeu**, dans la barre de
+ * ressources, et l'écran Ressources doit le montrer tel quel — sinon le champ
+ * `ordre` devient impossible à régler.
+ *
+ * `localeCompare` en français : les accents ne partent pas en fin de liste.
+ */
+export function parAlphabet(ressources: Ressource[]): Ressource[] {
+  return [...ressources].sort((a, b) =>
+    (a.nom ?? "").localeCompare(b.nom ?? "", "fr", { sensitivity: "base" }),
+  );
+}
+
 /** Libellé lisible d'un code, avec repli sur le code quand la ressource a disparu. */
 export function libelleRessource(ressources: Ressource[], code: string): string {
   return ressources.find((r) => r.code === code)?.nom || code;

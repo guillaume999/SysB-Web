@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Ressource } from "@/lib/ressources";
+import { parAlphabet, type Ressource } from "@/lib/ressources";
 
 /**
  * Une liste de ressources a cocher.
@@ -24,7 +24,7 @@ export default function ChoixRessources({
   const [filtre, setFiltre] = useState("");
   const q = filtre.trim().toLowerCase();
 
-  const visibles = ressources.filter(
+  const visibles = parAlphabet(ressources).filter(
     (r) => choisies.includes(r.code) || q === "" || r.nom.toLowerCase().includes(q),
   );
 

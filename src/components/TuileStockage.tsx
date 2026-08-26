@@ -2,7 +2,7 @@ import { useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
 import ChoixRessources from "@/components/ChoixRessources";
 import ChoixTuiles from "@/components/ChoixTuiles";
-import { estTransportable, libelleRessource, type Ressource } from "@/lib/ressources";
+import { estTransportable, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
   CIBLES_APPRO,
   SENS_APPRO,
@@ -93,9 +93,9 @@ export default function TuileStockage({
    * si rien ne peut la recolter ni l'envoyer, elle ne peut pas bouger. Ce n'est
    * pas une promesse, c'est une impossibilite.
    */
-  const transportables = ressources.filter(estTransportable);
+  const transportables = parAlphabet(ressources.filter(estTransportable));
   /** Le stockage accepte la population (c'est un logement), jamais un indicateur. */
-  const stockables = ressources.filter((r) => r.genre !== "indicateur");
+  const stockables = parAlphabet(ressources.filter((r) => r.genre !== "indicateur"));
   const toutes = maxToutesRessources(logistique);
   const nominatives = lignesNominatives(logistique);
   const aToutes = logistique.stockage.some((x) => x.ressource === TOUTES_RESSOURCES);

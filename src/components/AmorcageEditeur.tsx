@@ -1,5 +1,5 @@
 import { amorcageVide, type Amorcage, type RessourceDepart } from "@/lib/plateaux";
-import { codeInconnu, type Ressource } from "@/lib/ressources";
+import { codeInconnu, parAlphabet, type Ressource } from "@/lib/ressources";
 
 /**
  * Comment une partie démarre sur ce modèle de plateau.
@@ -75,7 +75,7 @@ export default function AmorcageEditeur({
                     {inconnue && (
                       <option value={ligne.ressource}>{ligne.ressource} (inconnue)</option>
                     )}
-                    {ressources.map((r) => (
+                    {parAlphabet(ressources).map((r) => (
                       <option key={r.id} value={r.code}>
                         {r.nom}
                       </option>
