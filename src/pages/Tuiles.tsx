@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { messageErreur, pb } from "@/lib/pb";
-import { loadModeles3D, type Modele3D } from "@/lib/modeles3d";
+import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
 import { loadRessources, libelleRessource, type Ressource } from "@/lib/ressources";
 import {
   COLLECTION_TUILES,
+  contrainteDe,
   couleurDe,
   formatDuree,
   loadTuiles,
@@ -18,11 +19,195 @@ import {
 } from "@/lib/tuiles";
 
 /**
+ * Une colonne au choix : ce qu'elle affiche, et sur quoi elle se trie.
+ *
+ * ⚠️ `rendu` et `valeur` sont DEUX fonctions distinctes, et c'est deliberé.
+ * Trier sur ce qui est affiche marcherait pour le texte mais pas pour les
+ * nombres : « 10 » se classerait avant « 2 », et « 3 h » avant « 45 min ».
+ * `valeur` rend donc la grandeur brute — un nombre reste un nombre.
+ */
+interface ColonneAuChoix {
+  cle: string;
+  libelle: string;
+  /** Court = la colonne peut rester etroite. */
+  etroite?: boolean;
+  rendu: (ctx: ContexteColonne) => ReactNode;
+  valeur: (ctx: ContexteColonne) => string | number;
+}
+
+/** Ce dont une colonne a besoin en plus de la tuile pour se rendre. */
+interface ContexteColonne {
+  tuile: Tuile;
+  modele: Modele3D | null;
+  ressources: Ressource[];
+}
+
+const RIEN = <span className="text-slate-600">—</span>;
+
+function resumeNiveau1(ctx: ContexteColonne) {
+  const n = niveauxDe(ctx.tuile)[0];
+  const cout = n.cout
+    .map((c) => `${c.quantite} ${libelleRessource(ctx.ressources, c.ressource)}`)
+    .join(", ");
+  const prod = n.production.periodique
+    .map(
+      (p) =>
+        `${p.quantite} ${libelleRessource(ctx.ressources, p.ressource)}/${formatDuree(p.periode_s)}`,
+    )
+    .join(", ");
+  return { cout, prod };
+}
+
+const COLONNES: ColonneAuChoix[] = [
+  {
+    cle: "id",
+    libelle: "id",
+    etroite: true,
+    rendu: ({ tuile }) => (
+      <span className="flex items-center gap-2 font-mono tabular-nums text-slate-300">
+        {/* La pastille : la meme couleur que dans l'editeur de plateaux. */}
+        <span
+          className="h-3 w-3 shrink-0 rounded-sm border border-edge"
+          style={{ background: couleurDe(tuile) }}
+          title={tuile.couleur ? tuile.couleur : "couleur automatique"}
+        />
+        {tuile.tileId}
+      </span>
+    ),
+    valeur: ({ tuile }) => tuile.tileId,
+  },
+  {
+    cle: "categorie",
+    libelle: "categorie",
+    rendu: ({ tuile }) => tuile.categorie || RIEN,
+    valeur: ({ tuile }) => tuile.categorie ?? "",
+  },
+  {
+    cle: "modele",
+    libelle: "modele 3D",
+    rendu: ({ modele }) =>
+      modele ? (
+        <span className="font-mono text-[11px] text-slate-400">{cheminJeu(modele)}</span>
+      ) : (
+        <span className="text-[11px] text-amber-300">modele introuvable</span>
+      ),
+    valeur: ({ modele }) => (modele ? cheminJeu(modele) : "\uffff"),
+  },
+  {
+    cle: "plateau",
+    libelle: "type de plateau",
+    etroite: true,
+    rendu: ({ tuile }) => tuile.typeOfPlateau || RIEN,
+    valeur: ({ tuile }) => tuile.typeOfPlateau ?? "",
+  },
+  {
+    cle: "niveaux",
+    libelle: "niveaux",
+    etroite: true,
+    rendu: ({ tuile }) => (
+      <span className="tabular-nums text-slate-400">{niveauxDe(tuile).length}</span>
+    ),
+    valeur: ({ tuile }) => niveauxDe(tuile).length,
+  },
+  {
+    cle: "cout",
+    libelle: "cout nv.1",
+    rendu: (ctx) => resumeNiveau1(ctx).cout || <span className="text-slate-600">gratuit</span>,
+    valeur: (ctx) => resumeNiveau1(ctx).cout,
+  },
+  {
+    cle: "production",
+    libelle: "production nv.1",
+    rendu: (ctx) => resumeNiveau1(ctx).prod || <span className="text-slate-600">aucune</span>,
+    valeur: (ctx) => resumeNiveau1(ctx).prod,
+  },
+  {
+    cle: "regles",
+    libelle: "regles de pose",
+    etroite: true,
+    rendu: ({ tuile }) => {
+      const n = placementDe(tuile).length;
+      return n === 0 ? <span className="text-slate-600">libre</span> : `${n}`;
+    },
+    valeur: ({ tuile }) => placementDe(tuile).length,
+  },
+  {
+    cle: "logistique",
+    libelle: "role logistique",
+    etroite: true,
+    rendu: ({ tuile }) => {
+      const l = logistiqueDe(tuile);
+      return l ? (
+        <span className="rounded border border-accent/40 px-1.5 py-0.5 text-[10px] uppercase text-accent">
+          {l.role}
+        </span>
+      ) : (
+        RIEN
+      );
+    },
+    // Les tuiles sans role se rangent APRES, pas au debut : trier sur
+    // « logistique » sert a trouver les entrepots, pas les 200 autres.
+    valeur: ({ tuile }) => logistiqueDe(tuile)?.role ?? "\uffff",
+  },
+  {
+    cle: "contrainte",
+    libelle: "destruction",
+    etroite: true,
+    rendu: ({ tuile }) => {
+      const c = contrainteDe(tuile);
+      return c === "destructible" ? <span className="text-slate-600">{c}</span> : c;
+    },
+    valeur: ({ tuile }) => contrainteDe(tuile),
+  },
+  {
+    cle: "etat",
+    libelle: "actif",
+    etroite: true,
+    rendu: ({ tuile }) =>
+      tuile.actif ? <span className="text-slate-600">actif</span> : "brouillon",
+    valeur: ({ tuile }) => (tuile.actif ? 1 : 0),
+  },
+  {
+    cle: "maj",
+    libelle: "modifiee le",
+    etroite: true,
+    rendu: ({ tuile }) => (
+      <span className="tabular-nums text-slate-400">{(tuile.updated ?? "").slice(0, 10)}</span>
+    ),
+    valeur: ({ tuile }) => tuile.updated ?? "",
+  },
+];
+
+/** Ce qu'on affiche par defaut, et ce qu'on retient d'une visite a l'autre. */
+const CLE_PREFS = "sysb.tuiles.colonne";
+const CLE_TRI = "sysb.tuiles.tri";
+
+function lirePref(cle: string, defaut: string): string {
+  // localStorage jette dans un onglet prive ou avec les cookies bloques : une
+  // preference d'affichage ne doit jamais empecher la page de s'ouvrir.
+  try {
+    return window.localStorage.getItem(cle) ?? defaut;
+  } catch {
+    return defaut;
+  }
+}
+
+function ecrirePref(cle: string, valeur: string) {
+  try {
+    window.localStorage.setItem(cle, valeur);
+  } catch {
+    /* tant pis : le choix vaut pour cette session seulement */
+  }
+}
+
+/**
  * Le catalogue de jeu : ce que le joueur peut reellement poser.
  *
- * La liste reste volontairement resumee. Le detail (couts, regles, productions)
- * vit dans la fenetre d'edition : une tuile complete represente quatre listes et
- * autant de niveaux, ce qui ne tient pas dans un tableau.
+ * Le tableau ne montre que TROIS colonnes : le nom, les actions, et **une
+ * colonne au choix** (selecteur en haut). Le detail complet vit dans la fenetre
+ * d'edition — une tuile represente quatre listes et autant de niveaux, ce qui
+ * ne tient de toute facon pas dans un tableau. Mieux vaut une colonne qu'on
+ * choisit que sept qu'on subit.
  */
 export default function Tuiles() {
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
@@ -35,6 +220,80 @@ export default function Tuiles() {
   const [saving, setSaving] = useState(false);
   const [erreurDialog, setErreurDialog] = useState<string | null>(null);
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
+
+  /** La 3e colonne, et le tri. Les deux survivent a un rechargement de page. */
+  const [colonneCle, setColonneCle] = useState(() => lirePref(CLE_PREFS, "cout"));
+  const [tri, setTri] = useState(() => lirePref(CLE_TRI, "nom:asc"));
+
+  const colonne = COLONNES.find((c) => c.cle === colonneCle) ?? COLONNES[0];
+  const [triCle, triSens] = tri.split(":");
+
+  const choisirColonne = (cle: string) => {
+    setColonneCle(cle);
+    ecrirePref(CLE_PREFS, cle);
+    // Rien a faire pour le tri : s'il portait deja sur « la colonne au choix »,
+    // il suit tout seul, puisque le classement se recalcule a partir de
+    // `colonne`. C'est l'interet de trier sur le ROLE et non sur un nom fige.
+  };
+
+  /** Clic sur un entete : meme colonne = on inverse le sens, sinon on y va. */
+  const basculerTri = (cle: "nom" | "colonne") => {
+    const sens = triCle === cle && triSens === "asc" ? "desc" : "asc";
+    const suivant = `${cle}:${sens}`;
+    setTri(suivant);
+    ecrirePref(CLE_TRI, suivant);
+  };
+
+  const parId = useMemo(() => new Map(modeles.map((m) => [m.id, m])), [modeles]);
+
+  const contexte = useCallback(
+    (tuile: Tuile): ContexteColonne => ({
+      tuile,
+      modele: tuile.expand?.modele ?? parId.get(tuile.modele) ?? null,
+      ressources,
+    }),
+    [parId, ressources],
+  );
+
+  const tuilesTriees = useMemo(() => {
+    const liste = [...tuiles];
+    const sens = triSens === "desc" ? -1 : 1;
+
+    liste.sort((a, b) => {
+      let va: string | number;
+      let vb: string | number;
+
+      if (triCle === "colonne") {
+        va = colonne.valeur(contexte(a));
+        vb = colonne.valeur(contexte(b));
+      } else {
+        va = a.nom ?? "";
+        vb = b.nom ?? "";
+      }
+
+      let ecart: number;
+      if (typeof va === "number" && typeof vb === "number") ecart = va - vb;
+      else
+        // `localeCompare` avec `numeric` : « tuile 10 » se range apres
+        // « tuile 2 », et les accents ne partent pas en fin de liste.
+        ecart = String(va).localeCompare(String(vb), "fr", {
+          numeric: true,
+          sensitivity: "base",
+        });
+
+      // Un tri stable et previsible : a valeur egale, on retombe sur le nom.
+      if (ecart === 0 && triCle === "colonne")
+        ecart = (a.nom ?? "").localeCompare(b.nom ?? "", "fr", { numeric: true });
+
+      return ecart * sens;
+    });
+
+    return liste;
+  }, [tuiles, triCle, triSens, colonne, contexte]);
+
+  /** La fleche de tri, ou rien si ce n'est pas la colonne classante. */
+  const fleche = (cle: string) =>
+    triCle === cle ? <span className="ml-1 text-accent">{triSens === "asc" ? "▲" : "▼"}</span> : null;
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -82,20 +341,6 @@ export default function Tuiles() {
     }
   };
 
-  /** Resume d'une tuile en une ligne : ce qu'elle coute et ce qu'elle rend au niveau 1. */
-  const resume = (tuile: Tuile) => {
-    const n = niveauxDe(tuile)[0];
-    const cout = n.cout
-      .map((c) => `${c.quantite} ${libelleRessource(ressources, c.ressource)}`)
-      .join(", ");
-    const prod = n.production.periodique
-      .map(
-        (p) => `${p.quantite} ${libelleRessource(ressources, p.ressource)}/${formatDuree(p.periode_s)}`,
-      )
-      .join(", ");
-    return { cout, prod };
-  };
-
   return (
     <div>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
@@ -110,7 +355,23 @@ export default function Tuiles() {
             niveau, role logistique. Le meme modele peut servir a autant de tuiles que necessaire.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Le choix de la 3e colonne. En haut, a cote des actions : c'est un
+              reglage d'affichage, pas une donnee du tableau. */}
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            Afficher
+            <select
+              className="input py-1 text-xs"
+              value={colonne.cle}
+              onChange={(e) => choisirColonne(e.target.value)}
+            >
+              {COLONNES.map((c) => (
+                <option key={c.cle} value={c.cle}>
+                  {c.libelle}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="btn-ghost" onClick={() => void charger()}>
             Recharger
           </button>
@@ -160,32 +421,41 @@ export default function Tuiles() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
-                <th className="w-16 px-3 py-2 font-medium">id</th>
-                <th className="px-3 py-2 font-medium">nom</th>
-                {/* Les actions viennent juste apres le nom : c'est la colonne
-                    qu'on vise, pas celle qu'on lit. Le modele 3D n'est plus
-                    affiche — il se voit dans le formulaire, onglet Identite. */}
+                {/* Les deux entetes classants sont des BOUTONS, pas des cellules
+                    decorees : un tri qui ne se declenche qu'au pixel pres du
+                    texte donne l'impression que le clic n'a pas marche. */}
+                <th className="px-3 py-2 font-medium">
+                  <button
+                    className="uppercase tracking-wide hover:text-white"
+                    onClick={() => basculerTri("nom")}
+                    title="Classer par nom"
+                  >
+                    nom{fleche("nom")}
+                  </button>
+                </th>
                 <th className="w-40 px-3 py-2" />
-                <th className="w-20 px-3 py-2 font-medium">niveaux</th>
-                <th className="px-3 py-2 font-medium">cout nv.1</th>
-                <th className="px-3 py-2 font-medium">production nv.1</th>
-                <th className="w-24 px-3 py-2 font-medium">regles</th>
+                <th className={`px-3 py-2 font-medium ${colonne.etroite ? "w-40" : ""}`}>
+                  <button
+                    className="uppercase tracking-wide hover:text-white"
+                    onClick={() => basculerTri("colonne")}
+                    title={`Classer par ${colonne.libelle}`}
+                  >
+                    {colonne.libelle}
+                    {fleche("colonne")}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
               {chargement && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={3} className="px-3 py-6 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>
               )}
               {!chargement &&
-                tuiles.map((tuile) => {
-                  const niveaux = niveauxDe(tuile);
-                  const regles = placementDe(tuile);
-                  const logistique = logistiqueDe(tuile);
-                  const { cout, prod } = resume(tuile);
+                tuilesTriees.map((tuile) => {
                   const confirme = aSupprimer === tuile.id;
                   const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
                   return (
@@ -193,17 +463,6 @@ export default function Tuiles() {
                       key={tuile.id}
                       className="border-b border-edge/60 align-top last:border-0 hover:bg-ink/40"
                     >
-                      <td className="px-3 py-2 font-mono tabular-nums text-slate-300">
-                        <span className="flex items-center gap-2">
-                          {/* La pastille : la meme couleur que dans l'editeur de plateaux. */}
-                          <span
-                            className="h-3 w-3 shrink-0 rounded-sm border border-edge"
-                            style={{ background: couleurDe(tuile) }}
-                            title={tuile.couleur ? tuile.couleur : "couleur automatique"}
-                          />
-                          {tuile.tileId}
-                        </span>
-                      </td>
                       <td className="px-3 py-2">
                         <span className={tuile.actif ? "text-slate-200" : "text-slate-500"}>
                           {tuile.nom}
@@ -212,14 +471,6 @@ export default function Tuiles() {
                           <span className="ml-2 rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-500">
                             brouillon
                           </span>
-                        )}
-                        {logistique && (
-                          <span className="ml-2 rounded border border-accent/40 px-1.5 py-0.5 text-[10px] uppercase text-accent">
-                            {logistique.role}
-                          </span>
-                        )}
-                        {tuile.categorie && (
-                          <p className="text-[11px] text-slate-500">{tuile.categorie}</p>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -265,15 +516,8 @@ export default function Tuiles() {
                           </>
                         )}
                       </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-400">{niveaux.length}</td>
                       <td className="px-3 py-2 text-xs text-slate-400">
-                        {cout || <span className="text-slate-600">gratuit</span>}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-400">
-                        {prod || <span className="text-slate-600">aucune</span>}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-500">
-                        {regles.length === 0 ? "libre" : `${regles.length}`}
+                        {colonne.rendu(contexte(tuile))}
                       </td>
                     </tr>
                   );
