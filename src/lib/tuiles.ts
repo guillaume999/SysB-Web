@@ -293,24 +293,10 @@ export interface LigneFlux {
   ressource: string;
   quantite: number;
   periode_s: number;
-  /**
-   * **Part de satisfaction**, en pourcentage, que cette consommation couvre —
-   * n'a de sens que si le palier déclare un `indicateur`.
-   *
-   * Modèle de l'utilisateur (26/08) :
-   * *« palier 1 : nourriture = 100 % satisfaction si qutt / periode suffisante.
-   * palier 2 : nourriture = 80 % + 10 % pierre + 10 % argile »*.
-   *
-   * La satisfaction obtenue est la **somme pondérée de ce qui est réellement
-   * couvert** : nourriture à moitié servie et le reste plein donne
-   * 40 + 10 + 10 = 60 %. Une ligne à `0` ne compte pas — c'est une
-   * consommation ordinaire.
-   */
-  part: number;
 }
 
 export function fluxVide(ressource: string): LigneFlux {
-  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT, part: 0 };
+  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT };
 }
 
 /**
@@ -343,44 +329,23 @@ export interface Palier {
   cout: LigneCout[];
   /** Ce qu'il consomme pendant qu'il tourne. Rien n'est prélevé en veille. */
   utilisation: LigneFlux[];
-  /**
-   * Le code de la ressource de genre `indicateur` que ce palier **produit** —
-   * la satisfaction, typiquement. Vide = ce palier n'en produit aucune.
-   *
-   * Ce n'est pas une production ordinaire : sa valeur ne se saisit pas, elle se
-   * **calcule** à partir des `part` des consommations ci-dessus. C'est ce qui
-   * garantit qu'un logement bien nourri est satisfait sans qu'on ait à
-   * l'écrire deux fois.
-   */
-  indicateur: string;
-  /**
-   * **Efficacité minimale garantie**, en pourcentage. La production de cette
-   * tuile ne descend jamais en dessous, quelle que soit la satisfaction du
-   * plateau : `efficacité = max(satisfaction, plancher)`.
-   *
-   * ⚠️ **C'est le garde-fou contre la spirale**, et l'utilisateur a voulu qu'il
-   * se règle **tuile par tuile** plutôt que globalement. Un seul nombre couvre
-   * les deux besoins : `100` = insensible à la satisfaction (les fermes
-   * continuent de nourrir même quand tout va mal), `0` = totalement soumis.
-   *
-   * Sans plancher quelque part, la boucle est mortelle : moins de vivres →
-   * moins de satisfaction → les fermes produisent moins → encore moins de
-   * vivres. Le joueur qui revient après douze heures découvre l'effondrement
-   * déjà consommé. C'était déjà l'intention du ralenti du 25/08 : « personne ne
-   * s'éteint ».
-   */
-  plancher_efficacite: number;
 }
 
-/** Somme des parts de satisfaction d'un palier. Devrait faire 100. */
-export function totalParts(p: Palier): number {
-  return p.utilisation.reduce((n, l) => n + Math.max(0, l.part), 0);
-}
-
-/** Vrai si le palier produit un indicateur et déclare au moins une part. */
-export function produitUnIndicateur(p: Palier): boolean {
-  return p.indicateur !== "" && totalParts(p) > 0;
-}
+/*
+ * ⚠️ **RETIRÉ le 2026-08-26, le jour même où c'était posé.** Un palier portait
+ * aussi `indicateur` (la ressource calculée qu'il produit — la satisfaction) et
+ * `plancher_efficacite` (l'efficacité minimale garantie, garde-fou contre la
+ * spirale). L'utilisateur les a fait retirer de l'écran en les voyant :
+ * *« on supprime produit l'indicateur, efficacité minimale, totalement soumise
+ * à la satisfaction »*. Les champs sont partis avec, plutôt que de rester
+ * saisis nulle part et lus par personne.
+ *
+ * Le MODÈLE, lui, reste décidé et vaut toujours — parts de satisfaction par
+ * consommation, malus par plateau, plancher par tuile. Il attend seulement un
+ * autre endroit où vivre. Tout est dans la note mémoire `sysb-satisfaction-v2`,
+ * y compris pourquoi le plancher est indispensable : sans lui la boucle
+ * satisfaction → production → nourriture → satisfaction est mortelle.
+ */
 
 /** Ce qui est payé une fois, à la construction. */
 export function coutConstruction(p: Palier): LigneCout[] {
@@ -396,14 +361,7 @@ export function chantierPasEncoreApplique(p: Palier): boolean {
 export const PERIODE_PAR_DEFAUT = 120;
 
 export function palierVide(numero: number): Palier {
-  return {
-    niveau: numero,
-    duree_construction_s: 0,
-    cout: [],
-    utilisation: [],
-    indicateur: "",
-    plancher_efficacite: 0,
-  };
+  return { niveau: numero, duree_construction_s: 0, cout: [], utilisation: [] };
 }
 
 /**
@@ -463,11 +421,8 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
-          part: Math.min(100, Math.max(0, entier(l?.part))),
         }))
       : [],
-    indicateur: typeof o.indicateur === "string" ? o.indicateur : "",
-    plancher_efficacite: Math.min(100, Math.max(0, entier(o.plancher_efficacite))),
   };
 }
 
@@ -482,8 +437,6 @@ export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
     duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
     cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
     utilisation: p.utilisation.filter((l) => l.ressource !== "" && l.quantite > 0),
-    indicateur: p.indicateur,
-    plancher_efficacite: Math.min(100, Math.max(0, Math.trunc(p.plancher_efficacite || 0))),
   }));
 }
 
@@ -518,10 +471,50 @@ export function formatDuree(secondes: number): string {
  */
 export type SensAppro = "entrant" | "sortant";
 
+/**
+ * ⚠️ Les libellés ont changé le 26/08 : « je reçois de » / « je fournis » sont
+ * devenus **« je prends » / « je produis »**, mot de l'utilisateur. Les valeurs
+ * stockées, elles, restent `entrant` / `sortant` — renommer les données pour
+ * suivre un libellé d'écran ne vaut jamais la migration qu'elle coûte.
+ */
 export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] = [
-  { valeur: "entrant", libelle: "je reçois de", aide: "la ressource vient jusqu'ici" },
-  { valeur: "sortant", libelle: "je fournis", aide: "la ressource part d'ici" },
+  { valeur: "entrant", libelle: "je prends", aide: "la ressource vient jusqu'ici" },
+  {
+    valeur: "sortant",
+    libelle: "je produis",
+    aide: "la tuile fabrique la ressource, et la rend disponible dans son rayon",
+  },
 ];
+
+/**
+ * ⚠️ **« je produis » EST la déclaration de production.** Décidé le 26/08 : le
+ * débit d'une règle `sortant` n'est pas seulement un circuit de distribution,
+ * c'est **combien la tuile fabrique**. Et ce chiffre est un **maximum** :
+ *
+ * ```
+ * production réelle = débit déclaré
+ *                   × couverture des intrants   (0 → 1)
+ *                   × satisfaction du plateau   (0 → 1)
+ * ```
+ *
+ * Mot de l'utilisateur : *« on produit tant de ressources si on a les
+ * ressources ou seulement un pourcentage en fonction de ce que les ressources
+ * correspondent au pourcentage de besoin, puis on applique le % de
+ * satisfaction »*.
+ *
+ * ⚠️ La couverture est un **pourcentage, pas un tout-ou-rien** : à moitié
+ * approvisionné, on produit la moitié. Le tout-ou-rien n'était pas invariant
+ * aux cadences — c'est la leçon du 25/08, ne pas la reperdre.
+ *
+ * ⚠️ Et il reste la porte : **sans main-d'œuvre mobilisée, production nulle**,
+ * quelle que soit la couverture.
+ *
+ * ⚠️ Un `rayon` de **0** est légitime et utile ici : « je produis chez moi et
+ * je ne livre personne — on vient m'y chercher ». C'est le cas de la ferme dont
+ * l'entrepôt vient ramasser la récolte.
+ */
+export const FORMULE_PRODUCTION =
+  "débit déclaré × couverture des intrants × satisfaction du plateau";
 
 /** Qui est en face. `tout` = n'importe quelle tuile à portée qui a / veut la ressource. */
 export type CibleAppro = "tout" | "tuiles";
@@ -558,6 +551,27 @@ export interface RegleAppro {
    * le débit avec elle ; surtout pas introduire du déplacement réel.
    */
   debit: { navettes: number; quantite: number; periode_s: number };
+  /**
+   * `sortant` seulement : **la satisfaction du plateau s'applique-t-elle à
+   * cette production ?**
+   *
+   * Demandé par l'utilisateur le 26/08 — *« et on choisit si la satisfaction
+   * entre en compte ou non »*. Coché (le défaut), la production est multipliée
+   * par la satisfaction ; décoché, elle n'en dépend pas.
+   *
+   * ⚠️ **C'est le garde-fou contre la spirale, réduit à une case à cocher.**
+   * Décoche-la sur les fermes et elles continuent de nourrir même quand tout va
+   * mal ; laisse-la sur l'industrie et elle tousse avec le reste. Sans au moins
+   * une production insensible quelque part, la boucle
+   * `satisfaction → production → nourriture → satisfaction` s'effondre toute
+   * seule pendant que le joueur dort, et il ne peut plus rien reconstruire
+   * puisque construire coûte ce qu'il ne produit plus.
+   *
+   * C'est la version simple du `plancher_efficacite` en pourcentage, conçu puis
+   * retiré le même jour — voir [[sysb-satisfaction-v2]]. Un booléen suffit tant
+   * qu'on n'a pas besoin d'un « à moitié soumis ».
+   */
+  soumis_satisfaction: boolean;
 }
 
 /** Le débit réel d'une règle : navettes × quantité, par période. */
@@ -575,27 +589,76 @@ export function regleApproVide(sens: SensAppro): RegleAppro {
     rayon: sens === "entrant" ? 3 : null,
     ressources: [],
     debit: { navettes: 1, quantite: 10, periode_s: PERIODE_PAR_DEFAUT },
+    soumis_satisfaction: true,
   };
 }
 
 /**
- * Ce que la tuile peut garder. ⚠️ **`ressources` vide = toutes les ressources**
- * — même convention que les règles d'approvisionnement, pour qu'il n'y ait
- * qu'une seule chose à retenir.
+ * Ce que la tuile peut garder, **ressource par ressource**.
+ *
+ * ⚠️ Refait le 26/08 : c'était d'abord une capacité globale plus une liste de
+ * ressources acceptées, où « vide = toutes ». L'utilisateur a demandé
+ * *« un tableau avec les ressources, et une quantité max de stockage à cocher
+ * et renseigner »* — donc un plafond PAR ressource, coché ou non.
+ *
+ * C'est plus juste : un entrepôt à grain et un coffre à minerai n'ont pas la
+ * même contenance, et « 500 au total toutes ressources confondues » obligeait
+ * à choisir un chiffre qui ne veut rien dire pour aucune.
+ *
+ * **Une ressource absente de la liste n'est pas stockée du tout** — sauf si la
+ * ligne « toutes les ressources » est cochée (voir `TOUTES_RESSOURCES`).
  */
-export interface Stockage {
-  ressources: string[];
-  /** Capacité totale, toutes ressources confondues. `0` = ne stocke rien. */
-  capacite: number;
+export interface LigneStockage {
+  /** Un code de ressource, ou `TOUTES_RESSOURCES`. */
+  ressource: string;
+  /** Plafond. `0` = la ligne ne sert à rien, elle est jetée à l'enregistrement. */
+  max: number;
 }
 
+/**
+ * La ligne fourre-tout du tableau de stockage : **n'importe quelle ressource,
+ * jusqu'à ce plafond, partagé entre toutes**.
+ *
+ * ⚠️ Demandée par l'utilisateur le 26/08 — *« pourtant si je voulais l'option
+ * toutes les ressources et 500 par exemple »* — après que le passage au tableau
+ * l'ait fait disparaître. Les deux se justifient et **cohabitent** : l'entrepôt
+ * générique a un volume, le silo à grain a un plafond par denrée.
+ *
+ * Une ligne nominative **l'emporte** sur celle-ci pour sa ressource : c'est ce
+ * qui permet « n'importe quoi jusqu'à 500, mais pas plus de 50 de bois ».
+ *
+ * `*` n'est pas un code de ressource valide (les codes sont en minuscules,
+ * chiffres et underscore), donc aucune collision possible.
+ */
+export const TOUTES_RESSOURCES = "*";
+
 export interface Logistique {
-  stockage: Stockage;
+  stockage: LigneStockage[];
   appros: RegleAppro[];
 }
 
 export function logistiqueVide(): Logistique {
-  return { stockage: { ressources: [], capacite: 0 }, appros: [] };
+  return { stockage: [], appros: [] };
+}
+
+/**
+ * Le plafond retenu pour une ressource : sa ligne nominative si elle existe,
+ * sinon la ligne « toutes », sinon 0 (la tuile ne la stocke pas).
+ */
+export function maxStocke(l: Logistique, code: string): number {
+  const propre = l.stockage.find((x) => x.ressource === code);
+  if (propre) return propre.max;
+  return l.stockage.find((x) => x.ressource === TOUTES_RESSOURCES)?.max ?? 0;
+}
+
+/** Le plafond de la ligne « toutes les ressources », ou 0 si elle n'est pas cochée. */
+export function maxToutesRessources(l: Logistique): number {
+  return l.stockage.find((x) => x.ressource === TOUTES_RESSOURCES)?.max ?? 0;
+}
+
+/** Les plafonds nominatifs, hors ligne « toutes ». */
+export function lignesNominatives(l: Logistique): LigneStockage[] {
+  return l.stockage.filter((x) => x.ressource !== TOUTES_RESSOURCES);
 }
 
 export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
@@ -604,10 +667,11 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
   const codes = (v: unknown) =>
     Array.isArray(v) ? Array.from(new Set(v.filter((c) => typeof c === "string" && c !== ""))) : [];
   return {
-    stockage: {
-      ressources: codes(l.stockage?.ressources),
-      capacite: Math.max(0, entier(l.stockage?.capacite)),
-    },
+    stockage: Array.isArray(l.stockage)
+      ? l.stockage
+          .filter((x) => x && typeof x.ressource === "string" && x.ressource !== "")
+          .map((x) => ({ ressource: x.ressource, max: Math.max(0, entier(x.max)) }))
+      : [],
     appros: Array.isArray(l.appros)
       ? l.appros.map((r) => ({
           sens: r?.sens === "sortant" ? ("sortant" as const) : ("entrant" as const),
@@ -622,6 +686,9 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
             quantite: Math.max(0, entier(r?.debit?.quantite)),
             periode_s: Math.max(1, entier(r?.debit?.periode_s) || PERIODE_PAR_DEFAUT),
           },
+          // Absent = soumis : le defaut doit etre le cas ordinaire, pas
+          // l'exception. Une regle ancienne relue reste donc soumise.
+          soumis_satisfaction: r?.soumis_satisfaction !== false,
         }))
       : [],
   };
@@ -634,7 +701,9 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
  */
 export function logistiquePourEnregistrer(l: Logistique): Logistique {
   return {
-    stockage: { ...l.stockage, capacite: Math.max(0, Math.trunc(l.stockage.capacite || 0)) },
+    // Un plafond nul ne dit rien : on jette la ligne plutot que de laisser
+    // croire que la ressource est stockee.
+    stockage: l.stockage.filter((x) => x.ressource !== "" && x.max > 0),
     appros: l.appros.filter((r) => r.cible === "tout" || r.tileIds.length > 0),
   };
 }
@@ -669,8 +738,8 @@ export function decrireAppro(
     `${r.debit.navettes} navette${r.debit.navettes > 1 ? "s" : ""} × ${r.debit.quantite} = ` +
     `${debitParPeriode(r)} par ${formatDuree(r.debit.periode_s)}`;
   return r.sens === "entrant"
-    ? `Récolte ${quoi} chez ${qui} ${ou} — ${combien}.`
-    : `Envoie ${quoi} vers ${qui} ${ou} — ${combien}.`;
+    ? `Prend ${quoi} chez ${qui} ${ou} — ${combien}.`
+    : `Produit ${quoi} pour ${qui} ${ou} — ${combien}.`;
 }
 
 /** Une tuile qui reçoit ET fournit : c'est ce qu'on appelle un entrepôt. */

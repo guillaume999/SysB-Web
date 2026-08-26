@@ -7,7 +7,6 @@ import {
   formatDuree,
   palierVide,
   rendEnVeille,
-  totalParts,
   type LigneCout,
   type LigneFlux,
   type ModeCout,
@@ -54,7 +53,6 @@ export default function TuileCouts({
     onChange(paliers.filter((_, i) => i !== index).map((p, i) => ({ ...p, niveau: i + 1 })));
 
   const nomRessource = (code: string) => libelleRessource(ressources, code);
-  const indicateurs = ressources.filter((r) => r.genre === "indicateur");
 
   /** Remplace les lignes d'UN mode, en gardant celles de l'autre. */
   const majCout = (index: number, mode: ModeCout, lignes: LigneCout[]) => {
@@ -98,29 +96,6 @@ export default function TuileCouts({
           Pas ici. Ce que le bâtiment consomme est dit dans cet onglet ; <strong>par où ça
           arrive</strong> se règle dans l'onglet <em>Stock &amp; appro</em>, qui porte aussi le
           rayon de récolte et les navettes.
-        </Terme>
-        <Terme nom="indicateur produit">
-          Certaines tuiles — les habitations — ne fabriquent pas un objet mais un{" "}
-          <strong>pourcentage</strong> : la satisfaction. Sa valeur ne se saisit pas, elle se{" "}
-          <strong>calcule</strong> à partir des parts ci-dessous, pour qu'un logement bien nourri
-          soit satisfait sans qu'on ait à l'écrire deux fois.
-        </Terme>
-        <Terme nom="part de satisfaction">
-          Ce que chaque consommation couvre, en pourcentage. Le total devrait faire 100.
-          <br />
-          La satisfaction obtenue est la <strong>somme pondérée de ce qui est réellement
-          servi</strong> : nourriture 80 % + pierre 10 % + argile 10 %, avec la nourriture servie
-          à moitié, donne 40 + 10 + 10 = <strong>60 %</strong>.
-        </Terme>
-        <Terme nom="efficacité minimale">
-          Le plancher sous lequel la production de <em>cette</em> tuile ne descend jamais, quelle
-          que soit la satisfaction du plateau. <code>100</code> = insensible (les fermes
-          continuent de nourrir même quand tout va mal), <code>0</code> = totalement soumise.
-          <br />
-          ⚠️ <strong>C'est le garde-fou contre la spirale.</strong> Sans plancher quelque part, la
-          boucle est mortelle : moins de vivres → moins de satisfaction → les fermes produisent
-          moins → encore moins de vivres. Le joueur qui revient après douze heures découvrirait
-          l'effondrement déjà consommé, sans avoir pu réagir.
         </Terme>
         <Terme nom="chantier">
           Le temps qu'il faut avant que le bâtiment serve. <code>0</code> = instantané.
@@ -228,76 +203,9 @@ export default function TuileCouts({
                 <LignesFlux
                   lignes={palier.utilisation}
                   ressources={ressources}
-                  avecParts={palier.indicateur !== ""}
                   onChange={(utilisation) => majPalier(index, { utilisation })}
                 />
 
-                {/* L'indicateur produit, et le garde-fou contre la spirale. */}
-                <div className="mt-3 space-y-1 border-t border-edge/60 pt-2">
-                  <label className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
-                    produit l'indicateur
-                    <select
-                      className="input h-9 w-44 py-1"
-                      value={palier.indicateur}
-                      onChange={(e) => majPalier(index, { indicateur: e.target.value })}
-                    >
-                      <option value="">aucun</option>
-                      {indicateurs.map((r) => (
-                        <option key={r.id} value={r.code}>
-                          {r.nom}
-                        </option>
-                      ))}
-                    </select>
-                    {indicateurs.length === 0 && (
-                      <span className="text-[11px] text-amber-300">
-                        aucune ressource de genre « indicateur » déclarée
-                      </span>
-                    )}
-                  </label>
-
-                  {palier.indicateur !== "" && (
-                    <p
-                      className={`text-[11px] leading-tight ${
-                        totalParts(palier) === 100 ? "text-slate-500" : "text-amber-400"
-                      }`}
-                    >
-                      Total des parts : <span className="tabular-nums">{totalParts(palier)} %</span>
-                      {totalParts(palier) === 100
-                        ? " — un logement entièrement servi atteint 100 %."
-                        : totalParts(palier) < 100
-                          ? ` — même entièrement servi, ce logement plafonnera à ${totalParts(palier)} %.`
-                          : " — au-delà de 100 %, le surplus est perdu. Rééquilibre les parts."}
-                    </p>
-                  )}
-
-                  <label className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
-                    efficacité minimale garantie
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={5}
-                      className="input h-9 w-20 py-1"
-                      value={palier.plancher_efficacite}
-                      onChange={(e) =>
-                        majPalier(index, {
-                          plancher_efficacite: Math.min(
-                            100,
-                            Math.max(0, Number(e.target.value) || 0),
-                          ),
-                        })
-                      }
-                    />
-                    %
-                  </label>
-                  <p className="text-[11px] leading-tight text-slate-500">
-                    {palier.plancher_efficacite >= 100
-                      ? "Insensible à la satisfaction : produit toujours à plein, même quand le plateau va mal."
-                      : palier.plancher_efficacite === 0
-                        ? "Totalement soumise à la satisfaction du plateau — jusqu'à 0 %."
-                        : `Produit au minimum à ${palier.plancher_efficacite} %, même si la satisfaction tombe plus bas.`}
-                  </p>
-                </div>
               </Section>
 
               {/* La relecture : le seul endroit ou la regle de veille se voit,
@@ -442,13 +350,10 @@ function LignesCout({
 function LignesFlux({
   lignes,
   ressources,
-  avecParts,
   onChange,
 }: {
   lignes: LigneFlux[];
   ressources: Ressource[];
-  /** Le palier produit un indicateur : chaque ligne porte alors une part. */
-  avecParts: boolean;
   onChange: (lignes: LigneFlux[]) => void;
 }) {
   const maj = (i: number, patch: Partial<LigneFlux>) =>
@@ -493,23 +398,7 @@ function LignesFlux({
                 <span className="text-[11px] text-slate-500">
                   soit {ligne.quantite} / {formatDuree(ligne.periode_s)}
                 </span>
-                {avecParts && (
-                  <label className="flex items-center gap-1 text-xs text-slate-500">
-                    couvre
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={5}
-                      className="input h-9 w-16 py-1"
-                      value={ligne.part}
-                      onChange={(e) =>
-                        maj(i, { part: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
-                      }
-                    />
-                    % de satisfaction
-                  </label>
-                )}
+
                 <button
                   type="button"
                   className="ml-auto text-xs text-slate-500 hover:text-red-400"

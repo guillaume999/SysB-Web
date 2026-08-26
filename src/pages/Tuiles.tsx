@@ -139,7 +139,8 @@ const COLONNES: ColonneAuChoix[] = [
         if (l.appros.some((r) => r.sens === "entrant")) bouts.push("reçoit");
         if (l.appros.some((r) => r.sens === "sortant")) bouts.push("fournit");
       }
-      if (l.stockage.capacite > 0) bouts.push(`stock ${l.stockage.capacite}`);
+      if (l.stockage.length > 0)
+        bouts.push(`stock ${l.stockage.reduce((n, x) => n + Math.max(0, x.max), 0)}`);
       return bouts.length === 0 ? RIEN : bouts.join(" · ");
     },
     // Les tuiles sans logistique se rangent APRES : trier sur cette colonne
@@ -148,7 +149,7 @@ const COLONNES: ColonneAuChoix[] = [
       const l = logistiqueDe(tuile);
       if (estEntrepot(l)) return "1 entrepot";
       if (l.appros.length > 0) return "2 appro";
-      if (l.stockage.capacite > 0) return "3 stock";
+      if (l.stockage.length > 0) return "3 stock";
       return "\uffff";
     },
   },
