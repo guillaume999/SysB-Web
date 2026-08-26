@@ -165,6 +165,15 @@ export default function Tuiles() {
   const [erreurDialog, setErreurDialog] = useState<string | null>(null);
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
 
+  /**
+   * Le filtre. Volontairement NON retenu d'une visite a l'autre, contrairement
+   * a la colonne et au tri : rouvrir la page sur une liste amputee, sans se
+   * souvenir d'avoir filtre, fait croire que des tuiles ont disparu.
+   */
+  const [filtre, setFiltre] = useState("");
+  const [filtreType, setFiltreType] = useState("tous");
+  const [filtreEtat, setFiltreEtat] = useState("tous");
+
   /** La 3e colonne, et le tri. Les deux survivent a un rechargement de page. */
   const [colonneCle, setColonneCle] = useState(() => lirePref(CLE_PREFS, "categorie"));
   const [tri, setTri] = useState(() => lirePref(CLE_TRI, "nom:asc"));
@@ -198,8 +207,36 @@ export default function Tuiles() {
     [parId],
   );
 
+  /**
+   * Le filtre porte sur ce qu'on LIT dans la ligne : le nom, l'id, la
+   * categorie. Chercher dans des champs invisibles donnerait des resultats
+   * inexplicables — « pourquoi cette tuile ressort-elle ? ».
+   */
+  const tuilesFiltrees = useMemo(() => {
+    const q = filtre.trim().toLowerCase();
+    return tuiles.filter((t) => {
+      if (filtreType !== "tous" && t.typeOfPlateau !== filtreType) return false;
+      if (filtreEtat === "actives" && !t.actif) return false;
+      if (filtreEtat === "brouillons" && t.actif) return false;
+      if (q === "") return true;
+      return (
+        (t.nom ?? "").toLowerCase().includes(q) ||
+        (t.categorie ?? "").toLowerCase().includes(q) ||
+        String(t.tileId) === q
+      );
+    });
+  }, [tuiles, filtre, filtreType, filtreEtat]);
+
+  const filtreActif = filtre.trim() !== "" || filtreType !== "tous" || filtreEtat !== "tous";
+
+  const reinitialiser = () => {
+    setFiltre("");
+    setFiltreType("tous");
+    setFiltreEtat("tous");
+  };
+
   const tuilesTriees = useMemo(() => {
-    const liste = [...tuiles];
+    const liste = [...tuilesFiltrees];
     const sens = triSens === "desc" ? -1 : 1;
 
     liste.sort((a, b) => {
@@ -232,7 +269,7 @@ export default function Tuiles() {
     });
 
     return liste;
-  }, [tuiles, triCle, triSens, colonne, contexte]);
+  }, [tuilesFiltrees, triCle, triSens, colonne, contexte]);
 
   /**
    * Le compte du catalogue. Le total seul ne dit pas grand-chose : une tuile en
@@ -370,10 +407,54 @@ export default function Tuiles() {
         </p>
       )}
 
+      {/* Le filtre, puis le compte. Dans cet ordre : on regle, puis on lit ce
+          que le reglage a donne. */}
+      {!chargement && tuiles.length > 0 && (
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <input
+            className="input h-8 w-56 py-1 text-xs"
+            value={filtre}
+            onChange={(e) => setFiltre(e.target.value)}
+            placeholder="filtrer par nom, categorie ou id..."
+          />
+          <select
+            className="input h-8 py-1 text-xs"
+            value={filtreType}
+            onChange={(e) => setFiltreType(e.target.value)}
+            title="Type de plateau"
+          >
+            <option value="tous">tous les plateaux</option>
+            <option value="ground">ground</option>
+            <option value="space">space</option>
+          </select>
+          <select
+            className="input h-8 py-1 text-xs"
+            value={filtreEtat}
+            onChange={(e) => setFiltreEtat(e.target.value)}
+            title="Actives ou brouillons"
+          >
+            <option value="tous">actives et brouillons</option>
+            <option value="actives">actives seulement</option>
+            <option value="brouillons">brouillons seulement</option>
+          </select>
+          {filtreActif && (
+            <button type="button" className="text-xs text-accent hover:underline" onClick={reinitialiser}>
+              tout afficher
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Le detail du compte : au-dessus du tableau, parce qu'il decrit ce que
           le tableau contient — pas un reglage, une lecture. */}
       {!chargement && tuiles.length > 0 && (
         <p className="mb-2 text-xs text-slate-500">
+          {filtreActif && (
+            <span className="text-slate-300">
+              <span className="tabular-nums">{tuilesFiltrees.length}</span> affichee
+              {tuilesFiltrees.length > 1 ? "s" : ""} sur{" "}
+            </span>
+          )}
           <span className="tabular-nums text-slate-300">{compte.total}</span> tuile
           {compte.total > 1 ? "s" : ""} au catalogue —{" "}
           <span className="tabular-nums text-slate-300">{compte.actives}</span> active
@@ -434,6 +515,16 @@ export default function Tuiles() {
                 <tr>
                   <td colSpan={3} className="px-3 py-6 text-center text-slate-500">
                     Chargement...
+                  </td>
+                </tr>
+              )}
+              {!chargement && tuilesTriees.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-3 py-6 text-center text-slate-500">
+                    Aucune tuile ne correspond au filtre.{" "}
+                    <button type="button" className="text-accent hover:underline" onClick={reinitialiser}>
+                      tout afficher
+                    </button>
                   </td>
                 </tr>
               )}

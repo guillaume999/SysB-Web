@@ -41,66 +41,35 @@ export interface EtatCase {
 
 // --- Amorcage : comment une partie demarre ----------------------------------
 //
-// ⚠️ Porte par le MODELE de plateau, pas par la tuile. Decide le 2026-08-24 :
-// une tuile est une entree de CATALOGUE, generique et reutilisable par
-// plusieurs scenarios ; combien d'exemplaires sont offerts au demarrage est une
-// propriete du SCENARIO. Le meme entrepot doit pouvoir etre offert sur un
-// plateau de debutant et payant sur un plateau difficile, sans creer deux
-// tuiles. `tuiles.premiers_gratuits` a ete supprime en consequence.
+// ⚠️ **LA GRATUITE N'EST PLUS ICI.** Elle a fait l'aller-retour :
+//   · avant le 24/08 elle vivait sur la tuile (`tuiles.premiers_gratuits`) ;
+//   · le 24/08 elle est passee sur le MODELE de plateau, au motif qu'une tuile
+//     est une entree de catalogue generique et que le meme entrepot doit
+//     pouvoir etre offert sur un plateau de debutant et payant ailleurs ;
+//   · le **26/08 l'utilisateur l'a voulue de nouveau sur la tuile**, en
+//     connaissance de ce compromis. Elle est desormais une regle de placement,
+//     `{regle: "gratuite", offerts}` — voir `lib/tuiles.ts`.
 //
-// Pendant exact de `SysB.Backend.Amorcage` cote Unity : memes champs, memes
-// noms. **Renommer d'un cote sans l'autre casse le jeu en silence** — le modele
-// se chargerait, avec des regles vides.
-
-/** Les trois modes ne different que sur une question : que se passe-t-il si le joueur DETRUIT un exemplaire offert ? */
-export type ModeGratuite = "sous_minimum" | "borne" | "cadeau";
-
-export const MODES_GRATUITE: { valeur: ModeGratuite; libelle: string; aide: string }[] = [
-  {
-    valeur: "sous_minimum",
-    libelle: "filet de sécurité",
-    aide:
-      "Tant que le joueur en possède moins de N, la pose est offerte. Détruire le dernier " +
-      "ré-arme la gratuité — c'est ce qui évite qu'un joueur ayant démoli son unique entrepôt " +
-      "reste bloqué pour de bon.",
-  },
-  {
-    valeur: "borne",
-    libelle: "filet + plafond",
-    aide:
-      "Comme le filet, plus un maximum : au-delà de M exemplaires, la pose est carrément " +
-      "interdite. (Un plafond seul, sans gratuité se disait avec la règle de placement " +
-      "« limite » sur la tuile — retirée le 26/08, en attente de refonte.)",
-  },
-  {
-    valeur: "cadeau",
-    libelle: "cadeau de bienvenue",
-    aide:
-      "Les N premières poses de la partie sont offertes, une fois pour toutes. Détruire ne rend " +
-      "PAS le cadeau. ⚠️ Un joueur qui démolit tout reste sans filet.",
-  },
-];
+// Il ne doit y en avoir **qu'un seul endroit**, sinon un jour la question
+// « laquelle gagne ? ». C'est pourquoi `Amorcage.gratuites` a ete retire ici et
+// vide en base le meme jour, plutot que laisse a dormir.
+//
+// Ce qui reste : la dotation en ressources de depart. Pendant exact de
+// `SysB.Backend.Amorcage` cote Unity : memes champs, memes noms. **Renommer
+// d'un cote sans l'autre casse le jeu en silence** — le modele se chargerait,
+// avec des regles vides.
 
 export interface RessourceDepart {
   ressource: string;
   quantite: number;
 }
 
-export interface RegleGratuite {
-  tileId: number;
-  mode: ModeGratuite;
-  min: number;
-  /** Plafond du mode « borne ». 0 = aucun plafond. */
-  max: number;
-}
-
 export interface Amorcage {
   ressources_depart: RessourceDepart[];
-  gratuites: RegleGratuite[];
 }
 
 export function amorcageVide(): Amorcage {
-  return { ressources_depart: [], gratuites: [] };
+  return { ressources_depart: [] };
 }
 
 /**
@@ -113,22 +82,22 @@ export function amorcageDe(plateau: Plateau | null | undefined): Amorcage {
   if (!a || typeof a !== "object") return amorcageVide();
   return {
     ressources_depart: Array.isArray(a.ressources_depart) ? a.ressources_depart : [],
-    gratuites: Array.isArray(a.gratuites) ? a.gratuites : [],
   };
 }
 
 /**
- * Ecarte les lignes vides avant l'envoi : une ressource sans code, une quantite
- * nulle, une regle sans tuile ou a `min` nul ne veulent rien dire. Le jeu les
- * ignorerait de toute facon (`Amorcage.RegleDe` exige `min > 0`) — autant ne pas
- * les stocker, plutot que de laisser croire qu'elles agissent.
+ * Ecarte les lignes vides avant l'envoi : une ressource sans code ou a quantite
+ * nulle ne veut rien dire. Autant ne pas la stocker, plutot que de laisser
+ * croire qu'elle agit.
+ *
+ * ⚠️ Ne renvoie QUE `ressources_depart` : c'est aussi ce qui efface en base les
+ * anciennes `gratuites` du modele des qu'un amorcage est reenregistre.
  */
 export function amorcageNettoye(a: Amorcage): Amorcage {
   return {
     ressources_depart: (a.ressources_depart ?? []).filter(
       (r) => r.ressource !== "" && r.quantite > 0,
     ),
-    gratuites: (a.gratuites ?? []).filter((g) => g.tileId > 0 && g.min > 0),
   };
 }
 

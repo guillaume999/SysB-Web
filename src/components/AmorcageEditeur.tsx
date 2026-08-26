@@ -1,24 +1,17 @@
-import {
-  MODES_GRATUITE,
-  amorcageVide,
-  type Amorcage,
-  type ModeGratuite,
-  type RegleGratuite,
-  type RessourceDepart,
-} from "@/lib/plateaux";
+import { amorcageVide, type Amorcage, type RessourceDepart } from "@/lib/plateaux";
 import { codeInconnu, type Ressource } from "@/lib/ressources";
-import type { Tuile } from "@/lib/tuiles";
 
 /**
  * Comment une partie démarre sur ce modèle de plateau.
  *
- * ⚠️ Ces réglages appartiennent au **modèle**, pas à la tuile. Décidé le
- * 2026-08-24 : une tuile est une entrée de catalogue générique, réutilisable par
- * plusieurs scénarios ; combien d'exemplaires sont offerts au démarrage est une
- * propriété du scénario. Le champ « Exemplaires offerts » a donc quitté le
- * formulaire des tuiles pour arriver ici.
+ * ⚠️ **Les bâtiments offerts ne sont plus ici.** Ils ont quitté cet écran le
+ * 2026-08-26, sur demande de l'utilisateur : la gratuité est redevenue une
+ * règle de la tuile (`{regle: "gratuite", offerts}` dans son onglet Placement).
+ * Il ne doit y en avoir qu'un seul endroit. Ne pas la réintroduire ici sans
+ * retirer l'autre.
  *
- * Deux mécanismes de dotation coexistent, et c'est voulu :
+ * Il ne reste donc que la dotation en ressources. Deux mécanismes coexistent,
+ * et c'est voulu :
  *  - le **coffre d'une case**, dans l'onglet d'inspection — pour placer
  *    précisément quelque chose à un endroit précis ;
  *  - la **liste ci-dessous** — pour la dotation globale, sans avoir à aller
@@ -26,24 +19,17 @@ import type { Tuile } from "@/lib/tuiles";
  */
 export default function AmorcageEditeur({
   amorcage,
-  tuiles,
   ressources,
   onChange,
 }: {
   amorcage: Amorcage | null;
-  tuiles: Tuile[];
   ressources: Ressource[];
   onChange: (a: Amorcage) => void;
 }) {
   const a = amorcage ?? amorcageVide();
   const dotation = a.ressources_depart ?? [];
-  const regles = a.gratuites ?? [];
 
   const majDotation = (lignes: RessourceDepart[]) => onChange({ ...a, ressources_depart: lignes });
-  const majRegles = (lignes: RegleGratuite[]) => onChange({ ...a, gratuites: lignes });
-
-  const nomTuile = (tileId: number) =>
-    tuiles.find((t) => t.tileId === tileId)?.nom ?? `tuile ${tileId}`;
 
   return (
     <div className="space-y-6">
@@ -126,124 +112,6 @@ export default function AmorcageEditeur({
         )}
       </div>
 
-      {/* ── Les règles de gratuité ────────────────────────────────────── */}
-      <div>
-        <div className="flex items-baseline justify-between gap-2">
-          <p className="label mb-0">Bâtiments offerts</p>
-          <button
-            type="button"
-            className="text-xs text-accent hover:underline"
-            onClick={() =>
-              majRegles([
-                ...regles,
-                { tileId: tuiles[0]?.tileId ?? 0, mode: "sous_minimum", min: 1, max: 0 },
-              ])
-            }
-          >
-            + ajouter
-          </button>
-        </div>
-        <p className="mt-0.5 text-[11px] text-slate-500">
-          Les trois modes ne diffèrent que sur <strong>une</strong> question : que se passe-t-il
-          quand le joueur <em>détruit</em> un exemplaire offert ? Seule la <strong>pose</strong>
-          {" "}est concernée — améliorer se paie toujours.
-        </p>
-
-        {regles.length === 0 ? (
-          <p className="mt-1 text-xs text-slate-600">aucune</p>
-        ) : (
-          <div className="mt-2 space-y-3">
-            {regles.map((regle, i) => {
-              const maj = (patch: Partial<RegleGratuite>) =>
-                majRegles(regles.map((r, k) => (k === i ? { ...r, ...patch } : r)));
-              const mode = MODES_GRATUITE.find((m) => m.valeur === regle.mode);
-              const orpheline = regle.tileId > 0 && !tuiles.some((t) => t.tileId === regle.tileId);
-
-              return (
-                <div key={i} className="rounded border border-edge p-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      className="input h-9 w-52 py-1"
-                      value={regle.tileId}
-                      onChange={(e) => maj({ tileId: Number(e.target.value) })}
-                    >
-                      {/* Une tuile supprimée depuis la saisie doit rester visible :
-                          la faire disparaître du menu changerait la règle en silence. */}
-                      {orpheline && (
-                        <option value={regle.tileId}>
-                          {nomTuile(regle.tileId)} — supprimée du catalogue
-                        </option>
-                      )}
-                      {tuiles.map((t) => (
-                        <option key={t.id} value={t.tileId}>
-                          {t.tileId} · {t.nom}
-                        </option>
-                      ))}
-                    </select>
-
-                    <select
-                      className="input h-9 w-44 py-1"
-                      value={regle.mode}
-                      onChange={(e) => maj({ mode: e.target.value as ModeGratuite })}
-                    >
-                      {MODES_GRATUITE.map((m) => (
-                        <option key={m.valeur} value={m.valeur}>
-                          {m.libelle}
-                        </option>
-                      ))}
-                    </select>
-
-                    <label className="flex items-center gap-1 text-xs text-slate-500">
-                      offerts
-                      <input
-                        type="number"
-                        min={1}
-                        step={1}
-                        className="input h-9 w-20 py-1"
-                        value={regle.min}
-                        onChange={(e) => maj({ min: Number(e.target.value) })}
-                      />
-                    </label>
-
-                    {/* Le plafond n'existe que dans le mode qui en a un. L'afficher
-                        partout laisserait croire qu'il agit ailleurs. */}
-                    {regle.mode === "borne" && (
-                      <label className="flex items-center gap-1 text-xs text-slate-500">
-                        maximum
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          className="input h-9 w-20 py-1"
-                          value={regle.max}
-                          onChange={(e) => maj({ max: Number(e.target.value) })}
-                        />
-                      </label>
-                    )}
-
-                    <button
-                      type="button"
-                      className="ml-auto text-xs text-slate-500 hover:text-red-400"
-                      onClick={() => majRegles(regles.filter((_, k) => k !== i))}
-                    >
-                      retirer
-                    </button>
-                  </div>
-
-                  {mode && <p className="mt-1.5 text-[11px] text-slate-500">{mode.aide}</p>}
-
-                  {regle.mode === "borne" && regle.max > 0 && regle.max < regle.min && (
-                    <p className="mt-1 text-[11px] text-amber-400">
-                      Le maximum ({regle.max}) est inférieur au nombre offert ({regle.min}) : la
-                      pose sera interdite avant que la gratuité ait pu servir.
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

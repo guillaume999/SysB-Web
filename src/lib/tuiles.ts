@@ -42,17 +42,26 @@ export const TILE_ID_MAX = 255;
 // --- Placement : les règles de pose ----------------------------------------
 
 /**
- * Reconstruit le 2026-08-26, à partir d'une page blanche. **Un seul type de
- * règle pour l'instant : `support`.** Les autres (voisinage, limite…) sont
- * ajoutés au fur et à mesure — le tableau `placement` les accueillera sans rien
- * casser, puisque chaque règle porte son champ `regle`.
+ * Reconstruit le 2026-08-26, à partir d'une page blanche. Trois types pour
+ * l'instant : **`support`** (ce que la case porte), **`limite`** (combien on
+ * peut en avoir) et **`gratuite`** (les premiers ne coûtent rien). Les autres —
+ * le voisinage surtout — sont ajoutés au fur et à mesure : le tableau
+ * `placement` les accueillera sans rien casser, puisque chaque règle porte son
+ * champ `regle`.
  *
- * Toutes les règles d'une tuile doivent être vraies en même temps : ET simple.
+ * ⚠️ **Toutes les règles ne sont PAS de même nature.** `support` et `limite`
+ * sont des CONDITIONS : elles disent oui ou non, et doivent toutes être vraies
+ * en même temps (ET simple). `gratuite` ne conditionne rien — elle change le
+ * PRIX. Côté Unity, les deux premières sont l'affaire de `PlacementValidator`,
+ * la troisième celle de `CoutConstruction`, et le validateur doit **ignorer
+ * explicitement** `gratuite` au lieu de la traiter en règle inconnue.
  */
-export type TypeRegle = "support";
+export type TypeRegle = "support" | "limite" | "gratuite";
 
 export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[] = [
   { valeur: "support", libelle: "support", aide: "ce que la case elle-même doit porter" },
+  { valeur: "limite", libelle: "limite", aide: "nombre maximum d'exemplaires sur le plateau" },
+  { valeur: "gratuite", libelle: "gratuité", aide: "les premiers exemplaires sont offerts" },
 ];
 
 /**
@@ -78,17 +87,77 @@ export const CASE_VIDE = 0;
  */
 export type BaseSupport = "liste" | "tout";
 
+/** Sur quoi porte une `limite`. Voir le champ `portee`. */
+export type PorteeLimite = "plateau" | "empire";
+
+/** Vrai tant que le jeu ne sait pas compter sur tous les plateaux du joueur. */
+export function porteePasEncoreAppliquee(r: ReglePlacement): boolean {
+  return r.regle === "limite" && r.portee === "empire";
+}
+
 export interface ReglePlacement {
   regle: TypeRegle;
+  // --- support ---
   base: BaseSupport;
   /** `base: "liste"` — les tuiles autorisées. `0` = la case vide. */
   tileIds: number[];
   /** `base: "tout"` — les tuiles interdites. `0` = la case vide. */
   sauf: number[];
+  // --- limite ---
+  /**
+   * Nombre maximum d'exemplaires. `0` = pas de limite (la règle est alors
+   * ignorée : un max de zéro rendrait la tuile impossible à poser, ce qui n'est
+   * jamais une intention).
+   */
+  max: number;
+  /**
+   * Sur quoi porte le maximum.
+   *
+   * - `plateau` : sur le plateau courant. La colonie et la station comptent
+   *   séparément, comme tout le reste du modèle. **C'est le seul cas qu'Unity
+   *   sait appliquer aujourd'hui.**
+   * - `empire` : tous plateaux confondus.
+   *
+   * ⚠️ **`empire` n'est PAS encore appliqué en jeu** — `PlacementValidator`
+   * compte le seul plateau courant. Le champ est saisi et enregistré, mais
+   * l'écran le dit en orange sous la règle : c'est la différence entre un champ
+   * qui ment et un champ pas encore branché. **Retirer cet avertissement en
+   * même temps que le rattrapage Unity, pas avant** — voir
+   * [[feedback-filtre-nest-pas-regle]].
+   */
+  portee: PorteeLimite;
+  // --- gratuite ---
+  /**
+   * Nombre d'exemplaires offerts. **Tant que le joueur en possède moins de
+   * `offerts` sur ce plateau, la pose au palier 1 ne coûte rien.** `0` = jamais
+   * gratuit.
+   *
+   * ⚠️ **Le compte est celui du MOMENT, pas un historique** : détruire son
+   * dernier entrepôt rend le suivant à nouveau gratuit. C'est un filet de
+   * sécurité, pas une promotion de bienvenue — sans ce ré-armement, un joueur
+   * qui démolit son unique entrepôt resterait bloqué définitivement.
+   *
+   * ⚠️ **Palier 1 seulement** : poser est offert, améliorer se paie.
+   *
+   * ⚠️ Revenu sur la tuile le 2026-08-26, sur demande de l'utilisateur, APRÈS
+   * en être parti le 24/08 (« une tuile est générique, la gratuité appartient
+   * au scénario »). La gratuité portée par le modèle de plateau
+   * (`amorcage.gratuites`) a été retirée en même temps : **il ne doit y en
+   * avoir qu'une seule, sinon un jour la question « laquelle gagne ? ».**
+   */
+  offerts: number;
 }
 
 export function regleVide(regle: TypeRegle): ReglePlacement {
-  return { regle, base: "liste", tileIds: [], sauf: [] };
+  return {
+    regle,
+    base: "liste",
+    tileIds: [],
+    sauf: [],
+    max: regle === "limite" ? 1 : 0,
+    portee: "plateau",
+    offerts: regle === "gratuite" ? 1 : 0,
+  };
 }
 
 /**
@@ -99,11 +168,17 @@ export function regleVide(regle: TypeRegle): ReglePlacement {
 export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
   const liste = (v: unknown) =>
     Array.isArray(v) ? Array.from(new Set(v.filter((n) => typeof n === "number"))).sort((a, b) => a - b) : [];
+  const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
+  const connu = (v: unknown): TypeRegle =>
+    v === "limite" || v === "gratuite" ? v : "support";
   return {
-    regle: "support",
+    regle: connu(r.regle),
     base: r.base === "tout" ? "tout" : "liste",
     tileIds: liste(r.tileIds),
     sauf: liste(r.sauf),
+    max: Math.max(0, entier(r.max)),
+    portee: r.portee === "empire" ? "empire" : "plateau",
+    offerts: Math.max(0, entier(r.offerts)),
   };
 }
 
@@ -116,6 +191,8 @@ export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
  * pas une règle de jeu. Une base « tout » sans exception n'interdit rien.
  */
 export function regleUtile(r: ReglePlacement): boolean {
+  if (r.regle === "gratuite") return r.offerts > 0;
+  if (r.regle === "limite") return r.max > 0;
   return r.base === "liste" ? r.tileIds.length > 0 : r.sauf.length > 0;
 }
 
@@ -127,6 +204,20 @@ export function regleUtile(r: ReglePlacement): boolean {
 export function decrireRegle(r: ReglePlacement, nomDe: (tileId: number) => string): string {
   const enumerer = (ids: number[], liaison: string) =>
     ids.map((id) => `« ${nomDe(id)} »`).join(` ${liaison} `);
+  if (r.regle === "limite") {
+    if (r.max <= 0)
+      return "Aucun maximum — cette règle n'interdit rien, elle sera ignorée en jeu.";
+    const ou = r.portee === "empire" ? "dans tout l'empire, tous plateaux confondus" : "sur ce plateau";
+    return `Au plus ${r.max} exemplaire${r.max > 1 ? "s" : ""} ${ou}.`;
+  }
+  if (r.regle === "gratuite") {
+    if (r.offerts <= 0)
+      return "Aucun exemplaire offert — cette règle ne change rien, elle sera ignorée en jeu.";
+    return (
+      `Gratuite tant que le joueur en possède moins de ${r.offerts} sur ce plateau ` +
+      "(pose au palier 1 seulement ; détruire ré-arme la gratuité)."
+    );
+  }
   if (r.base === "liste") {
     if (r.tileIds.length === 0) return "Aucune tuile cochée — cette règle sera ignorée en jeu.";
     return `Se pose seulement sur ${enumerer(r.tileIds, "ou")}.`;

@@ -407,7 +407,6 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             </p>
             <AmorcageEditeur
               amorcage={amorcage}
-              tuiles={palette}
               ressources={ressources}
               onChange={(a) => {
                 setAmorcage(a);
@@ -444,10 +443,11 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             sort du cadre est perdu, états compris.
           </Terme>
           <Terme nom="amorçage">
-            Sur un <strong>modèle</strong> seulement : les ressources de départ et les bâtiments
-            offerts. Les ressources atterrissent dans les entrepôts du plateau à sa création ;
-            les trois modes de gratuité ne diffèrent que sur ce qui arrive quand le joueur
-            détruit un exemplaire offert.
+            Sur un <strong>modèle</strong> seulement : les ressources de départ, qui atterrissent
+            dans les entrepôts du plateau à sa création. Les <strong>bâtiments offerts</strong> ne
+            sont plus ici depuis le 26/08 — la gratuité est redevenue une règle de la tuile, dans
+            son onglet Placement au{" "}
+            <Link to="/tuiles" className="underline">catalogue</Link>.
           </Terme>
           <Terme nom="états">
             Le point blanc marque une case qui retient quelque chose — un niveau, un stock, un
