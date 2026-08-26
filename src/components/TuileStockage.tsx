@@ -1,3 +1,4 @@
+import { useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
 import ChoixRessources from "@/components/ChoixRessources";
 import ChoixTuiles from "@/components/ChoixTuiles";
@@ -10,7 +11,6 @@ import {
   decrireAppro,
   estEntrepot,
   lignesNominatives,
-  maxStocke,
   maxToutesRessources,
   regleApproUtile,
   regleApproVide,
@@ -98,6 +98,18 @@ export default function TuileStockage({
   const stockables = ressources.filter((r) => r.genre !== "indicateur");
   const toutes = maxToutesRessources(logistique);
   const nominatives = lignesNominatives(logistique);
+  const aToutes = logistique.stockage.some((x) => x.ressource === TOUTES_RESSOURCES);
+
+  const [filtre, setFiltre] = useState("");
+  const q = filtre.trim().toLowerCase();
+  // Ce qui est coche reste TOUJOURS visible : sinon on ne sait plus ce qu'on a
+  // choisi des qu'on tape un filtre.
+  const visibles = stockables.filter(
+    (r) =>
+      logistique.stockage.some((x) => x.ressource === r.code) ||
+      q === "" ||
+      r.nom.toLowerCase().includes(q),
+  );
 
   return (
     <div className="space-y-4">
@@ -138,92 +150,120 @@ export default function TuileStockage({
           </Terme>
         </Aide>
 
-        <div className="mt-2 rounded border border-edge bg-ink/40 p-2">
+        {/* Meme boite que ChoixRessources : une liste qui defile, des lignes
+            cochables, un filtre au-dela de dix entrees. L'utilisateur a demande
+            explicitement ce gabarit — un tableau prenait toute la hauteur de la
+            modale pour dix ressources. La seule difference : chaque ligne porte
+            en plus son plafond. */}
+        <div className="mt-2">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded border px-1.5 py-0.5 text-[10px] uppercase ${
+                logistique.stockage.length === 0
+                  ? "border-edge text-slate-500"
+                  : "border-accent/40 text-accent"
+              }`}
+            >
+              {logistique.stockage.length === 0
+                ? "ne stocke rien"
+                : toutes > 0
+                  ? `toutes, ${toutes} au total`
+                  : `${nominatives.length} ressource${nominatives.length > 1 ? "s" : ""}`}
+            </span>
+            {logistique.stockage.length > 0 && (
+              <button
+                type="button"
+                className="text-xs text-accent hover:underline"
+                onClick={() => onChange({ ...logistique, stockage: [] })}
+              >
+                tout decocher
+              </button>
+            )}
+            {stockables.length > 10 && (
+              <input
+                className="input h-7 w-40 py-0.5 text-xs"
+                value={filtre}
+                onChange={(e) => setFiltre(e.target.value)}
+                placeholder="filtrer..."
+              />
+            )}
+          </div>
+
           {stockables.length === 0 ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-[11px] text-slate-500">
               Aucune ressource declaree : commence par l'onglet Ressources.
             </p>
           ) : (
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-edge text-left uppercase tracking-wide text-slate-500">
-                  <th className="w-8 py-1" />
-                  <th className="py-1 font-medium">ressource</th>
-                  <th className="w-24 py-1 font-medium">genre</th>
-                  <th className="w-32 py-1 font-medium">max stocké</th>
-                </tr>
-              </thead>
-              <tbody>
-                {/* La ligne fourre-tout, en tete et detachee : c'est un volume
-                    global, pas une ressource de plus. */}
-                <tr className="border-b-2 border-edge">
-                  <td className="py-1">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-accent"
-                      checked={toutes > 0 || logistique.stockage.some((x) => x.ressource === TOUTES_RESSOURCES)}
-                      onChange={(e) => majStock(TOUTES_RESSOURCES, e.target.checked ? 500 : null)}
-                      aria-label="stocker toutes les ressources"
-                    />
-                  </td>
-                  <td className={`py-1 italic ${toutes > 0 ? "text-accent" : "text-slate-500"}`}>
+            <div className="max-h-56 overflow-y-auto rounded border border-edge bg-ink/40 p-1">
+              {/* La ligne fourre-tout, en tete et detachee : c'est un volume
+                  global, pas une ressource de plus. */}
+              <div className="mb-1 flex items-center gap-2 border-b border-edge pb-1">
+                <label className="flex flex-1 cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-ink">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-accent"
+                    checked={aToutes}
+                    onChange={(e) => majStock(TOUTES_RESSOURCES, e.target.checked ? 500 : null)}
+                  />
+                  <span className={`italic ${aToutes ? "text-accent" : "text-slate-400"}`}>
                     toutes les ressources
-                  </td>
-                  <td className="py-1 font-mono text-[10px] text-slate-600">au total</td>
-                  <td className="py-1">
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-600">au total</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step={50}
+                  disabled={!aToutes}
+                  className="input h-7 w-24 py-0.5 text-xs disabled:opacity-30"
+                  value={toutes}
+                  onChange={(e) =>
+                    majStock(TOUTES_RESSOURCES, Math.max(0, Number(e.target.value) || 0))
+                  }
+                  aria-label="plafond partage"
+                />
+              </div>
+
+              {visibles.length === 0 && (
+                <p className="p-1 text-[11px] text-slate-500">Rien ne correspond a ce filtre.</p>
+              )}
+
+              {visibles.map((r) => {
+                const propre = logistique.stockage.find((x) => x.ressource === r.code);
+                const coche = propre !== undefined;
+                return (
+                  <div key={r.id} className="flex items-center gap-2">
+                    <label
+                      className={`flex flex-1 cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-ink ${
+                        coche ? "text-slate-200" : "text-slate-400"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="h-3.5 w-3.5 accent-accent"
+                        checked={coche}
+                        onChange={(e) => majStock(r.code, e.target.checked ? 100 : null)}
+                      />
+                      <span>{r.nom}</span>
+                      <span className="font-mono text-[10px] text-slate-600">{r.genre}</span>
+                      {!coche && toutes > 0 && (
+                        <span className="text-[10px] text-slate-600">— couverte par « toutes »</span>
+                      )}
+                    </label>
                     <input
                       type="number"
                       min={0}
-                      step={50}
-                      disabled={!logistique.stockage.some((x) => x.ressource === TOUTES_RESSOURCES)}
-                      className="input h-8 w-28 py-0.5 disabled:opacity-30"
-                      value={toutes}
-                      onChange={(e) =>
-                        majStock(TOUTES_RESSOURCES, Math.max(0, Number(e.target.value) || 0))
-                      }
+                      step={10}
+                      disabled={!coche}
+                      className="input h-7 w-24 py-0.5 text-xs disabled:opacity-30"
+                      value={coche ? propre.max : toutes}
+                      onChange={(e) => majStock(r.code, Math.max(0, Number(e.target.value) || 0))}
+                      aria-label={`plafond ${r.nom}`}
                     />
-                  </td>
-                </tr>
-                {stockables.map((r) => {
-                  const propre = logistique.stockage.find((x) => x.ressource === r.code);
-                  const coche = propre !== undefined;
-                  const max = coche ? propre.max : maxStocke(logistique, r.code);
-                  return (
-                    <tr key={r.id} className="border-b border-edge/40 last:border-0">
-                      <td className="py-1">
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-accent"
-                          checked={coche}
-                          onChange={(e) => majStock(r.code, e.target.checked ? 100 : null)}
-                          aria-label={`stocker ${r.nom}`}
-                        />
-                      </td>
-                      <td className={`py-1 ${coche ? "text-slate-200" : "text-slate-500"}`}>
-                        {r.nom}
-                        {!coche && toutes > 0 && (
-                          <span className="ml-2 text-[10px] text-slate-600">
-                            couverte par « toutes » ({toutes})
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-1 font-mono text-[10px] text-slate-600">{r.genre}</td>
-                      <td className="py-1">
-                        <input
-                          type="number"
-                          min={0}
-                          step={10}
-                          disabled={!coche}
-                          className="input h-8 w-28 py-0.5 disabled:opacity-30"
-                          value={coche ? max : toutes}
-                          onChange={(e) => majStock(r.code, Math.max(0, Number(e.target.value) || 0))}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </div>
+                );
+              })}
+            </div>
           )}
 
           <p className="mt-2 text-[11px] text-slate-500">
