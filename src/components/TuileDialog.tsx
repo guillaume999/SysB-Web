@@ -16,6 +16,7 @@ import {
   placementDe,
   placementPourEnregistrer,
   prochainTileId,
+  tuilesParModele,
   type Logistique,
   type Niveau,
   type ReglePlacement,
@@ -118,6 +119,20 @@ export default function TuileDialog({
   );
 
   /**
+   * Combien de tuiles visent chaque modele 3D. Un meme modele peut servir a
+   * autant de tuiles que voulu (c'est la raison d'etre de la relation), mais
+   * sans le compte on redecoupe un modele deja pris sans le savoir — et deux
+   * batiments identiques a l'ecran se distinguent alors mal en jeu.
+   */
+  const usages = useMemo(() => tuilesParModele(tuiles), [tuiles]);
+
+  /** Les AUTRES tuiles qui visent le modele choisi — la tuile en cours exclue. */
+  const autresTuilesDuModele = useMemo(
+    () => (usages.get(modele) ?? []).filter((t) => t.id !== tuile?.id),
+    [usages, modele, tuile],
+  );
+
+  /**
    * Le type de plateau suit le dossier du modele tant que l'admin ne l'a pas
    * force : les deux doivent normalement s'accorder, autant eviter la saisie.
    */
@@ -205,7 +220,10 @@ export default function TuileDialog({
                   Le prefab a instancier, choisi parmi ceux declares dans l'onglet 3DmodelTuile.
                   Plusieurs tuiles peuvent viser le meme modele : c'est ce qui permet d'avoir
                   &laquo; Ferme du nord &raquo; et &laquo; Ferme du sud &raquo; sur la meme
-                  apparence.
+                  apparence. Le nombre en fin de ligne dit combien de tuiles s'en servent deja
+                  (&laquo; libre &raquo; = aucune) : c'est le moyen de reprendre un modele en
+                  connaissance de cause, plutot que de decouvrir en jeu deux batiments
+                  indiscernables.
                 </Terme>
                 <Terme nom="type de plateau">
                   Sur quel plateau la tuile existe. Il est devine du dossier du modele, tu peux le
@@ -292,17 +310,42 @@ export default function TuileDialog({
                   onChange={(e) => setModele(e.target.value)}
                 >
                   <option value="">choisir un modele</option>
-                  {modeles.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {libelle(m)} ({cheminJeu(m)})
-                    </option>
-                  ))}
+                  {modeles.map((m) => {
+                    // Le compte est dans le libelle de l'option : un `<option>`
+                    // ne prend pas de balise, et une pastille a cote du menu ne
+                    // se verrait pas au moment ou l'on choisit.
+                    const n = usages.get(m.id)?.length ?? 0;
+                    return (
+                      <option key={m.id} value={m.id}>
+                        {libelle(m)} ({cheminJeu(m)}) {n === 0 ? "· libre" : `· ${n}\u00d7`}
+                      </option>
+                    );
+                  })}
                 </select>
                 {modeleChoisi && (
                   <p className="mt-1 break-all font-mono text-[11px] text-slate-500">
                     {cheminJeu(modeleChoisi)}
                   </p>
                 )}
+                {modeleChoisi &&
+                  (autresTuilesDuModele.length === 0 ? (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Aucune autre tuile n'utilise ce modele.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-400">
+                      Deja utilise par {autresTuilesDuModele.length} autre
+                      {autresTuilesDuModele.length > 1 ? "s tuiles" : " tuile"} :{" "}
+                      <span className="text-slate-300">
+                        {autresTuilesDuModele
+                          .slice(0, 6)
+                          .map((t) => t.nom)
+                          .join(", ")}
+                      </span>
+                      {autresTuilesDuModele.length > 6 &&
+                        ` (+${autresTuilesDuModele.length - 6})`}
+                    </p>
+                  ))}
                 {modeles.length === 0 && (
                   <p className="mt-1 text-xs text-amber-300">
                     Aucun modele declare : commence par l'onglet 3DmodelTuile.
