@@ -8,7 +8,6 @@ import {
   contrainteDe,
   couleurDe,
   loadTuiles,
-  restesEnBase,
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
@@ -79,28 +78,6 @@ const COLONNES: ColonneAuChoix[] = [
     etroite: true,
     rendu: ({ tuile }) => tuile.typeOfPlateau || RIEN,
     valeur: ({ tuile }) => tuile.typeOfPlateau ?? "",
-  },
-  {
-    // ⚠️ La colonne de la remise a zero du 26/08. Placement, niveaux et
-    // logistique ne s'editent plus sur le site, mais leurs donnees sont encore
-    // en base et le JEU les applique. Cette colonne est le seul moyen de
-    // retrouver les tuiles concernees — la retirer rendrait ces regles
-    // invisibles ET actives, le pire des deux mondes.
-    cle: "restes",
-    libelle: "reste en base",
-    etroite: true,
-    rendu: ({ tuile }) => {
-      const r = restesEnBase(tuile);
-      if (r.total === 0) return <span className="text-slate-600">rien</span>;
-      const morceaux = [
-        r.placement > 0 ? `${r.placement} regle(s)` : null,
-        r.niveaux > 0 ? `${r.niveaux} niv.` : null,
-        r.logistique > 0 ? "logistique" : null,
-      ].filter(Boolean);
-      return <span className="text-amber-300">{morceaux.join(", ")}</span>;
-    },
-    // Les tuiles qui portent le plus se rangent en tete en tri descendant.
-    valeur: ({ tuile }) => restesEnBase(tuile).total,
   },
   {
     cle: "contrainte",

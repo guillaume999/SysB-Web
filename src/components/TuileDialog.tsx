@@ -7,7 +7,6 @@ import {
   contrainteDe,
   couleurAuto,
   prochainTileId,
-  restesEnBase,
   tuilesParModele,
   type Tuile,
   type TypePlateau,
@@ -19,12 +18,8 @@ import {
  *
  * ⚠️ **REMISE A ZERO DU 2026-08-26** : ce formulaire ne porte plus que
  * l'IDENTITE. Les onglets Placement, Niveaux et Logistique ont ete retires pour
- * etre reconstruits de zero. Les champs json correspondants existent toujours
- * en base et le JEU les applique : un bandeau orange le dit, tuile par tuile,
- * plutot que de laisser agir quelque chose qu'aucun ecran ne montre.
- *
- * Enregistrer ici **n'efface pas** ces donnees : les trois cles ne font pas
- * partie de ce qu'on envoie, donc PocketBase ne les touche pas.
+ * etre reconstruits de zero, et les champs json correspondants ont ete vides en
+ * base le meme jour — plus rien n'agit en jeu sans ecran pour le montrer.
  *
  * Aucun champ ne laisse taper une reference : le modele se choisit dans une
  * liste. C'est ce qui remplace la validation que PocketBase ne fait pas.
@@ -118,13 +113,6 @@ export default function TuileDialog({
     if (devine) setType(devine);
   }, [modeleChoisi, typeForce]);
 
-  /**
-   * Ce que cette tuile porte ENCORE en base et que ce formulaire ne montre
-   * plus. Tant que ce n'est pas nul, le jeu s'en sert : le taire reviendrait a
-   * laisser agir une regle sans ecran pour l'expliquer.
-   */
-  const restes = useMemo(() => restesEnBase(tuile ?? {}), [tuile]);
-
   const idNumerique = Number(tileId);
   const idHorsBornes =
     !Number.isInteger(idNumerique) || idNumerique < TILE_ID_MIN || idNumerique > TILE_ID_MAX;
@@ -169,21 +157,6 @@ export default function TuileDialog({
             active, visible par les joueurs
           </label>
         </div>
-
-        {restes.total > 0 && (
-          <p className="mt-3 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
-            Cette tuile porte encore en base{" "}
-            {[
-              restes.placement > 0 && `${restes.placement} regle(s) de pose`,
-              restes.niveaux > 0 && `${restes.niveaux} niveau(x)`,
-              restes.logistique > 0 && "un role logistique",
-            ]
-              .filter(Boolean)
-              .join(", ")}
-            . Ces ecrans ont ete retires du site, mais <strong>le jeu les applique toujours</strong>.
-            Enregistrer ici n'y touche pas.
-          </p>
-        )}
 
         <div className="mt-4">
             <div className="space-y-4">

@@ -3,14 +3,13 @@
  *
  * ⚠️ **REMISE À ZÉRO DU 2026-08-26.** Ce fichier ne décrit plus que l'IDENTITÉ
  * d'une tuile. Les règles de pose, les niveaux (coûts et productions) et le rôle
- * logistique ont été retirés du site pour être reconstruits de zéro : le
- * formulaire ne les écrit plus, et plus rien ici ne sait les lire.
+ * logistique ont été retirés du site pour être reconstruits de zéro.
  *
- * **Les champs json correspondants existent toujours en base**, avec leur
- * contenu, et **Unity les lit toujours**. C'est pourquoi le type `Tuile` les
- * garde — en `unknown`, juste assez pour les COMPTER et prévenir l'admin qu'une
- * tuile porte encore quelque chose d'invisible. Un champ qui agit sans écran
- * pour le montrer est le piège qu'on s'est déjà pris deux fois.
+ * Les champs json `placement`, `niveaux` et `logistique` **ont été vidés en base
+ * le 2026-08-26** sur les 25 tuiles du catalogue : plus rien ne subsiste, donc
+ * plus rien n'agit en jeu sans écran pour le montrer. Le contenu des 3 seules
+ * tuiles qui portaient autre chose qu'un palier vide est sauvegardé dans
+ * `SysB/sauvegarde-tuiles-2026-08-26.json`, côté documentation.
  *
  * Ce qui a été retiré vit dans l'historique git (dernier commit avant le 26/08),
  * et le modèle qu'il portait est décrit en mémoire projet. Ne pas le réécrire
@@ -78,15 +77,11 @@ export type Tuile = {
    * remplacables sans migration.
    */
   non_remplacable: boolean;
-  /**
-   * ⚠️ Les trois champs de la remise a zero. Le site ne les ECRIT plus et ne
-   * sait plus les lire en detail — mais Unity, lui, les applique toujours. On
-   * les garde en `unknown` pour pouvoir dire a l'admin « cette tuile porte
-   * encore N choses que cet ecran ne montre pas ».
+  /*
+   * ⚠️ `placement`, `niveaux` et `logistique` existent encore comme colonnes
+   * json sur la collection, mais ils sont VIDES et ce type ne les declare plus.
+   * Les redeclarer, c'est se redonner le droit de les lire a moitie.
    */
-  placement: unknown[] | null;
-  niveaux: unknown[] | null;
-  logistique: unknown | null;
   created: string;
   updated: string;
   expand?: { modele?: Modele3D };
@@ -96,9 +91,8 @@ export type Tuile = {
  * Ce que le formulaire renvoie — l'identite, et rien d'autre.
  *
  * ⚠️ `placement`, `niveaux` et `logistique` n'y sont **volontairement pas** :
- * une cle absente n'est pas envoyee a PocketBase, donc enregistrer une tuile
- * **preserve** ce qu'elle porte encore. Les remettre ici avec une valeur vide
- * effacerait le travail de l'utilisateur au premier changement de nom.
+ * une cle absente n'est pas envoyee a PocketBase. Le jour ou on reconstruira
+ * ces sections, les rajouter ici est ce qui les rendra ecrivables — pas avant.
  */
 export interface ValeursTuile {
   tileId: number;
@@ -112,32 +106,6 @@ export interface ValeursTuile {
   tileId_apres_destruction: number;
   indestructible: boolean;
   non_remplacable: boolean;
-}
-
-// --- Ce qui reste en base sans ecran pour le montrer -------------------------
-
-export interface RestesEnBase {
-  placement: number;
-  niveaux: number;
-  logistique: number;
-  total: number;
-}
-
-/**
- * Combien de choses invisibles cette tuile porte encore. Sert au bandeau de la
- * fenetre d'edition et a la colonne « reste en base » de la liste : tant que
- * ces donnees existent, le jeu s'en sert, et l'admin doit pouvoir les trouver.
- */
-export function restesEnBase(tuile: {
-  placement?: unknown;
-  niveaux?: unknown;
-  logistique?: unknown;
-}): RestesEnBase {
-  const combien = (v: unknown) => (Array.isArray(v) ? v.length : 0);
-  const placement = combien(tuile.placement);
-  const niveaux = combien(tuile.niveaux);
-  const logistique = tuile.logistique ? 1 : 0;
-  return { placement, niveaux, logistique, total: placement + niveaux + logistique };
 }
 
 // --- Destruction -------------------------------------------------------------
