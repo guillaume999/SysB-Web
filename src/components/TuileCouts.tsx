@@ -126,8 +126,22 @@ export default function TuileCouts({
           <strong>Stock &amp; appro</strong> ; ici on dit seulement <em>d'où elle vient</em>.
         </Terme>
         <Terme nom="produit">
-          Ce que la tuile <strong>fabrique</strong> pendant qu'elle tourne. Une ligne par
-          ressource — n'importe laquelle, indicateurs compris.
+          Ce que la tuile <strong>fabrique</strong> pendant qu'elle tourne, <strong>au
+          maximum</strong>. Une ligne par ressource — n'importe laquelle, indicateurs compris.
+          <br />
+          La production suit <strong>au prorata</strong> ce que la tuile a réellement reçu :
+          50 bovins demandés pour 100 nourriture, mais seulement 25 reçus, donnent{" "}
+          <strong>50 nourriture</strong>. Puis la tranche d'indicateur s'applique par-dessus.
+          <br />
+          La couverture se calcule <strong>tuile par tuile, sur ses propres lignes de
+          consommation</strong> — et sur elles seules. Une ressource que ce bâtiment ne demande
+          pas n'a aucune influence sur lui.
+          <br />
+          ⚠️ Seule nuance, et elle est étroite : consommations et productions sont deux listes
+          séparées, donc <strong>à l'intérieur d'une même tuile</strong>, une entrée manquante
+          ralentit toutes ses sorties. Une tuile qui demande bovins <em>et</em> bois, et qui manque
+          de bois, ralentit aussi la production qui ne tenait qu'aux bovins. Le jour où ça gêne, il
+          faudra des recettes liées — une ligne portant ses propres entrées et sorties.
           <br />
           ⚠️ <strong>Ni cible ni rayon</strong> : un producteur ne livre pas. Il fabrique dans son
           coffre, et c'est le preneur qui vient, avec <em>son</em> rayon de récolte. Seul un
@@ -661,8 +675,18 @@ function LignesProduction({
                     )}
 
                     <p className="mt-1 text-[11px] leading-tight text-slate-500">
-                      C'est un <strong>maximum</strong> : la production réelle vaut ce débit × la
-                      couverture de ses intrants
+                      C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
+                      <span className="text-slate-300">la couverture de ses intrants</span>{" "}
+                      {/* L'exemple a moitie : c'est le cas que l'utilisateur cite
+                          lui-meme (« si il n'y a que 25 bovins sur 50 »), et un
+                          chiffre se verifie d'un coup d'oeil, pas une formule. */}
+                      <span className="text-slate-400">
+                        (à moitié approvisionné :{" "}
+                        <span className="tabular-nums text-slate-300">
+                          {Math.round(ligne.quantite / 2)}
+                        </span>
+                        )
+                      </span>
                       {ligne.indicateur !== "" ? (
                         <>
                           , puis la tranche de{" "}
