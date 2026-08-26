@@ -74,6 +74,53 @@ export default function TuileCouts({
   const productibles = parAlphabet(ressources.filter((r) => r.genre !== "mobilise"));
   const indicateurs = parAlphabet(ressources.filter((r) => r.genre === "indicateur"));
 
+  /**
+   * Ce qu'on peut **payer** ou **consommer** : uniquement ce qui vit dans un
+   * coffre. Deux genres n'y sont pas, et les proposer était le dernier piège
+   * ouvert de l'écran (26/08) :
+   *
+   * - `mobilise` — rien n'en est jamais stocké : la population se compte sur
+   *   les **places déclarées** (`Tresorerie.Places`), pas sur un contenu.
+   *   *Payer* 6 habitants passe la vérification (`Disponible` compte les logés)
+   *   puis échoue au débit, et le joueur lit « ressources insuffisantes » avec
+   *   des habitants libres affichés juste au-dessus. *Consommer* des habitants
+   *   ne trouve rien, fait tomber la couverture à zéro, et fige la tuile sans
+   *   un mot.
+   * - `indicateur` — calculé, jamais rangé nulle part (l'onglet *Stock & appro*
+   *   le refuse déjà au stockage). Une production le **lit** par son champ
+   *   `indicateur` ; elle ne le consomme pas.
+   *
+   * ⚠️ Le mode `mobilise`, lui, garde la liste ENTIÈRE : immobiliser du bois
+   * tant que le bâtiment tourne est un cas légitime, et c'est là que la
+   * population a sa place.
+   */
+  const depensables = parAlphabet(
+    ressources.filter((r) => r.genre !== "mobilise" && r.genre !== "indicateur"),
+  );
+
+  /**
+   * Les lignes déjà en base qui citent une ressource **existante mais qui n'a
+   * pas sa place ici** — rendues par leur nom affichable.
+   *
+   * On ne les efface pas : on les **dit**, comme le chantier pas encore branché
+   * et la portée `empire`. Un champ qui ment ne dit rien, un champ hors sujet
+   * l'annonce ; retirer la saisie à la place de l'utilisateur lui reperdrait
+   * l'information sans qu'il sache pourquoi.
+   *
+   * ⚠️ Un code **absent du catalogue** n'est PAS de ce cas-là : c'est une
+   * ressource supprimée ou mal tapée, et le menu le dit déjà en orange par son
+   * option « — inconnue ». Les confondre donnerait une explication fausse.
+   */
+  const horsSujet = (codes: string[]) =>
+    codes
+      .filter(
+        (c) =>
+          c !== "" &&
+          !depensables.some((r) => r.code === c) &&
+          ressources.some((r) => r.code === c),
+      )
+      .map(nomRessource);
+
   /** Remplace les lignes d'UN mode, en gardant celles de l'autre. */
   const majCout = (index: number, mode: ModeCout, lignes: LigneCout[]) => {
     const autres = paliers[index].cout.filter((l) => l.mode !== mode);
@@ -233,10 +280,12 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                 <LignesCout
                   lignes={payes}
                   mode="paye"
-                  ressources={ressources}
+                  ressources={depensables}
+                  toutes={ressources}
                   videTexte="gratuit"
                   onChange={(l) => majCout(index, "paye", l)}
                 />
+                <Avertissement noms={horsSujet(payes.map((l) => l.ressource))} quoi="payée" />
 
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-1 text-[11px] text-slate-500">
@@ -278,6 +327,7 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                   lignes={occupes}
                   mode="mobilise"
                   ressources={ressources}
+                  toutes={ressources}
                   videTexte="n'occupe rien"
                   onChange={(l) => majCout(index, "mobilise", l)}
                 />
@@ -285,8 +335,13 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                 <p className="mb-1 mt-3 text-[11px] text-slate-500">Consomme :</p>
                 <LignesFlux
                   lignes={palier.utilisation}
-                  ressources={ressources}
+                  ressources={depensables}
+                  toutes={ressources}
                   onChange={(utilisation) => majPalier(index, { utilisation })}
+                />
+                <Avertissement
+                  noms={horsSujet(palier.utilisation.map((l) => l.ressource))}
+                  quoi="consommée"
                 />
 
                 <p className="mb-1 mt-3 text-[11px] text-slate-500">Produit :</p>
@@ -366,29 +421,65 @@ function Section({ titre, children }: { titre: string; children: React.ReactNode
 function ChoixRessource({
   code,
   ressources,
+  toutes,
   onChange,
 }: {
   code: string;
+  /** Ce qu'on PROPOSE ici. Peut être plus étroit que le catalogue. */
   ressources: Ressource[];
+  /**
+   * Le catalogue ENTIER, pour nommer une ressource qui existe mais n'a pas sa
+   * place dans cette liste-ci. Sans lui, un `habitant` déjà saisi en « payé »
+   * s'afficherait « inconnue » — un mot faux, qui enverrait chercher un bug
+   * dans le catalogue au lieu de la ligne.
+   */
+  toutes?: Ressource[];
   onChange: (code: string) => void;
 }) {
-  // Un code disparu du vocabulaire doit rester VISIBLE : le faire tomber du
-  // menu changerait la ligne en silence au premier reenregistrement.
-  const inconnu = code !== "" && codeInconnu(ressources, code);
+  // Un code hors liste doit rester VISIBLE et choisi : le faire tomber du menu
+  // changerait la ligne en silence au premier reenregistrement.
+  const horsListe = code !== "" && codeInconnu(ressources, code);
+  const connuAilleurs = horsListe && !!toutes && !codeInconnu(toutes, code);
   return (
     <select
-      className={`input h-9 w-44 py-1 ${inconnu ? "border-amber-700 text-amber-300" : ""}`}
+      className={`input h-9 w-44 py-1 ${horsListe ? "border-amber-700 text-amber-300" : ""}`}
       value={code}
       onChange={(e) => onChange(e.target.value)}
     >
       <option value="">choisir une ressource</option>
-      {inconnu && <option value={code}>{code} — inconnue</option>}
+      {horsListe && (
+        <option value={code}>
+          {connuAilleurs
+            ? `${libelleRessource(toutes!, code)} — pas ici`
+            : `${code} — inconnue`}
+        </option>
+      )}
       {parAlphabet(ressources).map((r) => (
         <option key={r.id} value={r.code}>
           {r.nom}
         </option>
       ))}
     </select>
+  );
+}
+
+/**
+ * La ligne orange sous une section : « ces lignes ne veulent rien dire ici ».
+ *
+ * ⚠️ Même traitement que le chantier pas encore appliqué et la portée
+ * `empire` — **on ne supprime jamais la saisie de l'utilisateur en silence**,
+ * on la lui montre. Retirer la ligne à sa place, c'est reperdre l'information
+ * sans qu'il sache pourquoi.
+ */
+function Avertissement({ noms, quoi }: { noms: string[]; quoi: string }) {
+  if (noms.length === 0) return null;
+  return (
+    <p className="mt-1 text-[11px] leading-tight text-amber-400">
+      ⚠️ {noms.map((nom) => `« ${nom} »`).join(", ")} ne peut pas être {quoi} : cette ressource
+      n&apos;est <strong>jamais rangée dans un coffre</strong>, donc le jeu ne l&apos;y trouverait
+      pas. Retire la ligne — ou passe-la en <strong>occupe pendant qu&apos;il tourne</strong> si ce
+      sont des ouvriers.
+    </p>
   );
 }
 
@@ -404,12 +495,16 @@ function LignesCout({
   lignes,
   mode,
   ressources,
+  toutes,
   videTexte,
   onChange,
 }: {
   lignes: LigneCout[];
   mode: ModeCout;
+  /** Ce qu'on propose ici — plus étroit que le catalogue pour le mode `paye`. */
   ressources: Ressource[];
+  /** Le catalogue entier, pour nommer une ligne déjà saisie qui n'a plus sa place. */
+  toutes?: Ressource[];
   videTexte: string;
   onChange: (lignes: LigneCout[]) => void;
 }) {
@@ -435,6 +530,7 @@ function LignesCout({
               <ChoixRessource
                 code={ligne.ressource}
                 ressources={ressources}
+                toutes={toutes}
                 onChange={(ressource) => maj(i, { ressource })}
               />
               <button
@@ -798,10 +894,14 @@ function Escalier({
 function LignesFlux({
   lignes,
   ressources,
+  toutes,
   onChange,
 }: {
   lignes: LigneFlux[];
+  /** Ce qu'on propose ici : ni `mobilise` ni `indicateur` — rien n'en est stocké. */
   ressources: Ressource[];
+  /** Le catalogue entier, pour nommer une ligne déjà saisie qui n'a plus sa place. */
+  toutes?: Ressource[];
   onChange: (lignes: LigneFlux[]) => void;
 }) {
   const maj = (i: number, patch: Partial<LigneFlux>) =>
@@ -829,6 +929,7 @@ function LignesFlux({
                 <ChoixRessource
                   code={ligne.ressource}
                   ressources={ressources}
+                  toutes={toutes}
                   onChange={(ressource) => maj(i, { ressource })}
                 />
                 <label className="flex items-center gap-1 text-xs text-slate-500">

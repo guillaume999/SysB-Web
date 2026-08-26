@@ -695,15 +695,19 @@ export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] 
 ];
 
 /**
- * ⚠️ **« je produis » EST la déclaration de production.** Décidé le 26/08 : le
- * débit d'une règle `sortant` n'est pas seulement un circuit de distribution,
- * c'est **combien la tuile fabrique**. Et ce chiffre est un **maximum** :
+ * ⚠️ **Le débit déclaré d'une ligne de production est un MAXIMUM**, jamais une
+ * garantie :
  *
  * ```
- * production réelle = débit déclaré
- *                   × couverture des intrants   (0 → 1)
- *                   × satisfaction du plateau   (0 → 1)
+ * production réelle = quantité déclarée
+ *                   × couverture des intrants          (0 → 1)
+ *                   × rendement de la tranche atteinte (0 → 1)
  * ```
+ *
+ * ⚠️ Le sens `produit` (et son ancêtre `sortant`) a été **retiré le 26/08** :
+ * la production ne se déclare plus ici mais dans l'onglet *Coût*, à côté des
+ * consommations. Cette formule décrit donc une ligne de `Palier.production`,
+ * plus une règle d'appro.
  *
  * Mot de l'utilisateur : *« on produit tant de ressources si on a les
  * ressources ou seulement un pourcentage en fonction de ce que les ressources
@@ -717,9 +721,9 @@ export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] 
  * ⚠️ Et il reste la porte : **sans main-d'œuvre mobilisée, production nulle**,
  * quelle que soit la couverture.
  *
- * ⚠️ Un `rayon` de **0** est légitime et utile ici : « je produis chez moi et
- * je ne livre personne — on vient m'y chercher ». C'est le cas de la ferme dont
- * l'entrepôt vient ramasser la récolte.
+ * ⚠️ **Une ligne de production n'a ni cible ni rayon** : un producteur ne livre
+ * pas, il fabrique dans son propre coffre et c'est le preneur qui vient, avec
+ * SON rayon. C'est le cas de la ferme dont l'entrepôt ramasse la récolte.
  */
 export const FORMULE_PRODUCTION =
   "débit déclaré × couverture des intrants × rendement de la tranche d'indicateur";
@@ -728,8 +732,9 @@ export const FORMULE_PRODUCTION =
  * ⚠️ **L'ORDRE DES PASSES**, posé par l'utilisateur le 26/08 :
  * *« l'entrepôt doit passer APRÈS l'abattoir pour la récolte des bovins »*.
  *
- * Autrement dit : **les consommateurs directs se servent avant les
- * collecteurs**. Sans cette règle, l'entrepôt aspirerait tous les bovins du pré
+ * Autrement dit : **les consommateurs directs se servent avant les entrepôts**
+ * (le mot « collecteur » ne désigne plus rien : l'entrepôt se déduit d'avoir
+ * les deux sens). Sans cette règle, l'entrepôt aspirerait tous les bovins du pré
  * avant que l'abattoir ait pu en prendre, et l'abattoir tomberait en panne à
  * côté d'un champ plein.
  *
@@ -738,7 +743,7 @@ export const FORMULE_PRODUCTION =
  * `sysb-resolution-hors-ligne`. À rejouer en Python avant de l'écrire en C#.
  */
 export const ORDRE_DES_PASSES =
-  "consommateurs directs, puis collecteurs, puis livraisons des entrepôts";
+  "consommateurs directs, puis entrepôts, puis livraisons des entrepôts";
 
 /** Qui est en face. `tout` = n'importe quelle tuile à portée qui a / veut la ressource. */
 export type CibleAppro = "tout" | "tuiles";
@@ -754,7 +759,7 @@ export interface RegleAppro {
   /** `cible: "tuiles"` — avec qui, précisément. */
   tileIds: number[];
   /**
-   * Le **rayon de récolte** (`entrant`) ou de **récupération** (`sortant`), en
+   * Le **rayon de récolte** (`entrant`) ou de **livraison** (`envoi`), en
    * distance hexagonale.
    *
    * ⚠️ Remarque de l'utilisateur le 26/08, et elle est juste : *« rayon de

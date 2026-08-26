@@ -49,7 +49,8 @@ export default function AmorcageEditeur({
         </div>
         <p className="mt-0.5 text-[11px] text-slate-500">
           Versées dans les <strong>entrepôts</strong> du plateau à sa création, en respectant leur
-          capacité. Si le modèle n&apos;a aucun collecteur, la dotation n&apos;a nulle part où
+          capacité. Un entrepôt ne se déclare pas : c&apos;est une tuile qui <em>récolte</em> et
+          qui <em>envoie</em>. Si le modèle n&apos;en a aucune, la dotation n&apos;a nulle part où
           aller — le jeu le signale plutôt que de la faire disparaître.
         </p>
 
