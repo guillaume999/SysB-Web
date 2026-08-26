@@ -3,17 +3,12 @@ import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { messageErreur, pb } from "@/lib/pb";
 import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
-import { loadRessources, libelleRessource, type Ressource } from "@/lib/ressources";
 import {
   COLLECTION_TUILES,
   contrainteDe,
   couleurDe,
-  formatDuree,
   loadTuiles,
-  logistiqueDe,
-  niveauxDe,
-  placementDe,
-  tuilesCitant,
+  restesEnBase,
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
@@ -39,24 +34,9 @@ interface ColonneAuChoix {
 interface ContexteColonne {
   tuile: Tuile;
   modele: Modele3D | null;
-  ressources: Ressource[];
 }
 
 const RIEN = <span className="text-slate-600">—</span>;
-
-function resumeNiveau1(ctx: ContexteColonne) {
-  const n = niveauxDe(ctx.tuile)[0];
-  const cout = n.cout
-    .map((c) => `${c.quantite} ${libelleRessource(ctx.ressources, c.ressource)}`)
-    .join(", ");
-  const prod = n.production.periodique
-    .map(
-      (p) =>
-        `${p.quantite} ${libelleRessource(ctx.ressources, p.ressource)}/${formatDuree(p.periode_s)}`,
-    )
-    .join(", ");
-  return { cout, prod };
-}
 
 const COLONNES: ColonneAuChoix[] = [
   {
@@ -101,53 +81,26 @@ const COLONNES: ColonneAuChoix[] = [
     valeur: ({ tuile }) => tuile.typeOfPlateau ?? "",
   },
   {
-    cle: "niveaux",
-    libelle: "niveaux",
-    etroite: true,
-    rendu: ({ tuile }) => (
-      <span className="tabular-nums text-slate-400">{niveauxDe(tuile).length}</span>
-    ),
-    valeur: ({ tuile }) => niveauxDe(tuile).length,
-  },
-  {
-    cle: "cout",
-    libelle: "cout nv.1",
-    rendu: (ctx) => resumeNiveau1(ctx).cout || <span className="text-slate-600">gratuit</span>,
-    valeur: (ctx) => resumeNiveau1(ctx).cout,
-  },
-  {
-    cle: "production",
-    libelle: "production nv.1",
-    rendu: (ctx) => resumeNiveau1(ctx).prod || <span className="text-slate-600">aucune</span>,
-    valeur: (ctx) => resumeNiveau1(ctx).prod,
-  },
-  {
-    cle: "regles",
-    libelle: "regles de pose",
+    // ⚠️ La colonne de la remise a zero du 26/08. Placement, niveaux et
+    // logistique ne s'editent plus sur le site, mais leurs donnees sont encore
+    // en base et le JEU les applique. Cette colonne est le seul moyen de
+    // retrouver les tuiles concernees — la retirer rendrait ces regles
+    // invisibles ET actives, le pire des deux mondes.
+    cle: "restes",
+    libelle: "reste en base",
     etroite: true,
     rendu: ({ tuile }) => {
-      const n = placementDe(tuile).length;
-      return n === 0 ? <span className="text-slate-600">libre</span> : `${n}`;
+      const r = restesEnBase(tuile);
+      if (r.total === 0) return <span className="text-slate-600">rien</span>;
+      const morceaux = [
+        r.placement > 0 ? `${r.placement} regle(s)` : null,
+        r.niveaux > 0 ? `${r.niveaux} niv.` : null,
+        r.logistique > 0 ? "logistique" : null,
+      ].filter(Boolean);
+      return <span className="text-amber-300">{morceaux.join(", ")}</span>;
     },
-    valeur: ({ tuile }) => placementDe(tuile).length,
-  },
-  {
-    cle: "logistique",
-    libelle: "role logistique",
-    etroite: true,
-    rendu: ({ tuile }) => {
-      const l = logistiqueDe(tuile);
-      return l ? (
-        <span className="rounded border border-accent/40 px-1.5 py-0.5 text-[10px] uppercase text-accent">
-          {l.role}
-        </span>
-      ) : (
-        RIEN
-      );
-    },
-    // Les tuiles sans role se rangent APRES, pas au debut : trier sur
-    // « logistique » sert a trouver les entrepots, pas les 200 autres.
-    valeur: ({ tuile }) => logistiqueDe(tuile)?.role ?? "\uffff",
+    // Les tuiles qui portent le plus se rangent en tete en tri descendant.
+    valeur: ({ tuile }) => restesEnBase(tuile).total,
   },
   {
     cle: "contrainte",
@@ -212,7 +165,6 @@ function ecrirePref(cle: string, valeur: string) {
 export default function Tuiles() {
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [modeles, setModeles] = useState<Modele3D[]>([]);
-  const [ressources, setRessources] = useState<Ressource[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -222,7 +174,7 @@ export default function Tuiles() {
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
 
   /** La 3e colonne, et le tri. Les deux survivent a un rechargement de page. */
-  const [colonneCle, setColonneCle] = useState(() => lirePref(CLE_PREFS, "cout"));
+  const [colonneCle, setColonneCle] = useState(() => lirePref(CLE_PREFS, "categorie"));
   const [tri, setTri] = useState(() => lirePref(CLE_TRI, "nom:asc"));
 
   const colonne = COLONNES.find((c) => c.cle === colonneCle) ?? COLONNES[0];
@@ -250,9 +202,8 @@ export default function Tuiles() {
     (tuile: Tuile): ContexteColonne => ({
       tuile,
       modele: tuile.expand?.modele ?? parId.get(tuile.modele) ?? null,
-      ressources,
     }),
-    [parId, ressources],
+    [parId],
   );
 
   const tuilesTriees = useMemo(() => {
@@ -320,10 +271,9 @@ export default function Tuiles() {
     setChargement(true);
     setErreur(null);
     try {
-      const [t, m, r] = await Promise.all([loadTuiles(), loadModeles3D(), loadRessources()]);
+      const [t, m] = await Promise.all([loadTuiles(), loadModeles3D()]);
       setTuiles(t);
       setModeles(m);
-      setRessources(r);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
@@ -426,16 +376,6 @@ export default function Tuiles() {
         </p>
       )}
 
-      {!chargement && ressources.length === 0 && (
-        <p className="mb-4 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
-          Aucune ressource declaree :{" "}
-          <Link to="/ressources" className="underline">
-            commence par l'onglet Ressources
-          </Link>
-          , sinon les couts et les productions n'auront rien a proposer.
-        </p>
-      )}
-
       {/* Le detail du compte : au-dessus du tableau, parce qu'il decrit ce que
           le tableau contient — pas un reglage, une lecture. */}
       {!chargement && tuiles.length > 0 && (
@@ -506,7 +446,6 @@ export default function Tuiles() {
               {!chargement &&
                 tuilesTriees.map((tuile) => {
                   const confirme = aSupprimer === tuile.id;
-                  const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
                   return (
                     <tr
                       key={tuile.id}
@@ -526,9 +465,7 @@ export default function Tuiles() {
                         {confirme ? (
                           <div className="inline-flex flex-col items-start gap-1">
                             <span className="text-[11px] leading-tight text-red-300">
-                              {citants.length > 0
-                                ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
-                                : "Cet id ne sera jamais reattribue."}
+                              Cet id ne sera jamais reattribue.
                             </span>
                             <span>
                               <button
@@ -581,7 +518,6 @@ export default function Tuiles() {
           tuile={dialog.tuile}
           tuiles={tuiles}
           modeles={modeles}
-          ressources={ressources}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}

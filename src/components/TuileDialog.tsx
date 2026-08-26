@@ -1,55 +1,38 @@
 import { useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
-import TuileLogistique from "@/components/TuileLogistique";
-import TuileNiveaux from "@/components/TuileNiveaux";
-import TuilePlacement from "@/components/TuilePlacement";
 import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
-import type { Ressource } from "@/lib/ressources";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
   contrainteDe,
   couleurAuto,
-  logistiqueDe,
-  niveauVide,
-  niveauxDe,
-  placementDe,
-  placementPourEnregistrer,
   prochainTileId,
+  restesEnBase,
   tuilesParModele,
-  type Logistique,
-  type Niveau,
-  type ReglePlacement,
   type Tuile,
   type TypePlateau,
   type ValeursTuile,
 } from "@/lib/tuiles";
 
-type Onglet = "identite" | "placement" | "niveaux" | "logistique";
-
-const ONGLETS: { cle: Onglet; libelle: string }[] = [
-  { cle: "identite", libelle: "Identite" },
-  { cle: "placement", libelle: "Placement" },
-  { cle: "niveaux", libelle: "Niveaux" },
-  { cle: "logistique", libelle: "Logistique" },
-];
-
 /**
  * Creation / modification d'une tuile du catalogue.
  *
- * Le formulaire est decoupe en onglets : tout afficher d'un coup produirait une
- * modale interminable ou l'on ne trouve plus rien. Les quatre onglets suivent
- * l'ordre dans lequel on remplit reellement une tuile.
+ * ⚠️ **REMISE A ZERO DU 2026-08-26** : ce formulaire ne porte plus que
+ * l'IDENTITE. Les onglets Placement, Niveaux et Logistique ont ete retires pour
+ * etre reconstruits de zero. Les champs json correspondants existent toujours
+ * en base et le JEU les applique : un bandeau orange le dit, tuile par tuile,
+ * plutot que de laisser agir quelque chose qu'aucun ecran ne montre.
  *
- * Aucun champ ne laisse taper une reference : les modeles, les ressources et les
- * tuiles citees se choisissent dans des listes. C'est ce qui remplace la
- * validation que PocketBase ne fait pas sur les champs json.
+ * Enregistrer ici **n'efface pas** ces donnees : les trois cles ne font pas
+ * partie de ce qu'on envoie, donc PocketBase ne les touche pas.
+ *
+ * Aucun champ ne laisse taper une reference : le modele se choisit dans une
+ * liste. C'est ce qui remplace la validation que PocketBase ne fait pas.
  */
 export default function TuileDialog({
   tuile,
   tuiles,
   modeles,
-  ressources,
   saving,
   erreur,
   onCancel,
@@ -58,14 +41,12 @@ export default function TuileDialog({
   tuile: Tuile | null;
   tuiles: Tuile[];
   modeles: Modele3D[];
-  ressources: Ressource[];
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
   onSubmit: (valeurs: ValeursTuile) => void;
 }) {
   const enEdition = tuile !== null;
-  const [onglet, setOnglet] = useState<Onglet>("identite");
 
   const [tileId, setTileId] = useState<string>(
     String(tuile?.tileId ?? prochainTileId(tuiles) ?? TILE_ID_MIN),
@@ -99,12 +80,6 @@ export default function TuileDialog({
     setIndestructible(voulue !== "destructible");
     setNonRemplacable(voulue === "figee");
   };
-
-  const [placement, setPlacement] = useState<ReglePlacement[]>(tuile ? placementDe(tuile) : []);
-  const [niveaux, setNiveaux] = useState<Niveau[]>(tuile ? niveauxDe(tuile) : [niveauVide(1)]);
-  const [logistique, setLogistique] = useState<Logistique | null>(
-    tuile ? logistiqueDe(tuile) : null,
-  );
 
   useEffect(() => {
     // Echap ferme la fenetre : reflexe attendu sur une modale.
@@ -143,6 +118,13 @@ export default function TuileDialog({
     if (devine) setType(devine);
   }, [modeleChoisi, typeForce]);
 
+  /**
+   * Ce que cette tuile porte ENCORE en base et que ce formulaire ne montre
+   * plus. Tant que ce n'est pas nul, le jeu s'en sert : le taire reviendrait a
+   * laisser agir une regle sans ecran pour l'expliquer.
+   */
+  const restes = useMemo(() => restesEnBase(tuile ?? {}), [tuile]);
+
   const idNumerique = Number(tileId);
   const idHorsBornes =
     !Number.isInteger(idNumerique) || idNumerique < TILE_ID_MIN || idNumerique > TILE_ID_MAX;
@@ -170,11 +152,8 @@ export default function TuileDialog({
       tileId_apres_destruction: Number(apresDestruction) || 0,
       indestructible,
       non_remplacable: nonRemplacable,
-      // Forme canonique + `tileId` de compatibilite pour les builds anciens.
-      placement: placementPourEnregistrer(placement),
-      // Renumerotation de securite : la position et le champ `niveau` restent d'accord.
-      niveaux: niveaux.map((n, i) => ({ ...n, niveau: i + 1 })),
-      logistique,
+      // ⚠️ Ni `placement`, ni `niveaux`, ni `logistique` : une cle absente n'est
+      // pas envoyee, donc ce que la tuile porte encore reste intact.
     });
   };
 
@@ -191,23 +170,22 @@ export default function TuileDialog({
           </label>
         </div>
 
-        <div className="mt-4 flex overflow-hidden rounded-md border border-edge">
-          {ONGLETS.map((o) => (
-            <button
-              key={o.cle}
-              type="button"
-              onClick={() => setOnglet(o.cle)}
-              className={`flex-1 px-3 py-1.5 text-xs transition-colors ${
-                onglet === o.cle ? "bg-accent/20 text-white" : "text-slate-400 hover:bg-ink"
-              }`}
-            >
-              {o.libelle}
-            </button>
-          ))}
-        </div>
+        {restes.total > 0 && (
+          <p className="mt-3 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
+            Cette tuile porte encore en base{" "}
+            {[
+              restes.placement > 0 && `${restes.placement} regle(s) de pose`,
+              restes.niveaux > 0 && `${restes.niveaux} niveau(x)`,
+              restes.logistique > 0 && "un role logistique",
+            ]
+              .filter(Boolean)
+              .join(", ")}
+            . Ces ecrans ont ete retires du site, mais <strong>le jeu les applique toujours</strong>.
+            Enregistrer ici n'y touche pas.
+          </p>
+        )}
 
-        <div className="mt-4 min-h-[18rem]">
-          {onglet === "identite" && (
+        <div className="mt-4">
             <div className="space-y-4">
               <Aide titre="A quoi servent ces champs">
                 <Terme nom="tileId">
@@ -514,33 +492,6 @@ export default function TuileDialog({
                 />
               </div>
             </div>
-          )}
-
-          {onglet === "placement" && (
-            <TuilePlacement
-              regles={placement}
-              tuiles={tuiles}
-              tuileCourante={tuile?.id ?? null}
-              onChange={setPlacement}
-            />
-          )}
-
-          {onglet === "niveaux" && (
-            <TuileNiveaux
-              niveaux={niveaux}
-              ressources={ressources}
-              tuiles={tuiles}
-              onChange={setNiveaux}
-            />
-          )}
-
-          {onglet === "logistique" && (
-            <TuileLogistique
-              logistique={logistique}
-              ressources={ressources}
-              onChange={setLogistique}
-            />
-          )}
         </div>
 
         {conflit && (
@@ -554,13 +505,6 @@ export default function TuileDialog({
             tileId invalide : il faut un entier entre {TILE_ID_MIN} et {TILE_ID_MAX}.
           </p>
         )}
-        {ressources.length === 0 && (
-          <p className="mt-3 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
-            Aucune ressource declaree : les couts et productions n'auront rien a proposer. Commence
-            par l'onglet Ressources.
-          </p>
-        )}
-
         {erreur && (
           <p className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
             {erreur}

@@ -1,19 +1,24 @@
 /**
  * Catalogue de tuiles — ce que le joueur peut réellement poser sur un plateau.
  *
- * Une tuile n'est pas un modèle 3D : c'est un modèle (relation vers `tuile3dmodel`)
- * **plus** les règles du jeu qui vont avec — coût d'obtention, conditions de
- * placement, production, rôle logistique.
+ * ⚠️ **REMISE À ZÉRO DU 2026-08-26.** Ce fichier ne décrit plus que l'IDENTITÉ
+ * d'une tuile. Les règles de pose, les niveaux (coûts et productions) et le rôle
+ * logistique ont été retirés du site pour être reconstruits de zéro : le
+ * formulaire ne les écrit plus, et plus rien ici ne sait les lire.
  *
- * Tout ce qui est structuré vit dans des champs `json` plutôt que dans des tables
- * filles, pour une raison précise : le jeu lit le catalogue **en entier**, une fois,
- * et le met en cache. Une tuile = un record autonome = une requête. En contrepartie
- * PocketBase ne valide rien de ce contenu, donc les formulaires du site ne doivent
- * jamais laisser saisir un code ou un tileId au clavier : uniquement des listes.
+ * **Les champs json correspondants existent toujours en base**, avec leur
+ * contenu, et **Unity les lit toujours**. C'est pourquoi le type `Tuile` les
+ * garde — en `unknown`, juste assez pour les COMPTER et prévenir l'admin qu'une
+ * tuile porte encore quelque chose d'invisible. Un champ qui agit sans écran
+ * pour le montrer est le piège qu'on s'est déjà pris deux fois.
+ *
+ * Ce qui a été retiré vit dans l'historique git (dernier commit avant le 26/08),
+ * et le modèle qu'il portait est décrit en mémoire projet. Ne pas le réécrire
+ * de tête.
  *
  * La grille est **hexagonale**, en offset odd-r pointy-top (cf.
  * `PlateauGenerator.CalculerPosition` : `x + (z impair ? 0.5 : 0)`, `z * 0.866`).
- * Un `rayon` se mesure donc en distance hexagonale, pas en distance de Chebyshev :
+ * Une distance se mesure donc en distance hexagonale, pas en Chebyshev :
  *
  *     axial(x, z) = (x - (z - (z & 1)) / 2, z)
  *     dist = (|dq| + |dq + dr| + |dr|) / 2
@@ -34,193 +39,6 @@ export const COLLECTION_TUILES = "tuiles";
  */
 export const TILE_ID_MIN = 1;
 export const TILE_ID_MAX = 255;
-
-// --- Coût d'obtention -------------------------------------------------------
-
-/**
- * - `consomme` : payé et perdu.
- * - `occupe` : mobilisé tant que le bâtiment vit, rendu à la destruction (la population).
- * - `requis` : vérifié sans être prélevé.
- */
-export type ModeCout = "consomme" | "occupe" | "requis";
-
-export const MODES_COUT: { valeur: ModeCout; libelle: string; aide: string }[] = [
-  { valeur: "consomme", libelle: "consommé", aide: "payé et perdu" },
-  { valeur: "occupe", libelle: "occupé", aide: "mobilisé tant que le bâtiment vit" },
-  { valeur: "requis", libelle: "requis", aide: "vérifié sans être prélevé" },
-];
-
-export interface LigneCout {
-  ressource: string;
-  quantite: number;
-  mode: ModeCout;
-  /** Seulement pour `occupe` : le bâtiment éteint rend-il ce qu'il mobilise ? */
-  libere_si_inactif?: boolean;
-}
-
-// --- Prérequis (ce qui n'est pas une ressource) -----------------------------
-
-export type TypePrerequis = "niveau_joueur" | "tuile_possedee";
-
-export const TYPES_PREREQUIS: { valeur: TypePrerequis; libelle: string }[] = [
-  { valeur: "niveau_joueur", libelle: "niveau du joueur" },
-  { valeur: "tuile_possedee", libelle: "tuile déjà possédée" },
-];
-
-export interface Prerequis {
-  type: TypePrerequis;
-  /** `niveau_joueur` */
-  valeur?: number;
-  /** `tuile_possedee` */
-  tileId?: number;
-  min?: number;
-}
-
-export function prerequisVide(type: TypePrerequis): Prerequis {
-  return type === "niveau_joueur" ? { type, valeur: 1 } : { type, tileId: 0, min: 1 };
-}
-
-// --- Production -------------------------------------------------------------
-
-/** Versé une fois, à la construction. */
-export interface LigneInstant {
-  ressource: string;
-  quantite: number;
-}
-
-/**
- * Production ou consommation dans le temps. Volontairement `{quantite, periode_s}`
- * et non un taux décimal : la progression hors ligne se recalcule en multipliant
- * des entiers, sans dérive d'arrondi sur douze heures.
- */
-export interface LigneFlux {
-  ressource: string;
-  quantite: number;
-  periode_s: number;
-}
-
-export interface Production {
-  immediat: LigneInstant[];
-  periodique: LigneFlux[];
-  consomme: LigneFlux[];
-  /** Le bâtiment s'arrête quand son coffre local est plein. 0 = pas de plafond. */
-  stock_max: number;
-}
-
-// --- Niveaux ----------------------------------------------------------------
-
-/**
- * Un objet par palier. Le champ `niveau` est explicite en plus de la position
- * dans le tableau : un réordonnancement accidentel se voit alors, au lieu de
- * décaler tout le contenu en silence.
- */
-export interface Niveau {
-  niveau: number;
-  duree_construction_s: number;
-  cout: LigneCout[];
-  prerequis: Prerequis[];
-  production: Production;
-}
-
-// --- Placement --------------------------------------------------------------
-
-/**
- * Toutes les règles doivent être vraies (ET simple). Un champ `groupe` pourra
- * être ajouté plus tard pour les OU sans invalider une seule règle déjà saisie.
- *
- * Depuis le 2026-08-25, **proximité, exclusion et support citent une LISTE de
- * tuiles** (`tileIds`), pas une seule. Le sens est « n'importe laquelle » :
- * - proximité : au moins N tuiles à portée, toutes tuiles listées confondues ;
- * - exclusion : aucune tuile listée à portée ;
- * - support : la case porte l'une des tuiles listées.
- * `tileId` (au singulier) est l'ancien champ : `placementDe()` le replie dans
- * `tileIds` à la lecture, et `placementPourEnregistrer()` le réécrit encore
- * (= la première tuile de la liste) pour qu'un build du jeu antérieur à cette
- * date continue de lire quelque chose.
- *
- * `rayon` absent ou `null` = tout le plateau. **Ne jamais utiliser 0 pour ça** :
- * 0 a déjà un sens légitime, la case elle-même.
- */
-export type TypeRegle = "proximite" | "exclusion" | "support" | "limite";
-
-export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[] = [
-  { valeur: "proximite", libelle: "proximité", aide: "au moins N tuiles parmi celles cochées, à portée" },
-  { valeur: "exclusion", libelle: "exclusion", aide: "aucune des tuiles cochées à portée" },
-  { valeur: "support", libelle: "support", aide: "la case elle-même doit porter une des tuiles cochées" },
-  { valeur: "limite", libelle: "limite", aide: "nombre maximum d'exemplaires" },
-];
-
-/** Les règles qui citent des tuiles — `limite` n'en cite aucune. */
-export const REGLES_A_TUILES: readonly TypeRegle[] = ["proximite", "exclusion", "support"];
-
-export interface ReglePlacement {
-  regle: TypeRegle;
-  /**
-   * `proximite`, `exclusion`, `support` : les tuiles citées, « n'importe laquelle ».
-   * Toujours présent après `placementDe()`.
-   */
-  tileIds?: number[];
-  /**
-   * Ancien champ (une seule tuile pour proximité / exclusion). Lu pour migrer,
-   * réécrit pour la compatibilité — jamais édité par le formulaire.
-   */
-  tileId?: number;
-  /** Distance hexagonale. `null` = tout le plateau. */
-  rayon?: number | null;
-  /** `proximite` */
-  min?: number;
-  /** `limite` */
-  max?: number;
-  portee?: "plateau" | "empire";
-}
-
-export function regleVide(regle: TypeRegle): ReglePlacement {
-  switch (regle) {
-    case "proximite":
-      return { regle, tileIds: [], rayon: 2, min: 1 };
-    case "exclusion":
-      return { regle, tileIds: [], rayon: 2 };
-    case "support":
-      return { regle, tileIds: [] };
-    case "limite":
-      return { regle, max: 1, portee: "plateau" };
-  }
-}
-
-// --- Logistique -------------------------------------------------------------
-
-/**
- * Le modèle de couverture : un collecteur draine, à `debit`, les stocks locaux des
- * producteurs dans son `rayon`. Ce qui est dans un collecteur est disponible pour
- * la population ; ce qui est resté chez le producteur ne l'est pas.
- *
- * Les navettes visibles en jeu sont **une animation**, pas une simulation : elles
- * racontent ce que la formule vient de calculer. C'est ce qui rend la progression
- * hors ligne calculable en forme fermée au lieu de rejouer huit heures d'agents.
- */
-export type RoleLogistique = "collecteur" | "consommateur";
-
-export const ROLES_LOGISTIQUE: { valeur: RoleLogistique; libelle: string; aide: string }[] = [
-  {
-    valeur: "collecteur",
-    libelle: "collecteur",
-    aide: "draine les stocks locaux à portée (entrepôt)",
-  },
-  {
-    valeur: "consommateur",
-    libelle: "consommateur",
-    aide: "puise dans les collecteurs à portée (habitat)",
-  },
-];
-
-export interface Logistique {
-  role: RoleLogistique;
-  rayon: number | null;
-  /** Codes acceptés. Liste vide = toutes les ressources. */
-  ressources: string[];
-  debit: { quantite: number; periode_s: number };
-  capacite: number;
-}
 
 // --- Le record --------------------------------------------------------------
 
@@ -260,15 +78,28 @@ export type Tuile = {
    * remplacables sans migration.
    */
   non_remplacable: boolean;
-  placement: ReglePlacement[] | null;
-  niveaux: Niveau[] | null;
-  logistique: Logistique | null;
+  /**
+   * ⚠️ Les trois champs de la remise a zero. Le site ne les ECRIT plus et ne
+   * sait plus les lire en detail — mais Unity, lui, les applique toujours. On
+   * les garde en `unknown` pour pouvoir dire a l'admin « cette tuile porte
+   * encore N choses que cet ecran ne montre pas ».
+   */
+  placement: unknown[] | null;
+  niveaux: unknown[] | null;
+  logistique: unknown | null;
   created: string;
   updated: string;
   expand?: { modele?: Modele3D };
 };
 
-/** Ce que le formulaire renvoie. */
+/**
+ * Ce que le formulaire renvoie — l'identite, et rien d'autre.
+ *
+ * ⚠️ `placement`, `niveaux` et `logistique` n'y sont **volontairement pas** :
+ * une cle absente n'est pas envoyee a PocketBase, donc enregistrer une tuile
+ * **preserve** ce qu'elle porte encore. Les remettre ici avec une valeur vide
+ * effacerait le travail de l'utilisateur au premier changement de nom.
+ */
 export interface ValeursTuile {
   tileId: number;
   nom: string;
@@ -281,94 +112,35 @@ export interface ValeursTuile {
   tileId_apres_destruction: number;
   indestructible: boolean;
   non_remplacable: boolean;
-  placement: ReglePlacement[];
-  niveaux: Niveau[];
-  logistique: Logistique | null;
 }
 
-// --- Valeurs par défaut et normalisation ------------------------------------
+// --- Ce qui reste en base sans ecran pour le montrer -------------------------
 
-export function productionVide(): Production {
-  return { immediat: [], periodique: [], consomme: [], stock_max: 0 };
-}
-
-export function niveauVide(numero: number): Niveau {
-  return {
-    niveau: numero,
-    duree_construction_s: 0,
-    cout: [],
-    prerequis: [],
-    production: productionVide(),
-  };
-}
-
-export function logistiqueVide(role: RoleLogistique): Logistique {
-  return { role, rayon: 5, ressources: [], debit: { quantite: 10, periode_s: 60 }, capacite: 100 };
+export interface RestesEnBase {
+  placement: number;
+  niveaux: number;
+  logistique: number;
+  total: number;
 }
 
 /**
- * Un champ json jamais renseigné revient `null` de PocketBase, et un objet ancien
- * peut manquer une clé ajoutée depuis. On normalise à la lecture pour que le reste
- * du code n'ait jamais à se demander si une liste existe.
+ * Combien de choses invisibles cette tuile porte encore. Sert au bandeau de la
+ * fenetre d'edition et a la colonne « reste en base » de la liste : tant que
+ * ces donnees existent, le jeu s'en sert, et l'admin doit pouvoir les trouver.
  */
-export function placementDe(tuile: Tuile): ReglePlacement[] {
-  const brutes = Array.isArray(tuile.placement) ? tuile.placement : [];
-  return brutes.filter((r) => r && r.regle).map(normaliserRegle);
+export function restesEnBase(tuile: {
+  placement?: unknown;
+  niveaux?: unknown;
+  logistique?: unknown;
+}): RestesEnBase {
+  const combien = (v: unknown) => (Array.isArray(v) ? v.length : 0);
+  const placement = combien(tuile.placement);
+  const niveaux = combien(tuile.niveaux);
+  const logistique = tuile.logistique ? 1 : 0;
+  return { placement, niveaux, logistique, total: placement + niveaux + logistique };
 }
 
-/**
- * Replie l'ancien `tileId` unique dans `tileIds`, et garantit la liste pour les
- * trois règles qui citent des tuiles. Le formulaire ne voit ainsi qu'une forme.
- */
-export function normaliserRegle(r: ReglePlacement): ReglePlacement {
-  if (!REGLES_A_TUILES.includes(r.regle)) return { ...r, tileIds: undefined, tileId: undefined };
-  const liste = Array.isArray(r.tileIds) ? r.tileIds.filter((id) => id > 0) : [];
-  if (liste.length === 0 && r.tileId && r.tileId > 0) liste.push(r.tileId);
-  return { ...r, tileIds: Array.from(new Set(liste)), tileId: undefined };
-}
-
-/** Vrai si la règle cite au moins une tuile — ou n'en a pas besoin (`limite`). */
-export function regleComplete(r: ReglePlacement): boolean {
-  return !REGLES_A_TUILES.includes(r.regle) || (r.tileIds?.length ?? 0) > 0;
-}
-
-/**
- * Ce qui part en base. `tileId` est réémis (= première tuile citée) pour qu'un
- * build du jeu qui ne connaît pas encore `tileIds` sur proximité / exclusion
- * lise au moins la première. À retirer quand plus aucun build ancien ne tourne.
- */
-export function placementPourEnregistrer(regles: ReglePlacement[]): ReglePlacement[] {
-  return regles.map((r) => {
-    const n = normaliserRegle(r);
-    const sortie: ReglePlacement = { ...n };
-    if (!REGLES_A_TUILES.includes(n.regle)) {
-      delete sortie.tileIds;
-      delete sortie.tileId;
-    } else if (n.regle === "support") {
-      delete sortie.tileId;
-    } else {
-      sortie.tileId = n.tileIds?.[0] ?? 0;
-    }
-    return sortie;
-  });
-}
-
-export function niveauxDe(tuile: Tuile): Niveau[] {
-  const bruts = Array.isArray(tuile.niveaux) ? tuile.niveaux : [];
-  if (bruts.length === 0) return [niveauVide(1)];
-  return bruts.map((n, i) => ({
-    niveau: n.niveau ?? i + 1,
-    duree_construction_s: n.duree_construction_s ?? 0,
-    cout: Array.isArray(n.cout) ? n.cout : [],
-    prerequis: Array.isArray(n.prerequis) ? n.prerequis : [],
-    production: {
-      immediat: Array.isArray(n.production?.immediat) ? n.production.immediat : [],
-      periodique: Array.isArray(n.production?.periodique) ? n.production.periodique : [],
-      consomme: Array.isArray(n.production?.consomme) ? n.production.consomme : [],
-      stock_max: n.production?.stock_max ?? 0,
-    },
-  }));
-}
+// --- Destruction -------------------------------------------------------------
 
 /**
  * Les trois etats possibles d'une tuile face au joueur qui veut liberer la case.
@@ -383,18 +155,6 @@ export function contrainteDe(tuile: {
 }): Contrainte {
   if (!tuile.indestructible) return "destructible";
   return tuile.non_remplacable ? "figee" : "indestructible";
-}
-
-export function logistiqueDe(tuile: Tuile): Logistique | null {
-  const l = tuile.logistique;
-  if (!l || !l.role) return null;
-  return {
-    role: l.role,
-    rayon: l.rayon ?? null,
-    ressources: Array.isArray(l.ressources) ? l.ressources : [],
-    debit: { quantite: l.debit?.quantite ?? 0, periode_s: l.debit?.periode_s ?? 60 },
-    capacite: l.capacite ?? 0,
-  };
 }
 
 // --- Chargement et helpers --------------------------------------------------
@@ -426,26 +186,10 @@ export function tuilesParModele(tuiles: Tuile[]): Map<string, Tuile[]> {
 }
 
 /**
- * Tuiles dont une règle de placement cite `tileId`. Sert de garde-fou :
- * supprimer une tuile référencée casserait ces règles en silence.
+ * Nombre de cases couvertes par un rayon sur une grille hexagonale : 3r(r+1).
+ * Utilisé par le pinceau de l'éditeur de plateaux — il survit donc à la remise
+ * à zéro des règles de pose.
  */
-export function tuilesCitant(tuiles: Tuile[], tileId: number): Tuile[] {
-  return tuiles.filter((t) =>
-    placementDe(t).some(
-      (r) => r.tileId === tileId || (Array.isArray(r.tileIds) && r.tileIds.includes(tileId)),
-    ),
-  );
-}
-
-/** Résumé d'une durée en secondes, pour l'affichage. */
-export function formatDuree(secondes: number): string {
-  if (!secondes) return "immédiat";
-  if (secondes < 60) return `${secondes} s`;
-  if (secondes < 3600) return `${Math.round(secondes / 60)} min`;
-  return `${(secondes / 3600).toFixed(1).replace(".0", "")} h`;
-}
-
-/** Nombre de cases couvertes par un rayon sur une grille hexagonale : 3r(r+1). */
 export function casesCouvertes(rayon: number): number {
   return 3 * rayon * (rayon + 1);
 }
