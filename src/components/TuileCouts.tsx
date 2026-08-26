@@ -1,5 +1,5 @@
 import Aide, { Terme } from "@/components/Aide";
-import { codeInconnu, libelleRessource, type Ressource } from "@/lib/ressources";
+import { codeInconnu, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
   PERIODE_PAR_DEFAUT,
   chantierPasEncoreApplique,
@@ -57,8 +57,8 @@ export default function TuileCouts({
 
   const nomRessource = (code: string) => libelleRessource(ressources, code);
   /** Ce qu'une tuile peut fabriquer : tout sauf la population, indicateurs compris. */
-  const productibles = ressources.filter((r) => r.genre !== "population");
-  const indicateurs = ressources.filter((r) => r.genre === "indicateur");
+  const productibles = parAlphabet(ressources.filter((r) => r.genre !== "population"));
+  const indicateurs = parAlphabet(ressources.filter((r) => r.genre === "indicateur"));
 
   /** Remplace les lignes d'UN mode, en gardant celles de l'autre. */
   const majCout = (index: number, mode: ModeCout, lignes: LigneCout[]) => {
@@ -149,10 +149,12 @@ export default function TuileCouts({
           Même geste que sur une consommation : la plupart des lignes de production n'en ont pas,
           donc le champ reste caché jusqu'à ce qu'on clique <strong>+ indice</strong>.
           <br />
-          ⚠️ Contrairement à la consommation, c'est un <strong>plafond fixe</strong> que tu poses
-          toi-même — pas un indicateur choisi dans une liste ni des tranches. 60 % de rendement,
-          c'est 60 % du débit déclaré, point : la valeur ne varie pas toute seule pendant la
-          partie.
+Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de rendement
+          selon la Satisfaction, c'est 60 % du débit quand la satisfaction est au maximum, et{" "}
+          <strong>au prorata</strong> en dessous : à 60 % de satisfaction, il reste 36 % du débit.
+          <br />
+          Choisis <em>« rien (plafond fixe) »</em> comme indice si tu veux juste brider la ligne à
+          un pourcentage qui ne bouge pas.
           <br />
           ⚠️ <strong>Laisse-le vide sur les fermes.</strong> C'est le garde-fou contre la spirale :
           sans au moins une production non plafonnée quelque part, moins de vivres → moins de
@@ -278,6 +280,7 @@ export default function TuileCouts({
                   lignes={palier.production}
                   productibles={productibles}
                   indicateurs={indicateurs}
+                  nomRessource={nomRessource}
                   onChange={(production) => majPalier(index, { production })}
                 />
 
@@ -366,7 +369,7 @@ function ChoixRessource({
     >
       <option value="">choisir une ressource</option>
       {inconnu && <option value={code}>{code} — inconnue</option>}
-      {ressources.map((r) => (
+      {parAlphabet(ressources).map((r) => (
         <option key={r.id} value={r.code}>
           {r.nom}
         </option>
@@ -461,11 +464,13 @@ function LignesProduction({
   lignes,
   productibles,
   indicateurs,
+  nomRessource,
   onChange,
 }: {
   lignes: LigneProduction[];
   productibles: Ressource[];
   indicateurs: Ressource[];
+  nomRessource: (code: string) => string;
   onChange: (lignes: LigneProduction[]) => void;
 }) {
   const maj = (i: number, patch: Partial<LigneProduction>) =>
@@ -546,12 +551,27 @@ function LignesProduction({
                               })
                             }
                           />
-                          % de rendement
+                          % de rendement selon
+                          {/* ⚠️ Le pourcentage seul ne disait pas DE QUOI il
+                              depend. Demande explicite : « je veux pouvoir
+                              choisir l'indice ». */}
+                          <select
+                            className="input h-9 w-36 py-1"
+                            value={ligne.indicateur}
+                            onChange={(e) => maj(i, { indicateur: e.target.value })}
+                          >
+                            <option value="">rien (plafond fixe)</option>
+                            {indicateurs.map((r) => (
+                              <option key={r.id} value={r.code}>
+                                {r.nom}
+                              </option>
+                            ))}
+                          </select>
                           <button
                             type="button"
                             className="text-slate-500 hover:text-red-400"
                             title="retirer l'indice"
-                            onClick={() => maj(i, { rendement: 0 })}
+                            onClick={() => maj(i, { rendement: 0, indicateur: "" })}
                           >
                             ×
                           </button>
@@ -560,7 +580,12 @@ function LignesProduction({
                         <button
                           type="button"
                           className="text-xs text-accent hover:underline"
-                          onClick={() => maj(i, { rendement: 100 })}
+                          onClick={() =>
+                            maj(i, {
+                              rendement: 100,
+                              indicateur: indicateurs[0]?.code ?? "",
+                            })
+                          }
                         >
                           + indice
                         </button>
@@ -597,15 +622,33 @@ function LignesProduction({
                       )
                     </span>
                     {ligne.rendement > 0 ? (
-                      <>
-                        , plafonnée à{" "}
-                        <span className="text-slate-300">{ligne.rendement} % de rendement</span> —
-                        soit au plus{" "}
-                        <span className="tabular-nums text-slate-300">
-                          {Math.round((ligne.quantite * ligne.rendement) / 100)}
-                        </span>
-                        .
-                      </>
+                      ligne.indicateur !== "" ? (
+                        <>
+                          , puis ×{" "}
+                          <span className="text-slate-300">
+                            {ligne.rendement} % de {nomRessource(ligne.indicateur)}
+                          </span>{" "}
+                          — au maximum{" "}
+                          <span className="tabular-nums text-slate-300">
+                            {Math.round((ligne.quantite * ligne.rendement) / 100)}
+                          </span>
+                          , et à 60 % de {nomRessource(ligne.indicateur)}{" "}
+                          <span className="tabular-nums text-slate-300">
+                            {Math.round((ligne.quantite * ligne.rendement * 0.6) / 100)}
+                          </span>
+                          .
+                        </>
+                      ) : (
+                        <>
+                          , plafonnée à{" "}
+                          <span className="text-slate-300">{ligne.rendement} % de rendement</span> —
+                          soit au plus{" "}
+                          <span className="tabular-nums text-slate-300">
+                            {Math.round((ligne.quantite * ligne.rendement) / 100)}
+                          </span>
+                          .
+                        </>
+                      )
                     ) : (
                       <>
                         {" "}

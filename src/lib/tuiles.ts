@@ -362,10 +362,25 @@ export interface LigneProduction {
    * indicateur reste noté dans `sysb-satisfaction-v2` si le besoin revient.
    */
   rendement: number;
+  /**
+   * **Quel indicateur pilote ce rendement.** Vide = le rendement est un plafond
+   * fixe, il ne suit rien.
+   *
+   * ⚠️ Ajouté le 26/08 juste après le champ `rendement` : *« et je veux pouvoir
+   * choisir l'indice ! »*. Le pourcentage seul ne disait pas **de quoi** il
+   * dépendait — avec plusieurs indicateurs un jour (satisfaction, santé…), il
+   * faut le nommer.
+   *
+   * Le rendement effectif est un **prorata** :
+   * `rendement% × valeur_indicateur`. 80 % de rendement avec une satisfaction à
+   * 60 % donnent 48 %. C'est la même mécanique de prorata que partout ailleurs
+   * dans le modèle — la couverture des intrants, les parts de satisfaction.
+   */
+  indicateur: string;
 }
 
 export function productionVide(ressource: string): LigneProduction {
-  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, rendement: 0 };
+  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, rendement: 0, indicateur: "" };
 }
 
 export interface Palier {
@@ -498,6 +513,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
           rendement: Math.min(100, Math.max(0, entier(l?.rendement))),
+          indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
         }))
       : [],
   };
