@@ -327,6 +327,105 @@ export function fluxVide(ressource: string): LigneFlux {
  * tourne.
  */
 /**
+ * Un **cran** de l'escalier de rendement : « à partir de `seuil` %
+ * d'indicateur, la ligne rend `rendement` % de son débit ».
+ *
+ * ⚠️ Seul le **seuil bas** se saisit. Le haut est celui de la tranche du
+ * dessus, ou 100. C'est ce qui rend impossible un trou entre deux tranches, ou
+ * un recouvrement — deux fautes qui feraient dépendre le résultat de l'ordre de
+ * lecture, et donc diverger le site et le jeu.
+ */
+export interface Tranche {
+  /** Valeur de l'indicateur, en %, à partir de laquelle cette tranche vaut. */
+  seuil: number;
+  /** Ce que la ligne rend dans cette tranche, en % de son débit déclaré. */
+  rendement: number;
+}
+
+/**
+ * Les deux tranches de l'exemple de l'utilisateur, proposées quand il ajoute un
+ * indice : *« 60 nourriture × 100 % par 120 s pour satisfaction 100–80 %,
+ * 60 × 80 % pour satisfaction 80–0 % »*.
+ */
+export const TRANCHES_PAR_DEFAUT: Tranche[] = [
+  { seuil: 80, rendement: 100 },
+  { seuil: 0, rendement: 80 },
+];
+
+/**
+ * ⚠️ **QUAND l'indicateur est lu**, question posée par l'utilisateur le 26/08 :
+ * *« ça prendra l'indice de la période d'avant pour calculer le rendement ? »*.
+ * Oui, et ce n'est pas un confort.
+ *
+ * La boucle est circulaire : l'habitation consomme la nourriture → produit la
+ * satisfaction → la satisfaction freine la ferme → la ferme produit la
+ * nourriture. Résoudre tout dans le même tick demanderait un point fixe à
+ * chaque passe, et la résolution hors ligne (rejouer 300 ticks d'un coup au
+ * réveil) ne coïnciderait plus avec le jeu en direct.
+ *
+ * Donc : on produit avec la valeur **figée à la fin du tick précédent**, puis on
+ * recalcule l'indicateur en fin de tick pour le suivant. Un tick de retard,
+ * invisible à 120 s.
+ */
+export const INDICE_LU = "valeur de l'indicateur figée à la fin de la période précédente";
+
+/**
+ * Valeur d'un indicateur avant qu'une seule habitation existe. **100, pas 0** :
+ * une colonie neuve démarrerait sinon à rendement minimal, sans jamais pouvoir
+ * construire de quoi remonter — la spirale du 25/08 dès la première seconde.
+ */
+export const INDICE_AU_DEMARRAGE = 100;
+
+/** Tranches du haut vers le bas, seuils bornés et entiers. Ordre de lecture unique. */
+export function tranchesTriees(tranches: Tranche[]): Tranche[] {
+  return [...tranches]
+    .map((t) => ({
+      seuil: Math.min(100, Math.max(0, Math.trunc(t?.seuil || 0))),
+      rendement: Math.min(100, Math.max(0, Math.trunc(t?.rendement || 0))),
+    }))
+    .sort((a, b) => b.seuil - a.seuil);
+}
+
+/**
+ * Le rendement, en %, pour une valeur d'indicateur donnée.
+ *
+ * ⚠️ Aucune tranche atteinte = **la plus basse**, jamais 100. Sinon une
+ * satisfaction catastrophique rendrait la production maximale, exactement le
+ * contraire de l'intention. Liste vide = 100 : rien ne freine.
+ */
+export function rendementPourIndicateur(tranches: Tranche[], valeur: number): number {
+  const triees = tranchesTriees(tranches);
+  if (triees.length === 0) return 100;
+  for (const t of triees) if (valeur >= t.seuil) return t.rendement;
+  return triees[triees.length - 1].rendement;
+}
+
+/**
+ * Vrai si l'escalier descend jusqu'à 0. Sinon la tranche la plus basse
+ * s'applique quand même en dessous de son seuil, et l'écran doit le dire — un
+ * champ qui ment ne dit rien.
+ */
+export function tranchesCouvrentZero(tranches: Tranche[]): boolean {
+  const triees = tranchesTriees(tranches);
+  return triees.length === 0 || triees[triees.length - 1].seuil === 0;
+}
+
+/** Deux tranches au même seuil : le résultat dépendrait de l'ordre. À signaler. */
+export function seuilsEnDouble(tranches: Tranche[]): boolean {
+  const seuils = tranchesTriees(tranches).map((t) => t.seuil);
+  return new Set(seuils).size !== seuils.length;
+}
+
+function normaliserTranches(l: unknown): Tranche[] {
+  const o = l as { tranches?: unknown; rendement?: unknown };
+  if (Array.isArray(o?.tranches)) return tranchesTriees(o.tranches as Tranche[]);
+  // Lecture des enregistrements du matin : un `rendement` seul devient une
+  // tranche unique a seuil 0, soit exactement le plafond fixe qu'il etait.
+  const ancien = Math.min(100, Math.max(0, Math.trunc(Number(o?.rendement) || 0)));
+  return ancien > 0 ? [{ seuil: 0, rendement: ancien }] : [];
+}
+
+/**
  * Une ligne de PRODUCTION : ce que la tuile fabrique pendant qu'elle tourne.
  *
  * ⚠️ Déplacée ici depuis l'onglet Stock & appro le 26/08, sur la remarque de
@@ -345,23 +444,26 @@ export interface LigneProduction {
   quantite: number;
   periode_s: number;
   /**
-   * **Rendement de cette ligne**, en pourcentage. `0` = pas d'indice posé, la
-   * ligne produit à plein (dans la limite de ce que ses intrants couvrent).
+   * **L'escalier de rendement** de cette ligne. Liste vide = rien ne freine
+   * cette production, elle tourne à plein (dans la limite de ses intrants).
    *
-   * ⚠️ **Remplace le 26/08 le système « rendement selon [indicateur] » par
-   * tranches**, retiré le même jour sur demande de l'utilisateur — *« je veux
-   * la même chose pour le produit, le + indice par ligne, et c'est ça le
-   * rendement, on supprime le champ rendement selon »*. Même geste que le
-   * `part` de `LigneFlux` : un champ caché par défaut, ajouté d'un clic sur
-   * **+ indice**, un seul nombre au lieu d'un indicateur à choisir plus une
-   * table de tranches.
+   * ⚠️ **Troisième forme du même champ en une journée**, et c'est celle-ci qui
+   * tient : booléen → prorata `rendement% × indice` → **tranches**. Le prorata
+   * a été essayé le 26/08 au matin et refusé l'après-midi : *« escalier par
+   * ligne »*. Ne pas le remettre en continu sans que l'utilisateur le
+   * redemande — le chemin a déjà été parcouru dans les deux sens.
    *
-   * C'est un plafond **fixe**, posé par l'admin, pas une valeur qui varie
-   * toute seule avec la satisfaction du plateau — contrairement à l'ancien
-   * système de tranches. Le modèle où le rendement suit dynamiquement un
-   * indicateur reste noté dans `sysb-satisfaction-v2` si le besoin revient.
+   * Une tranche ne porte que son **seuil bas** ; le haut est déduit de la
+   * tranche du dessus. Impossible, donc, de laisser un trou ou de faire se
+   * chevaucher deux tranches — ce qui donnerait un rendement différent selon
+   * l'ordre de lecture.
+   *
+   *     à partir de 80 %  → rendement 100 %   → 60 par période
+   *     à partir de  0 %  → rendement  80 %   → 48 par période
+   *
+   * Sans indicateur, une tranche unique à seuil 0 est un **plafond fixe**.
    */
-  rendement: number;
+  tranches: Tranche[];
   /**
    * **Quel indicateur pilote ce rendement.** Vide = le rendement est un plafond
    * fixe, il ne suit rien.
@@ -371,16 +473,16 @@ export interface LigneProduction {
    * dépendait — avec plusieurs indicateurs un jour (satisfaction, santé…), il
    * faut le nommer.
    *
-   * Le rendement effectif est un **prorata** :
-   * `rendement% × valeur_indicateur`. 80 % de rendement avec une satisfaction à
-   * 60 % donnent 48 %. C'est la même mécanique de prorata que partout ailleurs
-   * dans le modèle — la couverture des intrants, les parts de satisfaction.
+   * Le rendement effectif se lit dans l'escalier ci-dessus :
+   * `rendementPourIndicateur(tranches, valeur)`. Ce n'est **pas** un prorata —
+   * une satisfaction à 79 % et une à 12 % donnent le même rendement si elles
+   * tombent dans la même tranche.
    */
   indicateur: string;
 }
 
 export function productionVide(ressource: string): LigneProduction {
-  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, rendement: 0, indicateur: "" };
+  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, tranches: [], indicateur: "" };
 }
 
 export interface Palier {
@@ -512,7 +614,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
-          rendement: Math.min(100, Math.max(0, entier(l?.rendement))),
+          tranches: normaliserTranches(l),
           indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
         }))
       : [],
@@ -530,7 +632,11 @@ export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
     duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
     cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
     utilisation: p.utilisation.filter((l) => l.ressource !== "" && l.quantite > 0),
-    production: p.production.filter((l) => l.ressource !== ""),
+    production: p.production
+      .filter((l) => l.ressource !== "")
+      // Tri a l'enregistrement : le jeu lit un escalier deja ordonne, il n'a
+      // pas a re-trier pour tomber sur le meme rendement que l'ecran.
+      .map((l) => ({ ...l, tranches: tranchesTriees(l.tranches) })),
   }));
 }
 
@@ -614,7 +720,7 @@ export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] 
  * l'entrepôt vient ramasser la récolte.
  */
 export const FORMULE_PRODUCTION =
-  "débit déclaré × couverture des intrants × satisfaction du plateau";
+  "débit déclaré × couverture des intrants × rendement de la tranche d'indicateur";
 
 /**
  * ⚠️ **L'ORDRE DES PASSES**, posé par l'utilisateur le 26/08 :

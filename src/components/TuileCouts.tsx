@@ -2,18 +2,24 @@ import Aide, { Terme } from "@/components/Aide";
 import { codeInconnu, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
   PERIODE_PAR_DEFAUT,
+  TRANCHES_PAR_DEFAUT,
   chantierPasEncoreApplique,
   fluxVide,
   formatDuree,
   palierVide,
   productionVide,
   rendEnVeille,
+  rendementPourIndicateur,
+  seuilsEnDouble,
   totalParts,
+  tranchesCouvrentZero,
+  tranchesTriees,
   type LigneCout,
   type LigneFlux,
   type LigneProduction,
   type ModeCout,
   type Palier,
+  type Tranche,
 } from "@/lib/tuiles";
 
 /**
@@ -534,27 +540,11 @@ function LignesProduction({
                       </span>
 
                       {/* ⚠️ Meme geste que le "+ indice" de la consommation :
-                          cache par defaut, un seul nombre une fois demande. */}
-                      {ligne.rendement > 0 ? (
+                          cache par defaut. Mais ici ce n'est PAS un nombre :
+                          c'est un ESCALIER (choix du 26/08 apres-midi). */}
+                      {ligne.tranches.length > 0 ? (
                         <span className="flex items-center gap-1 text-xs text-slate-500">
-                          =
-                          <input
-                            type="number"
-                            min={1}
-                            max={100}
-                            step={5}
-                            className="input h-9 w-16 py-1"
-                            value={ligne.rendement}
-                            onChange={(e) =>
-                              maj(i, {
-                                rendement: Math.min(100, Math.max(0, Number(e.target.value) || 0)),
-                              })
-                            }
-                          />
-                          % de rendement selon
-                          {/* ⚠️ Le pourcentage seul ne disait pas DE QUOI il
-                              depend. Demande explicite : « je veux pouvoir
-                              choisir l'indice ». */}
+                          selon
                           <select
                             className="input h-9 w-36 py-1"
                             value={ligne.indicateur}
@@ -571,7 +561,7 @@ function LignesProduction({
                             type="button"
                             className="text-slate-500 hover:text-red-400"
                             title="retirer l'indice"
-                            onClick={() => maj(i, { rendement: 0, indicateur: "" })}
+                            onClick={() => maj(i, { tranches: [], indicateur: "" })}
                           >
                             ×
                           </button>
@@ -582,7 +572,7 @@ function LignesProduction({
                           className="text-xs text-accent hover:underline"
                           onClick={() =>
                             maj(i, {
-                              rendement: 100,
+                              tranches: TRANCHES_PAR_DEFAUT,
                               indicateur: indicateurs[0]?.code ?? "",
                             })
                           }
@@ -608,55 +598,57 @@ function LignesProduction({
                     la tuile le produit à 100 % ; à moitié, à 50 %.
                   </p>
                 ) : (
-                  <p className="mt-1 text-[11px] leading-tight text-slate-500">
-                    C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
-                    <span className="text-slate-300">la couverture de ses intrants</span>{" "}
-                    {/* L'exemple a moitie : c'est le cas que l'utilisateur cite
-                        lui-meme (« si il n'y a que 25 bovins sur 50 »), et un
-                        chiffre se verifie d'un coup d'oeil, pas une formule. */}
-                    <span className="text-slate-400">
-                      (à moitié approvisionné :{" "}
-                      <span className="tabular-nums text-slate-300">
-                        {Math.round(ligne.quantite / 2)}
+                  <>
+                    {ligne.tranches.length > 0 && (
+                      <Escalier
+                        tranches={ligne.tranches}
+                        quantite={ligne.quantite}
+                        indicateur={ligne.indicateur}
+                        nomRessource={nomRessource}
+                        onChange={(tranches) => maj(i, { tranches })}
+                      />
+                    )}
+                    <p className="mt-1 text-[11px] leading-tight text-slate-500">
+                      C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
+                      <span className="text-slate-300">la couverture de ses intrants</span>{" "}
+                      {/* L'exemple a moitie : c'est le cas que l'utilisateur cite
+                          lui-meme (« si il n'y a que 25 bovins sur 50 »), et un
+                          chiffre se verifie d'un coup d'oeil, pas une formule. */}
+                      <span className="text-slate-400">
+                        (à moitié approvisionné :{" "}
+                        <span className="tabular-nums text-slate-300">
+                          {Math.round(ligne.quantite / 2)}
+                        </span>
+                        )
                       </span>
-                      )
-                    </span>
-                    {ligne.rendement > 0 ? (
-                      ligne.indicateur !== "" ? (
-                        <>
-                          , puis ×{" "}
-                          <span className="text-slate-300">
-                            {ligne.rendement} % de {nomRessource(ligne.indicateur)}
-                          </span>{" "}
-                          — au maximum{" "}
-                          <span className="tabular-nums text-slate-300">
-                            {Math.round((ligne.quantite * ligne.rendement) / 100)}
-                          </span>
-                          , et à 60 % de {nomRessource(ligne.indicateur)}{" "}
-                          <span className="tabular-nums text-slate-300">
-                            {Math.round((ligne.quantite * ligne.rendement * 0.6) / 100)}
-                          </span>
-                          .
-                        </>
+                      {ligne.tranches.length > 0 ? (
+                        ligne.indicateur !== "" ? (
+                          <>
+                            , puis × <span className="text-slate-300">le rendement de la tranche</span>{" "}
+                            de {nomRessource(ligne.indicateur)}{" "}
+                            <span className="text-slate-400">
+                              — la valeur lue est celle de{" "}
+                              <span className="text-slate-300">la période précédente</span>.
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            , puis ×{" "}
+                            <span className="text-slate-300">
+                              {rendementPourIndicateur(ligne.tranches, 100)} % de rendement
+                            </span>{" "}
+                            — aucun indice choisi, c'est un plafond fixe.
+                          </>
+                        )
                       ) : (
                         <>
-                          , plafonnée à{" "}
-                          <span className="text-slate-300">{ligne.rendement} % de rendement</span> —
-                          soit au plus{" "}
-                          <span className="tabular-nums text-slate-300">
-                            {Math.round((ligne.quantite * ligne.rendement) / 100)}
-                          </span>
-                          .
+                          {" "}
+                          — <span className="text-accent">rien ne la plafonne</span>.
                         </>
-                      )
-                    ) : (
-                      <>
-                        {" "}
-                        — <span className="text-accent">rien ne la plafonne</span>.
-                      </>
-                    )}{" "}
-                    Et sans sa main-d'œuvre, elle est nulle.
-                  </p>
+                      )}{" "}
+                      Et sans sa main-d'œuvre, elle est nulle.
+                    </p>
+                  </>
                 )}
               </div>
             );
@@ -669,6 +661,128 @@ function LignesProduction({
           onClick={() => onChange([...lignes, productionVide(productibles[0]?.code ?? "")])}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * L'**escalier de rendement** d'une ligne de production.
+ *
+ * ⚠️ Une tranche ne porte que son **seuil bas** — le haut est celui de la
+ * tranche du dessus. C'est ce qui interdit structurellement le trou et le
+ * recouvrement, les deux fautes qui feraient dependre le resultat de l'ordre de
+ * lecture. L'ecran affiche donc « de X a Y % », mais ne laisse saisir que X.
+ */
+function Escalier({
+  tranches,
+  quantite,
+  indicateur,
+  nomRessource,
+  onChange,
+}: {
+  tranches: Tranche[];
+  quantite: number;
+  indicateur: string;
+  nomRessource: (code: string) => string;
+  onChange: (tranches: Tranche[]) => void;
+}) {
+  const triees = tranchesTriees(tranches);
+  const nom = indicateur === "" ? "l'indice" : nomRessource(indicateur);
+
+  const maj = (i: number, patch: Partial<Tranche>) =>
+    onChange(triees.map((t, k) => (k === i ? { ...t, ...patch } : t)));
+
+  return (
+    <div className="mt-2 rounded border border-edge/60 bg-ink/60 p-2">
+      <p className="mb-1 text-[11px] uppercase tracking-wide text-slate-500">
+        rendement selon {nom}
+      </p>
+      <div className="space-y-1">
+        {triees.map((t, i) => {
+          // Le haut de la tranche est celui du dessus : on le LIT, on ne le
+          // saisit pas. 100 pour la premiere.
+          const haut = i === 0 ? 100 : triees[i - 1].seuil;
+          return (
+            <div key={i} className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+              de
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                className="input h-8 w-16 py-0"
+                value={t.seuil}
+                onChange={(e) =>
+                  maj(i, { seuil: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
+                }
+              />
+              à <span className="tabular-nums text-slate-400">{haut}</span> % →
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={1}
+                className="input h-8 w-16 py-0"
+                value={t.rendement}
+                onChange={(e) =>
+                  maj(i, { rendement: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
+                }
+              />
+              % de rendement
+              <span className="tabular-nums text-slate-400">
+                — soit {Math.round((quantite * t.rendement) / 100)} par période
+              </span>
+              <button
+                type="button"
+                className="ml-auto text-slate-500 hover:text-red-400"
+                title="retirer la tranche"
+                onClick={() => onChange(triees.filter((_, k) => k !== i))}
+              >
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-1">
+        <BoutonLigne
+          libelle="+ tranche"
+          onClick={() => onChange([...triees, { seuil: 0, rendement: 50 }])}
+        />
+      </div>
+
+      {/* ⚠️ Un escalier qui ne descend pas jusqu'a 0 n'est pas une erreur
+          bloquante : la tranche la plus basse s'applique quand meme en dessous
+          de son seuil. Mais l'ecran doit le DIRE, sinon il ment. */}
+      {!tranchesCouvrentZero(triees) && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-300">
+          La tranche la plus basse part de {triees[triees.length - 1].seuil} % : en dessous, c'est
+          elle qui s'applique quand même ({triees[triees.length - 1].rendement} %). Jamais 100 % —
+          sinon un {nom} catastrophique donnerait la production maximale.
+        </p>
+      )}
+      {seuilsEnDouble(triees) && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-300">
+          Deux tranches partent du même seuil : le rendement dépendrait de l'ordre de lecture.
+        </p>
+      )}
+      <p className="mt-1 text-[11px] leading-tight text-slate-500">
+        La valeur lue est celle de <strong>la période précédente</strong> — l'habitation produit son{" "}
+        {nom} à la fin du tick, la production le lit au tick suivant. À 100 % :{" "}
+        <span className="tabular-nums text-slate-300">
+          {Math.round((quantite * rendementPourIndicateur(triees, 100)) / 100)}
+        </span>{" "}
+        · à 60 % :{" "}
+        <span className="tabular-nums text-slate-300">
+          {Math.round((quantite * rendementPourIndicateur(triees, 60)) / 100)}
+        </span>{" "}
+        · à 0 % :{" "}
+        <span className="tabular-nums text-slate-300">
+          {Math.round((quantite * rendementPourIndicateur(triees, 0)) / 100)}
+        </span>
+        .
+      </p>
     </div>
   );
 }
@@ -735,7 +849,7 @@ function LignesFlux({
                       type="number"
                       min={1}
                       max={100}
-                      step={5}
+                      step={1}
                       className="input h-9 w-16 py-1"
                       value={ligne.part}
                       onChange={(e) =>
