@@ -326,42 +326,6 @@ export function fluxVide(ressource: string): LigneFlux {
  * `cout` = une fois, à la construction. `utilisation` = tant que le bâtiment
  * tourne.
  */
-/** Un palier de rendement : « à partir de `seuil` % d'indicateur, on produit à `rendement` % ». */
-export interface TrancheIndicateur {
-  seuil: number;
-  rendement: number;
-}
-
-/**
- * Le rendement retenu pour une valeur d'indicateur (0 → 1). Écrit **à un seul
- * endroit** pour que l'écran et le jeu ne puissent pas diverger.
- *
- * Aucune tranche = 100 % : une production que rien ne freine.
- * Aucune tranche atteinte = la plus basse s'applique — sinon une satisfaction
- * catastrophique rendrait la production maximale, ce qui est le contraire de
- * l'intention.
- */
-export function rendementPourIndicateur(
-  tranches: TrancheIndicateur[],
-  valeur: number,
-): number {
-  if (tranches.length === 0) return 100;
-  const pourcent = Math.min(100, Math.max(0, valeur * 100));
-  const triees = [...tranches].sort((a, b) => b.seuil - a.seuil);
-  const trouvee = triees.find((t) => pourcent >= t.seuil);
-  return trouvee ? trouvee.rendement : triees[triees.length - 1].rendement;
-}
-
-/** Les tranches remises en ordre, pour l'affichage comme pour l'enregistrement. */
-export function tranchesTriees(tranches: TrancheIndicateur[]): TrancheIndicateur[] {
-  return [...tranches].sort((a, b) => b.seuil - a.seuil);
-}
-
-/** Le haut de la tranche `i` : le seuil de celle du dessus, ou 100. */
-export function hautDeTranche(triees: TrancheIndicateur[], i: number): number {
-  return i === 0 ? 100 : triees[i - 1].seuil;
-}
-
 /**
  * Une ligne de PRODUCTION : ce que la tuile fabrique pendant qu'elle tourne.
  *
@@ -380,14 +344,28 @@ export interface LigneProduction {
   ressource: string;
   quantite: number;
   periode_s: number;
-  /** L'indicateur qui freine cette production. Vide = rien ne la freine. */
-  indicateur: string;
-  /** Le rendement par tranche d'indicateur. Vide = toujours 100 %. */
-  tranches: TrancheIndicateur[];
+  /**
+   * **Rendement de cette ligne**, en pourcentage. `0` = pas d'indice posé, la
+   * ligne produit à plein (dans la limite de ce que ses intrants couvrent).
+   *
+   * ⚠️ **Remplace le 26/08 le système « rendement selon [indicateur] » par
+   * tranches**, retiré le même jour sur demande de l'utilisateur — *« je veux
+   * la même chose pour le produit, le + indice par ligne, et c'est ça le
+   * rendement, on supprime le champ rendement selon »*. Même geste que le
+   * `part` de `LigneFlux` : un champ caché par défaut, ajouté d'un clic sur
+   * **+ indice**, un seul nombre au lieu d'un indicateur à choisir plus une
+   * table de tranches.
+   *
+   * C'est un plafond **fixe**, posé par l'admin, pas une valeur qui varie
+   * toute seule avec la satisfaction du plateau — contrairement à l'ancien
+   * système de tranches. Le modèle où le rendement suit dynamiquement un
+   * indicateur reste noté dans `sysb-satisfaction-v2` si le besoin revient.
+   */
+  rendement: number;
 }
 
 export function productionVide(ressource: string): LigneProduction {
-  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, indicateur: "", tranches: [] };
+  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, rendement: 0 };
 }
 
 export interface Palier {
@@ -519,13 +497,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
-          indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
-          tranches: Array.isArray(l?.tranches)
-            ? l.tranches.map((t) => ({
-                seuil: Math.min(100, Math.max(0, entier(t?.seuil))),
-                rendement: Math.min(100, Math.max(0, entier(t?.rendement))),
-              }))
-            : [],
+          rendement: Math.min(100, Math.max(0, entier(l?.rendement))),
         }))
       : [],
   };
