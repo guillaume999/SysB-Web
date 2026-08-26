@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { messageErreur, pb } from "@/lib/pb";
-import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
+import { loadModeles3D, type Modele3D } from "@/lib/modeles3d";
 import { loadRessources, libelleRessource, type Ressource } from "@/lib/ressources";
 import {
   COLLECTION_TUILES,
@@ -55,7 +55,6 @@ export default function Tuiles() {
     void charger();
   }, [charger]);
 
-  const parId = useMemo(() => new Map(modeles.map((m) => [m.id, m])), [modeles]);
 
   const enregistrer = async (valeurs: ValeursTuile) => {
     if (!dialog) return;
@@ -163,25 +162,26 @@ export default function Tuiles() {
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
                 <th className="w-16 px-3 py-2 font-medium">id</th>
                 <th className="px-3 py-2 font-medium">nom</th>
-                <th className="px-3 py-2 font-medium">modele</th>
+                {/* Les actions viennent juste apres le nom : c'est la colonne
+                    qu'on vise, pas celle qu'on lit. Le modele 3D n'est plus
+                    affiche — il se voit dans le formulaire, onglet Identite. */}
+                <th className="w-40 px-3 py-2" />
                 <th className="w-20 px-3 py-2 font-medium">niveaux</th>
                 <th className="px-3 py-2 font-medium">cout nv.1</th>
                 <th className="px-3 py-2 font-medium">production nv.1</th>
                 <th className="w-24 px-3 py-2 font-medium">regles</th>
-                <th className="w-40 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
               {chargement && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-slate-500">
+                  <td colSpan={7} className="px-3 py-6 text-center text-slate-500">
                     Chargement...
                   </td>
                 </tr>
               )}
               {!chargement &&
                 tuiles.map((tuile) => {
-                  const modele = tuile.expand?.modele ?? parId.get(tuile.modele) ?? null;
                   const niveaux = niveauxDe(tuile);
                   const regles = placementDe(tuile);
                   const logistique = logistiqueDe(tuile);
@@ -223,27 +223,8 @@ export default function Tuiles() {
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        {modele ? (
-                          <span className="font-mono text-[11px] text-slate-400">
-                            {cheminJeu(modele)}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-amber-300">modele introuvable</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-400">{niveaux.length}</td>
-                      <td className="px-3 py-2 text-xs text-slate-400">
-                        {cout || <span className="text-slate-600">gratuit</span>}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-400">
-                        {prod || <span className="text-slate-600">aucune</span>}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-500">
-                        {regles.length === 0 ? "libre" : `${regles.length}`}
-                      </td>
-                      <td className="px-3 py-2 text-right">
                         {confirme ? (
-                          <div className="inline-flex flex-col items-end gap-1">
+                          <div className="inline-flex flex-col items-start gap-1">
                             <span className="text-[11px] leading-tight text-red-300">
                               {citants.length > 0
                                 ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
@@ -283,6 +264,16 @@ export default function Tuiles() {
                             </button>
                           </>
                         )}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-slate-400">{niveaux.length}</td>
+                      <td className="px-3 py-2 text-xs text-slate-400">
+                        {cout || <span className="text-slate-600">gratuit</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-400">
+                        {prod || <span className="text-slate-600">aucune</span>}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-500">
+                        {regles.length === 0 ? "libre" : `${regles.length}`}
                       </td>
                     </tr>
                   );
