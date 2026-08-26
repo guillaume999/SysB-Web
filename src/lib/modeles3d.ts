@@ -94,27 +94,53 @@ export function cheminJeu(modele: Modele3D): string {
 }
 
 /**
- * Prefabs présents dans le projet au 22/08/2026, proposés en autocomplétion.
- * C'est une **aide à la saisie**, pas une contrainte : les champs restent libres,
- * pour ne pas bloquer l'admin quand un prefab est ajouté côté Unity sans que
- * cette liste soit remise à jour.
+ * Prefabs présents dans le projet Unity, proposés en autocomplétion.
+ *
+ * ⚠️ BLOC GÉNÉRÉ — ne pas éditer à la main. Il est réécrit par l'outil d'éditeur
+ * Unity `SySB → Relever les prefabs pour le site`, qui balaie
+ * `Assets/Resources/Prefabs/` et remplace tout ce qui se trouve entre les deux
+ * balises RELEVE_PREFABS. C'est une **aide à la saisie**, pas une contrainte :
+ * les champs du formulaire restent libres, pour ne jamais bloquer l'admin quand
+ * un prefab vient d'être ajouté côté Unity.
  */
+// <<< RELEVE_PREFABS  releve du 2026-08-26  —  genere, ne pas editer a la main
 export const PREFABS_CONNUS: { chemin: string; nom: string }[] = [
   { chemin: "Empire/Earth/Ground", nom: "BEIGE" },
   { chemin: "Empire/Earth/Ground", nom: "BLEU" },
+  { chemin: "Empire/Earth/Ground", nom: "BLEU_PECHEUR" },
+  { chemin: "Empire/Earth/Ground", nom: "Briquerie" },
+  { chemin: "Empire/Earth/Ground", nom: "CENTRE_VILLAGE" },
+  { chemin: "Empire/Earth/Ground", nom: "Distillerie" },
+  { chemin: "Empire/Earth/Ground", nom: "Entrepot_bois" },
   { chemin: "Empire/Earth/Ground", nom: "MOUTON" },
+  { chemin: "Empire/Earth/Ground", nom: "RUCHER" },
+  { chemin: "Empire/Earth/Ground", nom: "STONE_AUTEL" },
   { chemin: "Empire/Earth/Ground", nom: "VERT" },
+  { chemin: "Empire/Earth/Ground", nom: "VERT_ARGILE" },
+  { chemin: "Empire/Earth/Ground", nom: "VERT_BAIES" },
   { chemin: "Empire/Earth/Ground", nom: "VERT_BLE" },
+  { chemin: "Empire/Earth/Ground", nom: "VERT_BUCHERON" },
+  { chemin: "Empire/Earth/Ground", nom: "VERT_CARRIERE" },
   { chemin: "Empire/Earth/Ground", nom: "VERT_FORET" },
   { chemin: "Empire/Earth/Ground", nom: "VERT_MOULIN" },
   { chemin: "Empire/Earth/Ground", nom: "Vert_abattoir" },
   { chemin: "Empire/Earth/Ground", nom: "Vert_bovin" },
   { chemin: "Empire/Earth/Ground", nom: "Vert_volcan" },
+  { chemin: "Empire/Earth/Ground", nom: "habitation_bois1" },
+  { chemin: "Empire/Earth/Ground", nom: "habitation_bois2" },
+  { chemin: "Empire/Earth/Ground/building", nom: "bat_admin01" },
+  { chemin: "Empire/Earth/Ground/building", nom: "bat_admin02" },
+  { chemin: "Empire/Earth/Ground/building", nom: "buildings" },
+  { chemin: "Empire/Earth/Ground/building", nom: "eglise" },
+  { chemin: "Empire/Earth/Ground/building", nom: "habitation_pierre" },
+  { chemin: "Empire/Earth/Ground/building", nom: "hopital" },
   { chemin: "Empire/Earth/Space", nom: "Recup_materiaux4" },
   { chemin: "Empire/Earth/Space", nom: "Space_centre_trie" },
   { chemin: "Empire/Earth/Space", nom: "Space_porte" },
   { chemin: "Empire/Earth/Space", nom: "Tile_transparente_doree" },
 ];
+export const RELEVE_PREFABS_DATE = "2026-08-26";
+// RELEVE_PREFABS >>>
 
 /** Dossiers distincts relevés dans le projet, pour l'autocomplétion du chemin. */
 export const DOSSIERS_CONNUS: string[] = [...new Set(PREFABS_CONNUS.map((p) => p.chemin))];
@@ -151,6 +177,12 @@ export function loadModeles3D(): Promise<Modele3D[]> {
 /**
  * Erreurs de saisie repérables depuis le site, sans ouvrir Unity.
  * On ne bloque jamais la saisie : on signale.
+ *
+ * ⚠️ Le dernier avertissement se compare à `PREFABS_CONNUS`, un RELEVÉ daté du
+ * projet Unity. Il n'y a donc rien à « vérifier » depuis le site : le signal
+ * vieillit tout seul dès qu'un prefab est ajouté côté Unity, et la réponse est
+ * de refaire le relevé — menu `SySB → Relever les prefabs pour le site`, qui
+ * réécrit le bloc balisé ci-dessus.
  */
 export function avertissementsDe(chemin: string, nom: string): string[] {
   const liste: string[] = [];
@@ -166,7 +198,12 @@ export function avertissementsDe(chemin: string, nom: string): string[] {
   if (chemin.trim() !== "" && !typeDepuisChemin(chemin))
     liste.push("Dossier hors des emplacements connus (« …/Ground » ou « …/Space »).");
   if (nom.trim() !== "" && !estPrefabConnu(chemin, nom))
-    liste.push("Ce prefab ne fait pas partie de ceux relevés dans le projet — à vérifier dans Unity.");
+    liste.push(
+      `Ce prefab ne figure pas dans le relevé du projet Unity du ${RELEVE_PREFABS_DATE}. ` +
+        "Rien à valider ici : ou bien le nom est faux, ou bien le prefab a été ajouté " +
+        "depuis, et c'est le relevé qu'il faut refaire — menu Unity « SySB → Relever les " +
+        "prefabs pour le site ».",
+    );
 
   return liste;
 }
