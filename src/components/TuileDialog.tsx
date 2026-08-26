@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import TuileCouts from "@/components/TuileCouts";
 import TuilePlacement from "@/components/TuilePlacement";
 import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
+import type { Ressource } from "@/lib/ressources";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
   contrainteDe,
   couleurAuto,
+  palierVide,
+  paliersDe,
+  paliersPourEnregistrer,
   placementDe,
   placementPourEnregistrer,
   prochainTileId,
   tuilesParModele,
+  type Palier,
   type ReglePlacement,
   type Tuile,
   type TypePlateau,
@@ -20,25 +26,27 @@ import {
 /**
  * Creation / modification d'une tuile du catalogue.
  *
- * ⚠️ **REMISE A ZERO DU 2026-08-26**, puis reconstruction. Les onglets Niveaux
- * et Logistique restent retires, et leurs champs json ont ete vides en base le
- * meme jour — plus rien n'agit en jeu sans ecran pour le montrer. **Placement
- * est revenu**, refait de zero et limite au support pour l'instant.
+ * ⚠️ **REMISE A ZERO DU 2026-08-26**, puis reconstruction. L'onglet Logistique
+ * reste retire, et son champ json a ete vide en base le meme jour — plus rien
+ * n'agit en jeu sans ecran pour le montrer. **Placement** et **Cout** sont
+ * revenus, refaits de zero.
  *
  * Aucun champ ne laisse taper une reference : le modele se choisit dans une
  * liste. C'est ce qui remplace la validation que PocketBase ne fait pas.
  */
-type Onglet = "identite" | "placement";
+type Onglet = "identite" | "placement" | "cout";
 
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: "identite", libelle: "Identite" },
   { cle: "placement", libelle: "Placement" },
+  { cle: "cout", libelle: "Cout" },
 ];
 
 export default function TuileDialog({
   tuile,
   tuiles,
   modeles,
+  ressources,
   saving,
   erreur,
   onCancel,
@@ -47,6 +55,7 @@ export default function TuileDialog({
   tuile: Tuile | null;
   tuiles: Tuile[];
   modeles: Modele3D[];
+  ressources: Ressource[];
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
@@ -79,6 +88,7 @@ export default function TuileDialog({
   const [placement, setPlacement] = useState<ReglePlacement[]>(
     tuile ? placementDe(tuile) : [],
   );
+  const [paliers, setPaliers] = useState<Palier[]>(tuile ? paliersDe(tuile) : [palierVide(1)]);
 
   /**
    * Les deux cases decrivent trois etats qui s'excluent : cocher l'une decoche
@@ -156,8 +166,9 @@ export default function TuileDialog({
       indestructible,
       non_remplacable: nonRemplacable,
       placement: placementPourEnregistrer(placement),
-      // ⚠️ Ni `niveaux` ni `logistique` : une cle absente n'est pas envoyee, donc
-      // ces deux champs restent vides tant que leurs ecrans n'existent pas.
+      niveaux: paliersPourEnregistrer(paliers),
+      // ⚠️ Pas de `logistique` : une cle absente n'est pas envoyee, donc le champ
+      // reste vide tant que son ecran n'existe pas.
     });
   };
 
@@ -506,6 +517,10 @@ export default function TuileDialog({
               tuileCourante={tuile?.id ?? null}
               onChange={setPlacement}
             />
+          )}
+
+          {onglet === "cout" && (
+            <TuileCouts paliers={paliers} ressources={ressources} onChange={setPaliers} />
           )}
         </div>
 

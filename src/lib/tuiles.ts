@@ -1,9 +1,9 @@
 /**
  * Catalogue de tuiles — ce que le joueur peut réellement poser sur un plateau.
  *
- * ⚠️ **REMISE À ZÉRO DU 2026-08-26**, puis reconstruction en cours. Les niveaux
- * (coûts et productions) et le rôle logistique restent retirés du site. Les
- * **règles de pose reviennent une par une** : `support` d'abord — voir plus bas.
+ * ⚠️ **REMISE À ZÉRO DU 2026-08-26**, puis reconstruction en cours. Le rôle
+ * logistique reste retiré du site. Sont revenus : les **règles de pose**
+ * (`support`, `limite`, `gratuite`) et les **paliers de coût** — voir plus bas.
  *
  * Les champs json `placement`, `niveaux` et `logistique` **ont été vidés en base
  * le 2026-08-26** sur les 25 tuiles du catalogue : plus rien ne subsiste, donc
@@ -242,6 +242,147 @@ export function placementPourEnregistrer(regles: ReglePlacement[]): ReglePlaceme
   return regles.map(normaliserRegle);
 }
 
+// --- Coûts : ce qu'une tuile demande, par palier ----------------------------
+
+/**
+ * Reconstruit le 2026-08-26 après la page blanche, sur trois décisions de
+ * l'utilisateur prises le même jour :
+ *
+ * 1. **Les paliers tout de suite**, mais **tout dans un seul onglet « Coût »** —
+ *    pas un onglet par sujet.
+ * 2. **Deux modes de coût seulement.** Le troisième, `requis` (vérifié sans être
+ *    prélevé), est **supprimé** : une seule tuile s'en servait, en doublon d'un
+ *    `mobilisé` identique. Ne pas le réintroduire sans raison neuve.
+ * 3. **La veille rend TOUT ce qui est mobilisé**, sans réglage par ligne. Le
+ *    drapeau `libere_si_inactif` de l'ancien modèle a disparu avec lui.
+ */
+export type ModeCout = "paye" | "mobilise";
+
+export const MODES_COUT: { valeur: ModeCout; libelle: string; aide: string }[] = [
+  { valeur: "paye", libelle: "payé", aide: "prélevé du stock et perdu" },
+  {
+    valeur: "mobilise",
+    libelle: "mobilisé",
+    aide: "retenu tant que le bâtiment vit ; rendu à la destruction ET en veille",
+  },
+];
+
+export interface LigneCout {
+  ressource: string;
+  quantite: number;
+  mode: ModeCout;
+}
+
+/**
+ * Un débit dans le temps. Volontairement `{quantite, periode_s}` et **jamais un
+ * taux décimal** : la progression hors ligne se recalcule en multipliant des
+ * entiers, sans dérive d'arrondi sur douze heures.
+ *
+ * ⚠️ **Garder la MÊME `periode_s` partout** (120 s avait été retenu) : le
+ * ralenti de satisfaction est exact à 1 unité près avec une période commune, à
+ * 3–4 quand elles sont mélangées.
+ */
+export interface LigneFlux {
+  ressource: string;
+  quantite: number;
+  periode_s: number;
+}
+
+/**
+ * Un palier de la tuile. Le champ `niveau` est **explicite en plus** de la
+ * position dans le tableau : un réordonnancement accidentel se voit alors, au
+ * lieu de tout décaler en silence.
+ *
+ * `cout` = une fois, à la construction. `utilisation` = tant que le bâtiment
+ * tourne.
+ */
+export interface Palier {
+  niveau: number;
+  /** À la construction, une fois. */
+  cout: LigneCout[];
+  /** Pendant qu'il tourne. Rien n'est prélevé quand il est en veille. */
+  utilisation: LigneFlux[];
+}
+
+/** Période par défaut d'un flux, en secondes. Voir l'avertissement de `LigneFlux`. */
+export const PERIODE_PAR_DEFAUT = 120;
+
+export function palierVide(numero: number): Palier {
+  return { niveau: numero, cout: [], utilisation: [] };
+}
+
+/**
+ * ⚠️ **La règle de veille, écrite à un seul endroit.** Mettre un bâtiment en
+ * veille (`EtatCase.actif = false`) :
+ *
+ * - **rend tout ce qu'il mobilise** — les ouvriers d'abord ;
+ * - **arrête sa consommation** : plus rien de son `utilisation` n'est prélevé ;
+ * - **arrête sa production**.
+ *
+ * Ce qui a été **payé** ne revient jamais, ni en veille ni à la destruction.
+ *
+ * C'est le joueur qui décide, et lui seul : la pénurie fait **ralentir** au
+ * prorata (voir la satisfaction), elle n'éteint rien. Un problème, un
+ * mécanisme.
+ */
+export function rendEnVeille(p: Palier): LigneCout[] {
+  return p.cout.filter((l) => l.mode === "mobilise");
+}
+
+/** Vrai si mettre cette tuile en veille change quelque chose. */
+export function peutSeMettreEnVeille(paliers: Palier[]): boolean {
+  return paliers.some((p) => rendEnVeille(p).length > 0 || p.utilisation.length > 0);
+}
+
+export function paliersDe(tuile: { niveaux?: unknown }): Palier[] {
+  const bruts = Array.isArray(tuile.niveaux) ? tuile.niveaux : [];
+  if (bruts.length === 0) return [palierVide(1)];
+  return bruts.map((n, i) => normaliserPalier(n, i + 1));
+}
+
+export function normaliserPalier(n: unknown, position: number): Palier {
+  const o = (n ?? {}) as Partial<Palier>;
+  const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
+  return {
+    niveau: entier(o.niveau) || position,
+    cout: Array.isArray(o.cout)
+      ? o.cout.map((l) => ({
+          ressource: typeof l?.ressource === "string" ? l.ressource : "",
+          quantite: Math.max(0, entier(l?.quantite)),
+          mode: l?.mode === "mobilise" ? "mobilise" : "paye",
+        }))
+      : [],
+    utilisation: Array.isArray(o.utilisation)
+      ? o.utilisation.map((l) => ({
+          ressource: typeof l?.ressource === "string" ? l.ressource : "",
+          quantite: Math.max(0, entier(l?.quantite)),
+          periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
+        }))
+      : [],
+  };
+}
+
+/**
+ * Renumérotation de sécurité avant l'envoi : la position dans le tableau et le
+ * champ `niveau` restent d'accord. Les lignes sans ressource sont écartées —
+ * le jeu les ignorerait, autant ne pas laisser croire qu'elles agissent.
+ */
+export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
+  return paliers.map((p, i) => ({
+    niveau: i + 1,
+    cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
+    utilisation: p.utilisation.filter((l) => l.ressource !== "" && l.quantite > 0),
+  }));
+}
+
+/** Résumé d'une durée en secondes, pour l'affichage. */
+export function formatDuree(secondes: number): string {
+  if (!secondes) return "immédiat";
+  if (secondes < 60) return `${secondes} s`;
+  if (secondes < 3600) return `${Math.round(secondes / 60)} min`;
+  return `${(secondes / 3600).toFixed(1).replace(".0", "")} h`;
+}
+
 // --- Le record --------------------------------------------------------------
 
 export type Tuile = {
@@ -282,10 +423,12 @@ export type Tuile = {
   non_remplacable: boolean;
   /** Les règles de pose. Reconstruites depuis le 26/08 — voir `ReglePlacement`. */
   placement: ReglePlacement[] | null;
+  /** Les paliers de coût. Reconstruits depuis le 26/08 — voir `Palier`. */
+  niveaux: Palier[] | null;
   /*
-   * ⚠️ `niveaux` et `logistique` existent encore comme colonnes json sur la
-   * collection, mais ils sont VIDES et ce type ne les declare pas. Les
-   * redeclarer, c'est se redonner le droit de les lire a moitie.
+   * ⚠️ `logistique` existe encore comme colonne json sur la collection, mais
+   * elle est VIDE et ce type ne la declare pas. La redeclarer, c'est se
+   * redonner le droit de la lire a moitie.
    */
   created: string;
   updated: string;
@@ -295,10 +438,10 @@ export type Tuile = {
 /**
  * Ce que le formulaire renvoie — l'identite, et rien d'autre.
  *
- * ⚠️ `niveaux` et `logistique` n'y sont **volontairement pas** : une cle absente
- * n'est pas envoyee a PocketBase. Le jour ou on reconstruira ces sections, les
- * rajouter ici est ce qui les rendra ecrivables — pas avant. `placement` y est
- * revenu le 26/08, quand l'onglet a ete refait.
+ * ⚠️ `logistique` n'y est **volontairement pas** : une cle absente n'est pas
+ * envoyee a PocketBase, donc le champ reste vide tant que son ecran n'existe
+ * pas. `placement` et `niveaux` y sont revenus le 26/08, quand leurs onglets
+ * ont ete refaits.
  */
 export interface ValeursTuile {
   tileId: number;
@@ -313,6 +456,7 @@ export interface ValeursTuile {
   indestructible: boolean;
   non_remplacable: boolean;
   placement: ReglePlacement[];
+  niveaux: Palier[];
 }
 
 // --- Destruction -------------------------------------------------------------

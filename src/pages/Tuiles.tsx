@@ -3,11 +3,14 @@ import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { messageErreur, pb } from "@/lib/pb";
 import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
+import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
 import {
   COLLECTION_TUILES,
   contrainteDe,
   couleurDe,
+  formatDuree,
   loadTuiles,
+  paliersDe,
   placementDe,
   tuilesCitant,
   type Tuile,
@@ -35,6 +38,26 @@ interface ColonneAuChoix {
 interface ContexteColonne {
   tuile: Tuile;
   modele: Modele3D | null;
+  ressources: Ressource[];
+}
+
+/** Le palier 1 resume en une ligne : ce qu'on paie, ce qu'on mobilise. */
+function resumePalier1(ctx: ContexteColonne) {
+  const p = paliersDe(ctx.tuile)[0];
+  const cout = p.cout
+    .map(
+      (l) =>
+        `${l.quantite} ${libelleRessource(ctx.ressources, l.ressource)}` +
+        (l.mode === "mobilise" ? " (mobilisé)" : ""),
+    )
+    .join(", ");
+  const conso = p.utilisation
+    .map(
+      (l) =>
+        `${l.quantite} ${libelleRessource(ctx.ressources, l.ressource)}/${formatDuree(l.periode_s)}`,
+    )
+    .join(", ");
+  return { cout, conso };
 }
 
 const RIEN = <span className="text-slate-600">—</span>;
@@ -80,6 +103,27 @@ const COLONNES: ColonneAuChoix[] = [
     etroite: true,
     rendu: ({ tuile }) => tuile.typeOfPlateau || RIEN,
     valeur: ({ tuile }) => tuile.typeOfPlateau ?? "",
+  },
+  {
+    cle: "paliers",
+    libelle: "paliers",
+    etroite: true,
+    rendu: ({ tuile }) => (
+      <span className="tabular-nums text-slate-400">{paliersDe(tuile).length}</span>
+    ),
+    valeur: ({ tuile }) => paliersDe(tuile).length,
+  },
+  {
+    cle: "cout",
+    libelle: "cout nv.1",
+    rendu: (ctx) => resumePalier1(ctx).cout || <span className="text-slate-600">gratuit</span>,
+    valeur: (ctx) => resumePalier1(ctx).cout,
+  },
+  {
+    cle: "utilisation",
+    libelle: "consommation nv.1",
+    rendu: (ctx) => resumePalier1(ctx).conso || <span className="text-slate-600">aucune</span>,
+    valeur: (ctx) => resumePalier1(ctx).conso,
   },
   {
     cle: "regles",
@@ -157,6 +201,7 @@ function ecrirePref(cle: string, valeur: string) {
 export default function Tuiles() {
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [modeles, setModeles] = useState<Modele3D[]>([]);
+  const [ressources, setRessources] = useState<Ressource[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -203,8 +248,9 @@ export default function Tuiles() {
     (tuile: Tuile): ContexteColonne => ({
       tuile,
       modele: tuile.expand?.modele ?? parId.get(tuile.modele) ?? null,
+      ressources,
     }),
-    [parId],
+    [parId, ressources],
   );
 
   /**
@@ -300,9 +346,10 @@ export default function Tuiles() {
     setChargement(true);
     setErreur(null);
     try {
-      const [t, m] = await Promise.all([loadTuiles(), loadModeles3D()]);
+      const [t, m, r] = await Promise.all([loadTuiles(), loadModeles3D(), loadRessources()]);
       setTuiles(t);
       setModeles(m);
+      setRessources(r);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
@@ -404,6 +451,16 @@ export default function Tuiles() {
       {erreur && (
         <p className="mb-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
           {erreur}
+        </p>
+      )}
+
+      {!chargement && ressources.length === 0 && (
+        <p className="mb-4 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
+          Aucune ressource declaree :{" "}
+          <Link to="/ressources" className="underline">
+            commence par l'onglet Ressources
+          </Link>
+          , sinon l'onglet Cout n'aura rien a proposer.
         </p>
       )}
 
@@ -606,6 +663,7 @@ export default function Tuiles() {
           tuile={dialog.tuile}
           tuiles={tuiles}
           modeles={modeles}
+          ressources={ressources}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}
