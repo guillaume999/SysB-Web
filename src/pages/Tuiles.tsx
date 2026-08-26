@@ -8,6 +8,8 @@ import {
   contrainteDe,
   couleurDe,
   loadTuiles,
+  placementDe,
+  tuilesCitant,
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
@@ -80,6 +82,16 @@ const COLONNES: ColonneAuChoix[] = [
     valeur: ({ tuile }) => tuile.typeOfPlateau ?? "",
   },
   {
+    cle: "regles",
+    libelle: "regles de pose",
+    etroite: true,
+    rendu: ({ tuile }) => {
+      const n = placementDe(tuile).length;
+      return n === 0 ? <span className="text-slate-600">libre</span> : `${n}`;
+    },
+    valeur: ({ tuile }) => placementDe(tuile).length,
+  },
+  {
     cle: "contrainte",
     libelle: "destruction",
     etroite: true,
@@ -134,10 +146,13 @@ function ecrirePref(cle: string, valeur: string) {
  * Le catalogue de jeu : ce que le joueur peut reellement poser.
  *
  * Le tableau ne montre que TROIS colonnes : le nom, les actions, et **une
- * colonne au choix** (selecteur en haut). Le detail complet vit dans la fenetre
- * d'edition — une tuile represente quatre listes et autant de niveaux, ce qui
- * ne tient de toute facon pas dans un tableau. Mieux vaut une colonne qu'on
- * choisit que sept qu'on subit.
+ * colonne au choix** (selecteur en haut). Mieux vaut une colonne qu'on choisit
+ * que sept qu'on subit.
+ *
+ * ⚠️ Depuis la remise a zero du 2026-08-26, une tuile ne porte plus que son
+ * identite : les colonnes cout, production, regles de pose, niveaux et role
+ * logistique ont ete retirees en meme temps que les ecrans qui les
+ * remplissaient.
  */
 export default function Tuiles() {
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
@@ -309,8 +324,10 @@ export default function Tuiles() {
             <Link to="/3dmodeltuile" className="text-accent hover:underline">
               3DmodelTuile
             </Link>{" "}
-            plus les regles du jeu qui vont avec : cout, conditions de deploiement, production par
-            niveau, role logistique. Le meme modele peut servir a autant de tuiles que necessaire.
+            plus son identite de jeu : nom, categorie, couleur, comportement a la destruction. Le
+            meme modele peut servir a autant de tuiles que necessaire. Les regles de pose, les
+            niveaux et le role logistique sont en cours de refonte : ils ne se saisissent nulle
+            part pour l'instant.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -423,6 +440,7 @@ export default function Tuiles() {
               {!chargement &&
                 tuilesTriees.map((tuile) => {
                   const confirme = aSupprimer === tuile.id;
+                  const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
                   return (
                     <tr
                       key={tuile.id}
@@ -442,7 +460,9 @@ export default function Tuiles() {
                         {confirme ? (
                           <div className="inline-flex flex-col items-start gap-1">
                             <span className="text-[11px] leading-tight text-red-300">
-                              Cet id ne sera jamais reattribue.
+                              {citants.length > 0
+                                ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
+                                : "Cet id ne sera jamais reattribue."}
                             </span>
                             <span>
                               <button

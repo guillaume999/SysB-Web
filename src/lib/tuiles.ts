@@ -1,9 +1,9 @@
 /**
  * Catalogue de tuiles — ce que le joueur peut réellement poser sur un plateau.
  *
- * ⚠️ **REMISE À ZÉRO DU 2026-08-26.** Ce fichier ne décrit plus que l'IDENTITÉ
- * d'une tuile. Les règles de pose, les niveaux (coûts et productions) et le rôle
- * logistique ont été retirés du site pour être reconstruits de zéro.
+ * ⚠️ **REMISE À ZÉRO DU 2026-08-26**, puis reconstruction en cours. Les niveaux
+ * (coûts et productions) et le rôle logistique restent retirés du site. Les
+ * **règles de pose reviennent une par une** : `support` d'abord — voir plus bas.
  *
  * Les champs json `placement`, `niveaux` et `logistique` **ont été vidés en base
  * le 2026-08-26** sur les 25 tuiles du catalogue : plus rien ne subsiste, donc
@@ -38,6 +38,118 @@ export const COLLECTION_TUILES = "tuiles";
  */
 export const TILE_ID_MIN = 1;
 export const TILE_ID_MAX = 255;
+
+// --- Placement : les règles de pose ----------------------------------------
+
+/**
+ * Reconstruit le 2026-08-26, à partir d'une page blanche. **Un seul type de
+ * règle pour l'instant : `support`.** Les autres (voisinage, limite…) sont
+ * ajoutés au fur et à mesure — le tableau `placement` les accueillera sans rien
+ * casser, puisque chaque règle porte son champ `regle`.
+ *
+ * Toutes les règles d'une tuile doivent être vraies en même temps : ET simple.
+ */
+export type TypeRegle = "support";
+
+export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[] = [
+  { valeur: "support", libelle: "support", aide: "ce que la case elle-même doit porter" },
+];
+
+/**
+ * ⚠️ **La case vide est une valeur comme une autre : `0`.** C'est la convention
+ * de `tilesBase64`, et elle se coche dans les listes au même titre qu'une tuile.
+ *
+ * Avant la remise à zéro, les zéros étaient écartés à la lecture — des deux
+ * côtés — ce qui rendait « se construit seulement sur une case vide »
+ * inexprimable. Ne jamais refiltrer les `0` d'une liste de tuiles citées.
+ */
+export const CASE_VIDE = 0;
+
+/**
+ * Comment la règle `support` décide.
+ *
+ * - `liste` : la case doit porter **l'une** des tuiles cochées. Le reste est
+ *   refusé — une liste blanche contient déjà son « sauf ».
+ * - `tout` : n'importe quelle case convient, **sauf** celles cochées dans
+ *   `sauf`. C'est le seul cas où une exception a un sens.
+ *
+ * Les deux listes ne sont donc jamais utiles en même temps, et l'écran n'en
+ * montre qu'une : celle qui correspond à la base choisie.
+ */
+export type BaseSupport = "liste" | "tout";
+
+export interface ReglePlacement {
+  regle: TypeRegle;
+  base: BaseSupport;
+  /** `base: "liste"` — les tuiles autorisées. `0` = la case vide. */
+  tileIds: number[];
+  /** `base: "tout"` — les tuiles interdites. `0` = la case vide. */
+  sauf: number[];
+}
+
+export function regleVide(regle: TypeRegle): ReglePlacement {
+  return { regle, base: "liste", tileIds: [], sauf: [] };
+}
+
+/**
+ * Un champ json jamais renseigné revient `null` de PocketBase, et un objet
+ * ancien peut manquer une clé ajoutée depuis. On normalise à la lecture pour
+ * que le reste du code n'ait jamais à se demander si une liste existe.
+ */
+export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
+  const liste = (v: unknown) =>
+    Array.isArray(v) ? Array.from(new Set(v.filter((n) => typeof n === "number"))).sort((a, b) => a - b) : [];
+  return {
+    regle: "support",
+    base: r.base === "tout" ? "tout" : "liste",
+    tileIds: liste(r.tileIds),
+    sauf: liste(r.sauf),
+  };
+}
+
+/**
+ * Vrai si la règle dit réellement quelque chose. Une règle inutile est
+ * **ignorée en jeu, pas bloquante** — et signalée en orange sur le site, avec
+ * le même mot des deux côtés : « ignorée ».
+ *
+ * Une liste blanche vide interdirait tout, partout : c'est une saisie inachevée,
+ * pas une règle de jeu. Une base « tout » sans exception n'interdit rien.
+ */
+export function regleUtile(r: ReglePlacement): boolean {
+  return r.base === "liste" ? r.tileIds.length > 0 : r.sauf.length > 0;
+}
+
+/**
+ * La règle relue en français. C'est là qu'une saisie malheureuse se voit — pas
+ * dans le formulaire. La même phrase doit exister côté Unity, dans le message
+ * de refus montré au joueur.
+ */
+export function decrireRegle(r: ReglePlacement, nomDe: (tileId: number) => string): string {
+  const enumerer = (ids: number[], liaison: string) =>
+    ids.map((id) => `« ${nomDe(id)} »`).join(` ${liaison} `);
+  if (r.base === "liste") {
+    if (r.tileIds.length === 0) return "Aucune tuile cochée — cette règle sera ignorée en jeu.";
+    return `Se pose seulement sur ${enumerer(r.tileIds, "ou")}.`;
+  }
+  if (r.sauf.length === 0) return "Aucune exception — cette règle n'interdit rien, elle sera ignorée en jeu.";
+  return `Se pose n'importe où, sauf sur ${enumerer(r.sauf, "ni")}.`;
+}
+
+export function placementDe(tuile: { placement?: unknown }): ReglePlacement[] {
+  const brutes = Array.isArray(tuile.placement) ? tuile.placement : [];
+  return brutes
+    .filter((r): r is Partial<ReglePlacement> => !!r && typeof r === "object")
+    .map(normaliserRegle);
+}
+
+/**
+ * Ce qui part en base. Les règles inutiles sont gardées telles quelles : les
+ * jeter à l'enregistrement ferait disparaître sous les yeux de l'admin une
+ * ligne qu'il était en train de remplir.
+ */
+export function placementPourEnregistrer(regles: ReglePlacement[]): ReglePlacement[] {
+  return regles.map(normaliserRegle);
+}
 
 // --- Le record --------------------------------------------------------------
 
@@ -77,10 +189,12 @@ export type Tuile = {
    * remplacables sans migration.
    */
   non_remplacable: boolean;
+  /** Les règles de pose. Reconstruites depuis le 26/08 — voir `ReglePlacement`. */
+  placement: ReglePlacement[] | null;
   /*
-   * ⚠️ `placement`, `niveaux` et `logistique` existent encore comme colonnes
-   * json sur la collection, mais ils sont VIDES et ce type ne les declare plus.
-   * Les redeclarer, c'est se redonner le droit de les lire a moitie.
+   * ⚠️ `niveaux` et `logistique` existent encore comme colonnes json sur la
+   * collection, mais ils sont VIDES et ce type ne les declare pas. Les
+   * redeclarer, c'est se redonner le droit de les lire a moitie.
    */
   created: string;
   updated: string;
@@ -90,9 +204,10 @@ export type Tuile = {
 /**
  * Ce que le formulaire renvoie — l'identite, et rien d'autre.
  *
- * ⚠️ `placement`, `niveaux` et `logistique` n'y sont **volontairement pas** :
- * une cle absente n'est pas envoyee a PocketBase. Le jour ou on reconstruira
- * ces sections, les rajouter ici est ce qui les rendra ecrivables — pas avant.
+ * ⚠️ `niveaux` et `logistique` n'y sont **volontairement pas** : une cle absente
+ * n'est pas envoyee a PocketBase. Le jour ou on reconstruira ces sections, les
+ * rajouter ici est ce qui les rendra ecrivables — pas avant. `placement` y est
+ * revenu le 26/08, quand l'onglet a ete refait.
  */
 export interface ValeursTuile {
   tileId: number;
@@ -106,6 +221,7 @@ export interface ValeursTuile {
   tileId_apres_destruction: number;
   indestructible: boolean;
   non_remplacable: boolean;
+  placement: ReglePlacement[];
 }
 
 // --- Destruction -------------------------------------------------------------
@@ -160,6 +276,17 @@ export function tuilesParModele(tuiles: Tuile[]): Map<string, Tuile[]> {
  */
 export function casesCouvertes(rayon: number): number {
   return 3 * rayon * (rayon + 1);
+}
+
+/**
+ * Tuiles dont une règle de placement cite `tileId`, dans un sens ou dans
+ * l'autre. Sert de garde-fou : supprimer une tuile référencée casserait ces
+ * règles en silence.
+ */
+export function tuilesCitant(tuiles: Tuile[], tileId: number): Tuile[] {
+  return tuiles.filter((t) =>
+    placementDe(t).some((r) => r.tileIds.includes(tileId) || r.sauf.includes(tileId)),
+  );
 }
 
 // --- Couleurs ---------------------------------------------------------------

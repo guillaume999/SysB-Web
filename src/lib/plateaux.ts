@@ -69,8 +69,8 @@ export const MODES_GRATUITE: { valeur: ModeGratuite; libelle: string; aide: stri
     libelle: "filet + plafond",
     aide:
       "Comme le filet, plus un maximum : au-delà de M exemplaires, la pose est carrément " +
-      "interdite. (Un plafond seul, sans gratuité, se dit déjà avec la règle de placement " +
-      "« limite » sur la tuile.)",
+      "interdite. (Un plafond seul, sans gratuité se disait avec la règle de placement " +
+      "« limite » sur la tuile — retirée le 26/08, en attente de refonte.)",
   },
   {
     valeur: "cadeau",

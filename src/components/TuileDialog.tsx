@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import TuilePlacement from "@/components/TuilePlacement";
 import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
   contrainteDe,
   couleurAuto,
+  placementDe,
+  placementPourEnregistrer,
   prochainTileId,
   tuilesParModele,
+  type ReglePlacement,
   type Tuile,
   type TypePlateau,
   type ValeursTuile,
@@ -16,14 +20,21 @@ import {
 /**
  * Creation / modification d'une tuile du catalogue.
  *
- * ⚠️ **REMISE A ZERO DU 2026-08-26** : ce formulaire ne porte plus que
- * l'IDENTITE. Les onglets Placement, Niveaux et Logistique ont ete retires pour
- * etre reconstruits de zero, et les champs json correspondants ont ete vides en
- * base le meme jour — plus rien n'agit en jeu sans ecran pour le montrer.
+ * ⚠️ **REMISE A ZERO DU 2026-08-26**, puis reconstruction. Les onglets Niveaux
+ * et Logistique restent retires, et leurs champs json ont ete vides en base le
+ * meme jour — plus rien n'agit en jeu sans ecran pour le montrer. **Placement
+ * est revenu**, refait de zero et limite au support pour l'instant.
  *
  * Aucun champ ne laisse taper une reference : le modele se choisit dans une
  * liste. C'est ce qui remplace la validation que PocketBase ne fait pas.
  */
+type Onglet = "identite" | "placement";
+
+const ONGLETS: { cle: Onglet; libelle: string }[] = [
+  { cle: "identite", libelle: "Identite" },
+  { cle: "placement", libelle: "Placement" },
+];
+
 export default function TuileDialog({
   tuile,
   tuiles,
@@ -42,6 +53,7 @@ export default function TuileDialog({
   onSubmit: (valeurs: ValeursTuile) => void;
 }) {
   const enEdition = tuile !== null;
+  const [onglet, setOnglet] = useState<Onglet>("identite");
 
   const [tileId, setTileId] = useState<string>(
     String(tuile?.tileId ?? prochainTileId(tuiles) ?? TILE_ID_MIN),
@@ -64,6 +76,9 @@ export default function TuileDialog({
   );
   const [indestructible, setIndestructible] = useState(tuile?.indestructible ?? false);
   const [nonRemplacable, setNonRemplacable] = useState(tuile?.non_remplacable ?? false);
+  const [placement, setPlacement] = useState<ReglePlacement[]>(
+    tuile ? placementDe(tuile) : [],
+  );
 
   /**
    * Les deux cases decrivent trois etats qui s'excluent : cocher l'une decoche
@@ -140,8 +155,9 @@ export default function TuileDialog({
       tileId_apres_destruction: Number(apresDestruction) || 0,
       indestructible,
       non_remplacable: nonRemplacable,
-      // ⚠️ Ni `placement`, ni `niveaux`, ni `logistique` : une cle absente n'est
-      // pas envoyee, donc ce que la tuile porte encore reste intact.
+      placement: placementPourEnregistrer(placement),
+      // ⚠️ Ni `niveaux` ni `logistique` : une cle absente n'est pas envoyee, donc
+      // ces deux champs restent vides tant que leurs ecrans n'existent pas.
     });
   };
 
@@ -158,7 +174,23 @@ export default function TuileDialog({
           </label>
         </div>
 
-        <div className="mt-4">
+        <div className="mt-4 flex overflow-hidden rounded-md border border-edge">
+          {ONGLETS.map((o) => (
+            <button
+              key={o.cle}
+              type="button"
+              onClick={() => setOnglet(o.cle)}
+              className={`flex-1 px-3 py-1.5 text-xs transition-colors ${
+                onglet === o.cle ? "bg-accent/20 text-white" : "text-slate-400 hover:bg-ink"
+              }`}
+            >
+              {o.libelle}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 min-h-[18rem]">
+          {onglet === "identite" && (
             <div className="space-y-4">
               <Aide titre="A quoi servent ces champs">
                 <Terme nom="tileId">
@@ -465,6 +497,16 @@ export default function TuileDialog({
                 />
               </div>
             </div>
+          )}
+
+          {onglet === "placement" && (
+            <TuilePlacement
+              regles={placement}
+              tuiles={tuiles}
+              tuileCourante={tuile?.id ?? null}
+              onChange={setPlacement}
+            />
+          )}
         </div>
 
         {conflit && (
