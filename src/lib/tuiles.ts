@@ -293,10 +293,29 @@ export interface LigneFlux {
   ressource: string;
   quantite: number;
   periode_s: number;
+  /**
+   * **Part de satisfaction couverte par cette consommation**, en pourcentage.
+   * `0` = consommation ordinaire, elle ne produit pas de satisfaction.
+   *
+   * Modèle de l'utilisateur, avec ses chiffres (26/08) :
+   * *« je consomme 20 nourriture / 120 s = 100 % satisfaction ; si ça ne
+   * consomme que 15 car pas assez de stock : satisfaction à 75 %. Plus on
+   * ajoute d'autres consommations : je consomme 10 de pierre / 120 s =
+   * satisfaction +10 % »*.
+   *
+   * Donc, ligne par ligne : `part × (reçu / demandé)`, et on additionne.
+   * 15 nourriture sur 20 demandées, part 100 % → **75 %**.
+   * En ajoutant 10 pierre servies à plein, part 10 % → 75 + 10 = **85 %**.
+   *
+   * ⚠️ Ce champ avait été posé puis retiré le 26/08 (il encombrait l'onglet
+   * Coût). Il est revenu le même jour, l'utilisateur ayant redonné le modèle
+   * avec ses chiffres. **Ne pas le re-retirer sans le remplacer.**
+   */
+  part: number;
 }
 
 export function fluxVide(ressource: string): LigneFlux {
-  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT };
+  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT, part: 0 };
 }
 
 /**
@@ -307,6 +326,70 @@ export function fluxVide(ressource: string): LigneFlux {
  * `cout` = une fois, à la construction. `utilisation` = tant que le bâtiment
  * tourne.
  */
+/** Un palier de rendement : « à partir de `seuil` % d'indicateur, on produit à `rendement` % ». */
+export interface TrancheIndicateur {
+  seuil: number;
+  rendement: number;
+}
+
+/**
+ * Le rendement retenu pour une valeur d'indicateur (0 → 1). Écrit **à un seul
+ * endroit** pour que l'écran et le jeu ne puissent pas diverger.
+ *
+ * Aucune tranche = 100 % : une production que rien ne freine.
+ * Aucune tranche atteinte = la plus basse s'applique — sinon une satisfaction
+ * catastrophique rendrait la production maximale, ce qui est le contraire de
+ * l'intention.
+ */
+export function rendementPourIndicateur(
+  tranches: TrancheIndicateur[],
+  valeur: number,
+): number {
+  if (tranches.length === 0) return 100;
+  const pourcent = Math.min(100, Math.max(0, valeur * 100));
+  const triees = [...tranches].sort((a, b) => b.seuil - a.seuil);
+  const trouvee = triees.find((t) => pourcent >= t.seuil);
+  return trouvee ? trouvee.rendement : triees[triees.length - 1].rendement;
+}
+
+/** Les tranches remises en ordre, pour l'affichage comme pour l'enregistrement. */
+export function tranchesTriees(tranches: TrancheIndicateur[]): TrancheIndicateur[] {
+  return [...tranches].sort((a, b) => b.seuil - a.seuil);
+}
+
+/** Le haut de la tranche `i` : le seuil de celle du dessus, ou 100. */
+export function hautDeTranche(triees: TrancheIndicateur[], i: number): number {
+  return i === 0 ? 100 : triees[i - 1].seuil;
+}
+
+/**
+ * Une ligne de PRODUCTION : ce que la tuile fabrique pendant qu'elle tourne.
+ *
+ * ⚠️ Déplacée ici depuis l'onglet Stock & appro le 26/08, sur la remarque de
+ * l'utilisateur : *« du coup tu peux même rentrer la production, en fait, avec
+ * le choix d'une ressource quelconque »*. Sa place est à côté des
+ * consommations : c'est ce que le bâtiment **fait** pendant qu'il tourne.
+ * Stock & appro ne garde que ce qui **bouge** — le stockage, la récolte,
+ * l'envoi.
+ *
+ * ⚠️ **Un producteur ne livre pas.** Il fabrique dans son propre coffre, et
+ * c'est le preneur qui vient — avec sa règle « je récolte » et SON rayon. Une
+ * ligne de production n'a donc ni cible ni rayon.
+ */
+export interface LigneProduction {
+  ressource: string;
+  quantite: number;
+  periode_s: number;
+  /** L'indicateur qui freine cette production. Vide = rien ne la freine. */
+  indicateur: string;
+  /** Le rendement par tranche d'indicateur. Vide = toujours 100 %. */
+  tranches: TrancheIndicateur[];
+}
+
+export function productionVide(ressource: string): LigneProduction {
+  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, indicateur: "", tranches: [] };
+}
+
 export interface Palier {
   niveau: number;
   /**
@@ -329,6 +412,8 @@ export interface Palier {
   cout: LigneCout[];
   /** Ce qu'il consomme pendant qu'il tourne. Rien n'est prélevé en veille. */
   utilisation: LigneFlux[];
+  /** Ce qu'il fabrique pendant qu'il tourne. Rien n'est produit en veille. */
+  production: LigneProduction[];
 }
 
 /*
@@ -347,6 +432,11 @@ export interface Palier {
  * satisfaction → production → nourriture → satisfaction est mortelle.
  */
 
+/** Somme des parts de satisfaction d'un palier. Devrait faire 100 sur une habitation. */
+export function totalParts(p: Palier): number {
+  return p.utilisation.reduce((n, l) => n + Math.max(0, l.part), 0);
+}
+
 /** Ce qui est payé une fois, à la construction. */
 export function coutConstruction(p: Palier): LigneCout[] {
   return p.cout.filter((l) => l.mode === "paye");
@@ -361,7 +451,7 @@ export function chantierPasEncoreApplique(p: Palier): boolean {
 export const PERIODE_PAR_DEFAUT = 120;
 
 export function palierVide(numero: number): Palier {
-  return { niveau: numero, duree_construction_s: 0, cout: [], utilisation: [] };
+  return { niveau: numero, duree_construction_s: 0, cout: [], utilisation: [], production: [] };
 }
 
 /**
@@ -421,6 +511,21 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
+          part: Math.min(100, Math.max(0, entier(l?.part))),
+        }))
+      : [],
+    production: Array.isArray(o.production)
+      ? o.production.map((l) => ({
+          ressource: typeof l?.ressource === "string" ? l.ressource : "",
+          quantite: Math.max(0, entier(l?.quantite)),
+          periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
+          indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
+          tranches: Array.isArray(l?.tranches)
+            ? l.tranches.map((t) => ({
+                seuil: Math.min(100, Math.max(0, entier(t?.seuil))),
+                rendement: Math.min(100, Math.max(0, entier(t?.rendement))),
+              }))
+            : [],
         }))
       : [],
   };
@@ -437,6 +542,7 @@ export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
     duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
     cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
     utilisation: p.utilisation.filter((l) => l.ressource !== "" && l.quantite > 0),
+    production: p.production.filter((l) => l.ressource !== ""),
   }));
 }
 
@@ -469,21 +575,27 @@ export function formatDuree(secondes: number): string {
  * Le rôle a disparu : il se déduit des règles. Une tuile qui n'a que des règles
  * `entrant` est un consommateur ; une tuile qui a les deux est un entrepôt.
  */
-export type SensAppro = "entrant" | "sortant";
+export type SensAppro = "entrant" | "envoi";
 
 /**
- * ⚠️ Les libellés ont changé le 26/08 : « je reçois de » / « je fournis » sont
- * devenus **« je prends » / « je produis »**, mot de l'utilisateur. Les valeurs
- * stockées, elles, restent `entrant` / `sortant` — renommer les données pour
- * suivre un libellé d'écran ne vaut jamais la migration qu'elle coûte.
+ * ⚠️ **TROIS cas, pas deux** — précisé par l'utilisateur le 26/08 :
+ *
+ * - **`entrant` — « je récolte »** : cette tuile va chercher. Elle a un **rayon
+ *   de récolte**, des navettes, et la liste de ce qu'elle peut prendre. (Mot de
+ *   l'utilisateur ; il va mieux avec « rayon de récolte » que « je prends ».)
+ * - **`envoi` — « j'envoie »** : cette tuile livre chez les autres. Elle a un
+ *   **rayon d'envoi**. *« J'ai besoin d'envoi, seulement pour l'entrepôt qui va
+ *   envoyer du bovin à l'abattoir. »* C'est le seul cas où quelque chose part
+ *   de soi-même.
+ *
+ * ⚠️ **Il y a eu un troisième sens, `produit`, retiré le 26/08** : la
+ * production a déménagé dans l'onglet Coût, à côté des consommations. Cet
+ * onglet ne garde que ce qui **bouge**. Les anciennes règles `produit` (et leur
+ * ancêtre `sortant`) sont **écartées à la lecture**.
  */
 export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] = [
-  { valeur: "entrant", libelle: "je prends", aide: "la ressource vient jusqu'ici" },
-  {
-    valeur: "sortant",
-    libelle: "je produis",
-    aide: "la tuile fabrique la ressource, et la rend disponible dans son rayon",
-  },
+  { valeur: "entrant", libelle: "je récolte", aide: "cette tuile va chercher ailleurs" },
+  { valeur: "envoi", libelle: "j'envoie", aide: "cette tuile livre chez les autres" },
 ];
 
 /**
@@ -516,6 +628,22 @@ export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] 
 export const FORMULE_PRODUCTION =
   "débit déclaré × couverture des intrants × satisfaction du plateau";
 
+/**
+ * ⚠️ **L'ORDRE DES PASSES**, posé par l'utilisateur le 26/08 :
+ * *« l'entrepôt doit passer APRÈS l'abattoir pour la récolte des bovins »*.
+ *
+ * Autrement dit : **les consommateurs directs se servent avant les
+ * collecteurs**. Sans cette règle, l'entrepôt aspirerait tous les bovins du pré
+ * avant que l'abattoir ait pu en prendre, et l'abattoir tomberait en panne à
+ * côté d'un champ plein.
+ *
+ * C'est une règle de MOTEUR, elle ne se saisit nulle part. Et c'est exactement
+ * la famille de bugs qui a déjà tué deux versions d'`Acheminement.cs` — voir
+ * `sysb-resolution-hors-ligne`. À rejouer en Python avant de l'écrire en C#.
+ */
+export const ORDRE_DES_PASSES =
+  "consommateurs directs, puis collecteurs, puis livraisons des entrepôts";
+
 /** Qui est en face. `tout` = n'importe quelle tuile à portée qui a / veut la ressource. */
 export type CibleAppro = "tout" | "tuiles";
 
@@ -530,12 +658,26 @@ export interface RegleAppro {
   /** `cible: "tuiles"` — avec qui, précisément. */
   tileIds: number[];
   /**
-   * Le **rayon de récolte** (`entrant`) ou d'**envoi** (`sortant`), en distance
-   * hexagonale. ⚠️ `null` = **tout le plateau**. Jamais `0` pour ça : zéro a
-   * déjà le sens légitime de « la case elle-même ».
+   * Le **rayon de récolte** (`entrant`) ou de **récupération** (`sortant`), en
+   * distance hexagonale.
+   *
+   * ⚠️ Remarque de l'utilisateur le 26/08, et elle est juste : *« rayon de
+   * récupération ? parce qu'on envoie rien là, et seulement les entrepôts vont
+   * envoyer »*. Un producteur ne livre pas — il rend sa production
+   * **disponible**, et c'est le preneur qui se déplace. Le mot « envoi » ne
+   * vaut que pour un entrepôt, qui a justement les deux règles.
+   *
+   * ⚠️ `null` = **tout le plateau**. Jamais `0` pour ça : zéro a déjà le sens
+   * légitime de « la case elle-même ».
    */
   rayon: number | null;
-  /** ⚠️ **Liste vide = toutes les ressources.** Sinon, seulement celles-ci. */
+  /**
+   * ⚠️ **Liste vide = toutes les ressources.** Sinon, seulement celles-ci.
+   *
+   * ⚠️ Pour `produit`, c'est **une seule ressource** : une quantité attachée à
+   * plusieurs ressources serait ambiguë — 10 de chaque, ou 10 en tout ? Une
+   * ligne par ressource produite, et la question ne se pose pas.
+   */
   ressources: string[];
   /**
    * Le débit, écrit en **navettes** : `navettes` trajets par `periode_s`,
@@ -551,27 +693,6 @@ export interface RegleAppro {
    * le débit avec elle ; surtout pas introduire du déplacement réel.
    */
   debit: { navettes: number; quantite: number; periode_s: number };
-  /**
-   * `sortant` seulement : **la satisfaction du plateau s'applique-t-elle à
-   * cette production ?**
-   *
-   * Demandé par l'utilisateur le 26/08 — *« et on choisit si la satisfaction
-   * entre en compte ou non »*. Coché (le défaut), la production est multipliée
-   * par la satisfaction ; décoché, elle n'en dépend pas.
-   *
-   * ⚠️ **C'est le garde-fou contre la spirale, réduit à une case à cocher.**
-   * Décoche-la sur les fermes et elles continuent de nourrir même quand tout va
-   * mal ; laisse-la sur l'industrie et elle tousse avec le reste. Sans au moins
-   * une production insensible quelque part, la boucle
-   * `satisfaction → production → nourriture → satisfaction` s'effondre toute
-   * seule pendant que le joueur dort, et il ne peut plus rien reconstruire
-   * puisque construire coûte ce qu'il ne produit plus.
-   *
-   * C'est la version simple du `plancher_efficacite` en pourcentage, conçu puis
-   * retiré le même jour — voir [[sysb-satisfaction-v2]]. Un booléen suffit tant
-   * qu'on n'a pas besoin d'un « à moitié soumis ».
-   */
-  soumis_satisfaction: boolean;
 }
 
 /** Le débit réel d'une règle : navettes × quantité, par période. */
@@ -579,17 +700,19 @@ export function debitParPeriode(r: RegleAppro): number {
   return Math.max(0, r.debit.navettes) * Math.max(0, r.debit.quantite);
 }
 
+
+
 export function regleApproVide(sens: SensAppro): RegleAppro {
   return {
     sens,
     cible: "tout",
     tileIds: [],
-    // Recevoir suppose d'aller chercher, donc une portee ; fournir se fait a
-    // l'echelle du plateau, comme un entrepot qui dessert tout le monde.
+    // Aller chercher suppose une portee courte ; livrer se fait a l'echelle du
+    // plateau, comme un entrepot qui dessert tout le monde. « Je produis » n'a
+    // pas de rayon du tout — la valeur est la, inutilisee.
     rayon: sens === "entrant" ? 3 : null,
     ressources: [],
     debit: { navettes: 1, quantite: 10, periode_s: PERIODE_PAR_DEFAUT },
-    soumis_satisfaction: true,
   };
 }
 
@@ -674,7 +797,15 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
       : [],
     appros: Array.isArray(l.appros)
       ? l.appros.map((r) => ({
-          sens: r?.sens === "sortant" ? ("sortant" as const) : ("entrant" as const),
+          // ⚠️ `sortant` est l'ancien nom de `produit` (avant la scission du
+          // 26/08 en trois sens). Relu, jamais reecrit — d'ou le passage par
+          // `string` : le type n'a plus cette valeur, les donnees si.
+          sens: ((brut) =>
+            brut === "envoi"
+              ? ("envoi" as const)
+              : brut === "produit" || brut === "sortant"
+                ? ("perime" as unknown as SensAppro)
+                : ("entrant" as const))((r as { sens?: string })?.sens),
           cible: r?.cible === "tuiles" ? ("tuiles" as const) : ("tout" as const),
           tileIds: Array.isArray(r?.tileIds)
             ? Array.from(new Set(r.tileIds.filter((n: unknown) => typeof n === "number")))
@@ -686,10 +817,10 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
             quantite: Math.max(0, entier(r?.debit?.quantite)),
             periode_s: Math.max(1, entier(r?.debit?.periode_s) || PERIODE_PAR_DEFAUT),
           },
-          // Absent = soumis : le defaut doit etre le cas ordinaire, pas
-          // l'exception. Une regle ancienne relue reste donc soumise.
-          soumis_satisfaction: r?.soumis_satisfaction !== false,
         }))
+          // ⚠️ Les anciennes regles « produit » / « sortant » sont ecartees :
+          // la production a demenage dans l'onglet Cout le 26/08.
+          .filter((r) => r.sens === "entrant" || r.sens === "envoi")
       : [],
   };
 }
@@ -739,14 +870,15 @@ export function decrireAppro(
     `${debitParPeriode(r)} par ${formatDuree(r.debit.periode_s)}`;
   return r.sens === "entrant"
     ? `Prend ${quoi} chez ${qui} ${ou} — ${combien}.`
-    : `Produit ${quoi} pour ${qui} ${ou} — ${combien}.`;
+    : `Envoie ${quoi} vers ${qui} ${ou} — ${combien}.`;
 }
 
-/** Une tuile qui reçoit ET fournit : c'est ce qu'on appelle un entrepôt. */
+/**
+ * Une tuile qui **va chercher** ET qui **livre** : c'est un entrepôt. Produire
+ * ne suffit pas — une ferme produit, elle n'est pas un entrepôt.
+ */
 export function estEntrepot(l: Logistique): boolean {
-  return (
-    l.appros.some((r) => r.sens === "entrant") && l.appros.some((r) => r.sens === "sortant")
-  );
+  return l.appros.some((r) => r.sens === "entrant") && l.appros.some((r) => r.sens === "envoi");
 }
 
 // --- Le record --------------------------------------------------------------

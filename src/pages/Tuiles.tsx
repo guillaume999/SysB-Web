@@ -136,8 +136,8 @@ const COLONNES: ColonneAuChoix[] = [
       const bouts: string[] = [];
       if (estEntrepot(l)) bouts.push("entrepôt");
       else {
-        if (l.appros.some((r) => r.sens === "entrant")) bouts.push("reçoit");
-        if (l.appros.some((r) => r.sens === "sortant")) bouts.push("fournit");
+        if (l.appros.some((r) => r.sens === "entrant")) bouts.push("récolte");
+        if (l.appros.some((r) => r.sens === "envoi")) bouts.push("envoie");
       }
       if (l.stockage.length > 0)
         bouts.push(`stock ${l.stockage.reduce((n, x) => n + Math.max(0, x.max), 0)}`);

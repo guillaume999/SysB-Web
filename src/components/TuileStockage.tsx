@@ -304,35 +304,41 @@ export default function TuileStockage({
         <div className="flex items-baseline justify-between gap-2">
           <p className="label mb-0">Approvisionnement</p>
           <span className="flex gap-3">
-            <button
-              type="button"
-              className="text-xs text-accent hover:underline"
-              onClick={() => onChange({ ...logistique, appros: [...appros, regleApproVide("entrant")] })}
-            >
-              + je prends
-            </button>
-            <button
-              type="button"
-              className="text-xs text-accent hover:underline"
-              onClick={() => onChange({ ...logistique, appros: [...appros, regleApproVide("sortant")] })}
-            >
-              + je produis
-            </button>
+            {(["entrant", "envoi"] as const).map((sens) => (
+              <button
+                key={sens}
+                type="button"
+                className="text-xs text-accent hover:underline"
+                onClick={() =>
+                  onChange({ ...logistique, appros: [...appros, regleApproVide(sens)] })
+                }
+              >
+                + {SENS_APPRO.find((x) => x.valeur === sens)?.libelle}
+              </button>
+            ))}
           </span>
         </div>
         <p className="mt-0.5 text-[11px] text-slate-500">
-          Ce que la tuile prend ailleurs, ce qu'elle produit pour les autres. Les deux peuvent
-          coexister — c'est ce qui fait un entrepôt.
+          Ce qu'elle va chercher, ce qu'elle fabrique, ce qu'elle livre. Prendre et envoyer à la
+          fois, c'est ce qui fait un entrepôt.
         </p>
 
         <Aide titre="Les deux sens, le rayon, les navettes">
-          <Terme nom="je prends">
-            La ressource <strong>vient jusqu'ici</strong>. Le rayon est un{" "}
-            <strong>rayon de récolte</strong> : jusqu'où cette tuile va chercher.
+          <Terme nom="je récolte">
+            Cette tuile <strong>va chercher</strong> ailleurs. Son <strong>rayon de récolte</strong>{" "}
+            dit jusqu'où elle se déplace, et sa liste dit ce qu'elle peut prendre.
           </Terme>
           <Terme nom="je produis">
-            La ressource <strong>part d'ici</strong>. Le rayon est un{" "}
-            <strong>rayon d'envoi</strong> : jusqu'où cette tuile dessert.
+            Cette tuile <strong>fabrique</strong>. <strong>Ni cible, ni rayon</strong> : n'importe
+            qui peut venir s'y servir, s'il a la portée et le besoin. C'est le{" "}
+            <strong>preneur</strong> qui décide de sa zone, pas le producteur — sinon il faudrait
+            accorder deux rayons pour chaque paire, et personne ne saurait lequel bloque.
+          </Terme>
+          <Terme nom="j'envoie">
+            Cette tuile <strong>livre</strong> chez les autres, dans son{" "}
+            <strong>rayon d'envoi</strong>. C'est le seul cas où quelque chose part de soi-même, et
+            en pratique c'est <strong>l'entrepôt</strong> : celui qui apporte les bovins à
+            l'abattoir.
           </Terme>
           <Terme nom="combien on produit vraiment">
             Le débit d'une règle « je produis » est <strong>ce que la tuile fabrique</strong> — et
@@ -347,25 +353,38 @@ export default function TuileStockage({
             ⚠️ Et sans sa main-d'œuvre, un bâtiment ne produit <strong>rien du tout</strong>,
             quelle que soit la couverture.
           </Terme>
-          <Terme nom="la satisfaction s'applique ou non">
-            Une case à cocher, sur chaque règle « je produis ». Cochée, la production est
-            multipliée par la satisfaction du plateau ; décochée, elle n'en dépend pas.
-            <br />
-            ⚠️ <strong>C'est le garde-fou contre la spirale.</strong> Décoche-la sur les fermes et
-            elles continuent de nourrir même quand tout va mal ; laisse-la sur l'industrie et elle
-            tousse avec le reste. Sans au moins une production insensible quelque part, la boucle
-            satisfaction → production → nourriture → satisfaction s'effondre toute seule pendant
-            que le joueur dort — et il ne peut plus rien reconstruire, puisque construire coûte ce
-            qu'il ne produit plus.
+          <Terme nom="produire un indicateur">
+            Une <strong>habitation</strong> produit la satisfaction : choisis-la comme ressource
+            produite, et il n'y a <strong>rien d'autre à saisir</strong>. Sa valeur se{" "}
+            <strong>calcule</strong> à partir de ce que l'habitation arrive réellement à
+            consommer — bien nourrie, elle la produit à 100 % ; à moitié servie, à 50 %.
           </Terme>
-          <Terme nom="produire sans livrer">
-            Mets le <strong>rayon à 0</strong> : la tuile produit chez elle et ne dessert
-            personne — c'est l'entrepôt qui viendra ramasser la récolte avec sa propre règle
-            « je prends ». Rayon 0 veut dire « la case elle-même », pas « aucune portée ».
+          <Terme nom="freinée par">
+            L'autre bout de la chaîne : une production ordinaire déclare{" "}
+            <strong>quel indicateur la freine, et à quel point</strong>.
+            <br />
+            <code>facteur = 1 − impact% × (1 − indicateur)</code>
+            <br />
+            À 100 % d'impact et 60 % de satisfaction, la ferme produit à 60 %. À 80 % d'impact,
+            elle produit à 68 %. À 0 %, elle produit à plein quoi qu'il arrive. La phrase sous
+            chaque règle te montre le calcul sur tes vrais chiffres.
+            <br />
+            ⚠️ <strong>C'est le garde-fou contre la spirale.</strong> Mets 0 sur les fermes et
+            elles continuent de nourrir même quand tout va mal. Sans au moins une production
+            insensible quelque part, la boucle satisfaction → production → nourriture →
+            satisfaction s'effondre toute seule pendant que le joueur dort — et il ne peut plus
+            rien reconstruire, puisque construire coûte ce qu'il ne produit plus.
+          </Terme>
+          <Terme nom="qui passe en premier">
+            ⚠️ Les <strong>consommateurs directs se servent avant les entrepôts</strong>. Sans ça,
+            l'entrepôt aspirerait tous les bovins du pré avant que l'abattoir ait pu en prendre, et
+            l'abattoir tomberait en panne à côté d'un champ plein.
+            <br />
+            Rien à régler ici : c'est une règle du jeu, pas un champ.
           </Terme>
           <Terme nom="entrepôt">
             Il n'y a pas de case « c'est un entrepôt » : une tuile qui a une règle{" "}
-            <em>je prends</em> <strong>et</strong> une règle <em>je produis</em> en est un. Le rôle
+            <em>je récolte</em> <strong>et</strong> une règle <em>j'envoie</em> en est un. Le rôle
             se déduit au lieu de se déclarer, donc il ne peut pas contredire les règles.
           </Terme>
           <Terme nom="navettes">
@@ -411,39 +430,41 @@ export default function TuileStockage({
                       ))}
                     </select>
 
-                    <select
-                      className="input h-9 w-48 py-1"
-                      value={regle.cible}
-                      onChange={(e) => majAppro(i, { cible: e.target.value as CibleAppro })}
-                    >
-                      {CIBLES_APPRO.map((c) => (
-                        <option key={c.valeur} value={c.valeur}>
-                          {c.libelle}
-                        </option>
-                      ))}
-                    </select>
+                        <select
+                          className="input h-9 w-48 py-1"
+                          value={regle.cible}
+                          onChange={(e) => majAppro(i, { cible: e.target.value as CibleAppro })}
+                        >
+                          {CIBLES_APPRO.map((c) => (
+                            <option key={c.valeur} value={c.valeur}>
+                              {c.libelle}
+                            </option>
+                          ))}
+                        </select>
 
-                    {/* rayon null = tout le plateau. Zero reste la case elle-meme. */}
-                    <label className="flex items-center gap-1 text-xs text-slate-500">
-                      {regle.sens === "entrant" ? "rayon de récolte" : "rayon d'envoi"}
-                      <input
-                        type="number"
-                        min={0}
-                        step={1}
-                        disabled={regle.rayon === null}
-                        className="input h-9 w-16 py-1 disabled:opacity-40"
-                        value={regle.rayon ?? 0}
-                        onChange={(e) => majAppro(i, { rayon: Math.max(0, Number(e.target.value) || 0) })}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1 text-xs text-slate-400">
-                      <input
-                        type="checkbox"
-                        checked={regle.rayon === null}
-                        onChange={(e) => majAppro(i, { rayon: e.target.checked ? null : 3 })}
-                      />
-                      tout le plateau
-                    </label>
+                        {/* rayon null = tout le plateau. Zero reste la case elle-meme. */}
+                        <label className="flex items-center gap-1 text-xs text-slate-500">
+                          {regle.sens === "entrant" ? "rayon de récolte" : "rayon d'envoi"}
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            disabled={regle.rayon === null}
+                            className="input h-9 w-16 py-1 disabled:opacity-40"
+                            value={regle.rayon ?? 0}
+                            onChange={(e) =>
+                              majAppro(i, { rayon: Math.max(0, Number(e.target.value) || 0) })
+                            }
+                          />
+                        </label>
+                        <label className="flex items-center gap-1 text-xs text-slate-400">
+                          <input
+                            type="checkbox"
+                            checked={regle.rayon === null}
+                            onChange={(e) => majAppro(i, { rayon: e.target.checked ? null : 3 })}
+                          />
+                          tout le plateau
+                        </label>
 
                     <button
                       type="button"
@@ -456,7 +477,8 @@ export default function TuileStockage({
                     </button>
                   </div>
 
-                  {/* Les navettes : N x Q par periode. */}
+                  {/* Les navettes : N x Q par periode. Pas pour un indicateur :
+                      sa valeur n'est pas un debit, elle se calcule. */}
                   <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-slate-500">
                     <input
                       type="number"
@@ -470,7 +492,7 @@ export default function TuileStockage({
                         })
                       }
                     />
-                    {regle.sens === "entrant" ? "navette(s) de" : "navette(s) portant"}
+                    navette(s) de
                     <input
                       type="number"
                       min={0}
@@ -498,26 +520,14 @@ export default function TuileStockage({
                     />
                     s — soit{" "}
                     <span className="tabular-nums text-slate-300">{debitParPeriode(regle)}</span>{" "}
-                    {regle.sens === "entrant" ? "ramassés" : "produits"} par période
+                    {regle.sens === "entrant" ? "ramassés" : "livrés"} par période
                   </div>
 
                   {/* Le garde-fou contre la spirale, reduit a une case a cocher. */}
-                  {regle.sens === "sortant" && (
-                    <label className="mt-1 flex cursor-pointer items-center gap-2 text-xs text-slate-400">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 accent-accent"
-                        checked={regle.soumis_satisfaction}
-                        onChange={(e) => majAppro(i, { soumis_satisfaction: e.target.checked })}
-                      />
-                      la satisfaction du plateau s'applique à cette production
-                    </label>
-                  )}
-
                   {regle.cible === "tuiles" && (
                     <div className="mt-2">
                       <p className="mb-1 text-[11px] text-slate-500">
-                        {regle.sens === "entrant" ? "Prend chez :" : "Produit pour :"}
+                        {regle.sens === "entrant" ? "Récolte chez :" : "Envoie vers :"}
                       </p>
                       <ChoixTuiles
                         tuiles={citables}
@@ -552,30 +562,6 @@ export default function TuileStockage({
                       : decrireAppro(regle, nomTuile, nomRessource)}
                   </p>
 
-                  {/* ⚠️ Le chiffre saisi est un PLAFOND, pas une garantie. Le
-                      dire ici, sous la regle, evite de croire qu'un batiment
-                      mal approvisionne produira quand meme son maximum. */}
-                  {!inutile && regle.sens === "sortant" && (
-                    <p className="mt-1 text-[11px] leading-tight text-slate-500">
-                      C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
-                      <span className="text-slate-300">la couverture de ses intrants</span>
-                      {regle.soumis_satisfaction ? (
-                        <>
-                          {" "}× <span className="text-slate-300">la satisfaction du plateau</span>
-                        </>
-                      ) : (
-                        <>
-                          {" "}
-                          — <span className="text-accent">insensible à la satisfaction</span>, elle
-                          produit à plein même quand le plateau va mal
-                        </>
-                      )}
-                      . Et sans sa main-d'œuvre, elle est nulle.
-                      {regle.rayon === 0 && (
-                        <> Rayon 0 : elle produit chez elle, on vient l'y chercher.</>
-                      )}
-                    </p>
-                  )}
                 </div>
               );
             })}
@@ -584,7 +570,7 @@ export default function TuileStockage({
 
         {estEntrepot(logistique) && (
           <p className="mt-2 rounded border border-accent/40 bg-accent/10 p-2 text-[11px] text-accent">
-            Cette tuile prend <strong>et</strong> produit : c'est un entrepôt. Rien à cocher de
+            Cette tuile récolte <strong>et</strong> envoie : c'est un entrepôt. Rien à cocher de
             plus — le rôle se déduit de ses règles.
           </p>
         )}
