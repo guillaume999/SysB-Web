@@ -75,7 +75,13 @@ export default function TuileDialog({
   const [categorie, setCategorie] = useState(tuile?.categorie ?? "");
   const [description, setDescription] = useState(tuile?.description ?? "");
   const [couleur, setCouleur] = useState(tuile?.couleur ?? "");
-  const [actif, setActif] = useState(tuile?.actif ?? false);
+  // ⚠️ `?? true` et non `?? false` : le `??` ne se declenche que sur une tuile
+  //    ABSENTE, donc a la CREATION. Une tuile existante garde toujours son
+  //    propre `actif`, y compris `false` — decocher puis rouvrir doit rendre la
+  //    case decochee. Demande de l'utilisateur le 26/08 : une tuile qu'on vient
+  //    de saisir est faite pour servir, la laisser en brouillon obligeait a
+  //    cocher a chaque fois et se voyait seulement en jeu, par un plateau vide.
+  const [actif, setActif] = useState(tuile?.actif ?? true);
   const [apresDestruction, setApresDestruction] = useState<string>(
     String(tuile?.tileId_apres_destruction ?? 0),
   );
