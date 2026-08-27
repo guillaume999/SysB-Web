@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import { Vignette } from "@/components/Vignette";
 import { messageErreur, pb } from "@/lib/pb";
 import {
   COLLECTION_RESSOURCES,
@@ -226,7 +227,12 @@ export default function Ressources() {
                         </span>
                       </td>
                       <td className="px-3 py-2 font-mono text-[11px] text-slate-500">
-                        {r.chemin_icone?.trim() || <span className="text-slate-600">a venir</span>}
+                        <span className="flex items-center gap-2">
+                          <Vignette chemin={r.chemin_icone} alt="" taille={24} />
+                          {r.chemin_icone?.trim() || (
+                            <span className="text-slate-600">a venir</span>
+                          )}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-right">
                         {confirme ? (
@@ -402,19 +408,25 @@ function RessourceDialog({
           <Terme nom="genre, stock">
             S'accumule et se depense : bois, pierre, or, viande. Le cas courant.
           </Terme>
-          <Terme nom="genre, flux">
-            N'existe qu'en debit et ne s'accumule pas : energie, eau courante. Un bilan, pas un
-            coffre.
-          </Terme>
           <Terme nom="genre, mobilise">
             S'occupe et se rend, au lieu de se depenser : c'est ce qui permet a un batiment
-            d'occuper 6 habitants et de les rendre quand on l'eteint ou qu'on le detruit. La
-            population est le premier cas, mais le genre decrit le MECANISME, pas le sujet.
+            d'occuper 6 habitants — ou 20 d'electricite — et de les rendre quand on l'eteint ou
+            qu'on le detruit. La population est le premier cas, mais le genre decrit le MECANISME,
+            pas le sujet : depuis le 27/08 l'eau, la vapeur, l'electricite, l'energie et la foi
+            sont de ce genre. Une centrale DECLARE des places, une usine en OCCUPE.
             <br />
             ⚠️ Une ressource de ce genre ne se produit pas et ne voyage pas : elle se declare en
             PLACES, dans le tableau de stockage d'une tuile. Une tuile qui stocke 12 population
             loge 12 habitants, presents des la pose. C'est pour ca qu'elle n'est proposee ni dans
             la liste « produit » d'un palier, ni dans les regles d'approvisionnement.
+          </Terme>
+          <Terme nom="genre, indicateur">
+            Calcule par le jeu, jamais stocke ni transporte : la satisfaction en est le cas. Elle
+            garde son nom, son icone et sa place dans la barre des ressources, mais elle ne
+            s'accumule dans aucun coffre et ne monte dans aucune navette.
+            <br />
+            ⚠️ Comme le genre mobilise, il n'est propose ni dans la liste
+            « produit » d'un palier, ni dans les regles d'approvisionnement.
           </Terme>
           <Terme nom="ordre d'affichage">
             L'ordre des listes, ici et dans les formulaires de tuiles. Laisse des trous (10, 20,

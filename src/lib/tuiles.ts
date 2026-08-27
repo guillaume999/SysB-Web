@@ -1019,6 +1019,17 @@ export type Tuile = {
   collectionName: string;
   tileId: number;
   nom: string;
+  /**
+   * Le code de la tuile dans l'arbre techno (`SysB/arbre/arbre_sysb.json`) —
+   * `cabane_bois`, `four_briques`… **C'est la seule jointure entre le catalogue
+   * jouable et le document de conception**, et elle n'existait pas avant le 27/08 :
+   * on rapprochait les deux par le `nom`, qui est en fait celui du modele 3D.
+   *
+   * ⚠️ Il ne sert PAS a charger le prefab : ca, c'est la relation `modele` vers
+   * `tuile3dmodel` (voir `cheminJeu`). Vide est permis — les cases de terrain
+   * (eau, foret, volcan) n'ont pas d'entree dans l'arbre.
+   */
+  code: string;
   /** Id du record `tuile3dmodel`. */
   modele: string;
   typeOfPlateau: TypePlateau;
@@ -1071,6 +1082,7 @@ export type Tuile = {
 export interface ValeursTuile {
   tileId: number;
   nom: string;
+  code: string;
   modele: string;
   typeOfPlateau: TypePlateau;
   categorie: string;
@@ -1163,6 +1175,25 @@ export function tuilesCitant(tuiles: Tuile[], tileId: number): Tuile[] {
  * qu'accepte `<input type="color">`, qui doit pouvoir afficher la couleur
  * effective d'une tuile meme quand le catalogue ne dit rien.
  */
+/**
+ * Le chemin de la vignette du batiment, dans la convention de `Resources.Load`
+ * cote Unity : **`Icones_Tuiles/<code>`**, sans extension et sans
+ * `Assets/Resources/`.
+ *
+ * ⚠️ **Il n'est PAS stocke en base** — il se DEDUIT du `code`, parce qu'il en a
+ * toujours ete la simple traduction. Un champ `chemin_icone` a existe sur les
+ * tuiles le 27/08, quelques heures : deux colonnes qui disent toujours la meme
+ * chose finissent par se contredire. Les `ressources`, elles, gardent le leur —
+ * leur code precede l'arbre.
+ *
+ * Chaine vide si la tuile n'a pas de code : les cases de terrain (eau, foret,
+ * volcan) n'ont pas d'entree dans l'arbre, donc pas de dessin.
+ */
+export function cheminIcone(tuile: { code?: string }): string {
+  const c = (tuile.code ?? "").trim();
+  return c ? `Icones_Tuiles/${c}` : "";
+}
+
 export function couleurAuto(tileId: number): string {
   return hslVersHex((tileId * 137.508) % 360, 0.55, 0.45);
 }

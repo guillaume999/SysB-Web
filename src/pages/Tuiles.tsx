@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
+import { Vignette } from "@/components/Vignette";
 import { messageErreur, pb } from "@/lib/pb";
 import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
 import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
 import {
   COLLECTION_TUILES,
+  cheminIcone,
   contrainteDe,
   couleurDe,
   estCommun,
@@ -82,6 +84,13 @@ const COLONNES: ColonneAuChoix[] = [
       </span>
     ),
     valeur: ({ tuile }) => tuile.tileId,
+  },
+  {
+    cle: "code",
+    libelle: "code de l'arbre",
+    rendu: ({ tuile }) =>
+      tuile.code ? <span className="font-mono text-xs text-slate-300">{tuile.code}</span> : RIEN,
+    valeur: ({ tuile }) => tuile.code ?? "",
   },
   {
     cle: "categorie",
@@ -627,7 +636,12 @@ export default function Tuiles() {
                       className="border-b border-edge/60 align-top last:border-0 hover:bg-ink/40"
                     >
                       <td className="px-3 py-2">
-                        <span className={tuile.actif ? "text-slate-200" : "text-slate-500"}>
+                        <Vignette chemin={cheminIcone(tuile)} alt="" taille={24} />
+                        <span
+                          className={`ml-2 align-middle ${
+                            tuile.actif ? "text-slate-200" : "text-slate-500"
+                          }`}
+                        >
                           {tuile.nom}
                         </span>
                         {!tuile.actif && (

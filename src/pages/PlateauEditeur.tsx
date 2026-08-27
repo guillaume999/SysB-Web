@@ -208,9 +208,9 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   };
 
   /**
-   * Seules les ressources de genre `stock` s'entreposent. Un `flux` n'existe
-   * qu'en debit et une `population` se mobilise : les proposer ici laisserait
-   * saisir une dotation que le jeu ne saurait pas depenser.
+   * Seules les ressources de genre `stock` s'entreposent. Un `mobilise` se
+   * declare en PLACES et un `indicateur` se calcule : les proposer ici
+   * laisserait saisir une dotation que le jeu ne saurait pas depenser.
    */
   const ressourcesStockables = useMemo(
     () =>

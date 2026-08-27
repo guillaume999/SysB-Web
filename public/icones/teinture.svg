@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SysB — icône de ressource « Teinture » (teinture), provisoire. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="128" height="128" role="img" aria-label="Teinture"><title>Teinture</title><path d="M9 3 h6 v3.5 l3 4.5 v7 a2 2 0 0 1 -2 2 H8 a2 2 0 0 1 -2 -2 v-7 l3 -4.5 Z" fill="#9fc4cf" opacity=".7"/><path d="M6 13 h12 v6 a2 2 0 0 1 -2 2 H8 a2 2 0 0 1 -2 -2 Z" fill="#7a3f8c"/><circle cx="12" cy="12.6" r="1.7" fill="#7a3f8c"/></svg>

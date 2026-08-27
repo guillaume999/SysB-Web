@@ -3,11 +3,13 @@ import Aide, { Terme } from "@/components/Aide";
 import TuileCouts from "@/components/TuileCouts";
 import TuilePlacement from "@/components/TuilePlacement";
 import TuileStockage from "@/components/TuileStockage";
+import { Vignette } from "@/components/Vignette";
 import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
 import type { Ressource } from "@/lib/ressources";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
+  cheminIcone,
   contrainteDe,
   couleurAuto,
   logistiqueDe,
@@ -77,6 +79,7 @@ export default function TuileDialog({
   const [categorie, setCategorie] = useState(tuile?.categorie ?? "");
   const [description, setDescription] = useState(tuile?.description ?? "");
   const [couleur, setCouleur] = useState(tuile?.couleur ?? "");
+  const [code, setCode] = useState(tuile?.code ?? "");
   // ⚠️ `?? true` et non `?? false` : le `??` ne se declenche que sur une tuile
   //    ABSENTE, donc a la CREATION. Une tuile existante garde toujours son
   //    propre `actif`, y compris `false` — decocher puis rouvrir doit rendre la
@@ -150,6 +153,9 @@ export default function TuileDialog({
 
   // Le selecteur de couleur exige toujours un #rrggbb : quand le catalogue ne dit
   // rien, il montre la couleur automatique, celle que l'editeur utiliserait.
+  // La vignette n'est pas un champ : elle se lit du code, ici comme dans la liste.
+  const cheminDeduit = cheminIcone({ code: code.trim() });
+
   const couleurEffective =
     couleur || couleurAuto(Number.isFinite(idNumerique) ? idNumerique : 0);
 
@@ -161,6 +167,7 @@ export default function TuileDialog({
     onSubmit({
       tileId: idNumerique,
       nom: nom.trim(),
+      code: code.trim(),
       modele,
       typeOfPlateau: type,
       categorie: categorie.trim(),
@@ -238,6 +245,19 @@ export default function TuileDialog({
                   &laquo; automatique &raquo; et une teinte stable est deduite du tileId ; regle-la
                   pour rendre lisibles les tuiles que tu peins le plus souvent.
                 </Terme>
+                <Terme nom="code de l'arbre">
+                  Le code de la tuile dans l'arbre techno — la seule jointure entre ce catalogue
+                  et le document de conception. Le <b>nom</b> ne peut pas jouer ce role : c'est
+                  celui du modele 3D. Le code ne sert pas non plus a trouver le prefab, qui vient
+                  de la relation <b>modele 3D</b>. Vide est permis pour une case de terrain.
+                </Terme>
+                <Terme nom="vignette">
+                  Le dessin du batiment dans le menu de construction. Il ne se saisit pas : il
+                  DECOULE du code, sous la forme
+                  <code className="mx-1 text-slate-300">Icones_Tuiles/&lt;code&gt;</code> — le
+                  chemin que lit <code className="mx-1 text-slate-300">Resources.Load</code> cote
+                  Unity. Le site montre le meme dessin, en SVG.
+                </Terme>
                 <Terme nom="active">
                   Tant que ce n'est pas coche, la tuile est un brouillon : elle existe en base mais
                   n'est pas proposee aux joueurs. Utile pour preparer une tuile en plusieurs fois.
@@ -274,6 +294,19 @@ export default function TuileDialog({
                     placeholder="Abattoir"
                     autoFocus
                     required
+                  />
+                </div>
+
+                <div>
+                  <label className="label" htmlFor="tuile-code">
+                    Code de l'arbre
+                  </label>
+                  <input
+                    id="tuile-code"
+                    className="input font-mono text-xs"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="cabane_bois"
                   />
                 </div>
 
@@ -415,6 +448,22 @@ export default function TuileDialog({
                 <p className="mt-1 text-xs text-slate-500">
                   Seulement pour l'editeur de plateaux du site : en jeu, c'est le prefab 3D qui est
                   affiche.
+                </p>
+              </div>
+
+              {/* La vignette ne se saisit pas : elle DECOULE du code. Rien a stocker. */}
+              <div>
+                <p className="label">Vignette</p>
+                <div className="flex items-center gap-3">
+                  <Vignette chemin={cheminDeduit} alt="" taille={44} />
+                  <code className="text-xs text-slate-400">
+                    {cheminDeduit || "aucune — cette tuile n'a pas de code"}
+                  </code>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Deduite du code : <code>Icones_Tuiles/&lt;code&gt;</code>, le chemin que lit
+                  <code className="mx-1">Resources.Load</code>. Rien a saisir — change le code et
+                  le dessin suit. Le carre pointille veut dire qu'aucun fichier ne porte ce nom.
                 </p>
               </div>
 

@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SysB — icône de ressource « Canne à sucre » (canne), provisoire. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="128" height="128" role="img" aria-label="Canne à sucre"><title>Canne à sucre</title><g stroke="#3e7a49" stroke-width="2.2" stroke-linecap="round"><path d="M8 21 V7"/><path d="M12 21 V5"/><path d="M16 21 V8"/></g><g stroke="#63a06d" stroke-width="1.1"><path d="M8 17 h-3 M12 15 h3.4 M16 18 h3"/></g><g fill="#e0bb63"><circle cx="8" cy="6.4" r="1.5"/><circle cx="12" cy="4.4" r="1.5"/><circle cx="16" cy="7.4" r="1.5"/></g></svg>
