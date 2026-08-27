@@ -23,6 +23,8 @@ import {
   ligneEntretienVide,
   loadTechnologies,
   MODES_EFFET,
+  prerequisDeclaresAilleurs,
+  prerequisEffectifs,
   SANS_CATEGORIE,
   tileIdsDe,
   valeursAvecBatiment,
@@ -240,6 +242,7 @@ export default function Technologies() {
                           key={t.id}
                           techno={t}
                           tuiles={tuiles}
+                          toutes={technologies}
                           confirme={aSupprimer === t.id}
                           onModifier={() => {
                             setErreurDialog(null);
@@ -280,13 +283,15 @@ export default function Technologies() {
  * s'appelle. La description est un texte libre qui peut etre vide ; le resume,
  * lui, se deduit de ce qui est saisi.
  */
-function resumeTechno(t: Technologie, tuiles: Tuile[]): string {
+function resumeTechno(t: Technologie, tuiles: Tuile[], toutes: Technologie[]): string {
   const nomDe = (id: number) => tuiles.find((x) => x.tileId === id)?.nom ?? `#${id}`;
   const bouts: string[] = [];
   const debloque = tileIdsDe(t.debloque);
   if (debloque.length) bouts.push("debloque " + debloque.map(nomDe).join(", "));
-  const technos = codesDe(t.technos_requises);
+  const technos = prerequisEffectifs(t.code, toutes);
   if (technos.length) bouts.push("apres " + technos.join(", "));
+  const ouvre = codesDe(t.debloque_technos);
+  if (ouvre.length) bouts.push("ouvre " + ouvre.join(", "));
   const cout = coutDe(t);
   if (cout.achat.length) bouts.push(cout.achat.map((l) => `${l.quantite} ${l.ressource}`).join(" + "));
   if (cout.entretien.length)
@@ -344,6 +349,9 @@ function TechnologieDialog({
     codesDe(technologie?.technos_requises),
   );
   const [debloque, setDebloque] = useState<number[]>(tileIdsDe(technologie?.debloque));
+  const [debloqueTechnos, setDebloqueTechnos] = useState<string[]>(
+    codesDe(technologie?.debloque_technos),
+  );
   const [cout, setCout] = useState<CoutTechno>(
     technologie ? coutDe(technologie) : { achat: [], entretien: [] },
   );
@@ -367,6 +375,12 @@ function TechnologieDialog({
    */
   const interdits = useMemo(
     () => codesInterdits(code.trim().toLowerCase(), technologies),
+    [code, technologies],
+  );
+
+  /** Les prerequis que d'AUTRES fiches lui imposent, en se declarant la debloquer. */
+  const venuesDAilleurs = useMemo(
+    () => prerequisDeclaresAilleurs(code.trim().toLowerCase(), technologies),
     [code, technologies],
   );
 
@@ -400,6 +414,7 @@ function TechnologieDialog({
             batiments_requis: batimentsRequis,
             technos_requises: technosRequises,
             debloque,
+            debloque_technos: debloqueTechnos,
             // Les lignes inachevees partent telles quelles : les jeter a
             // l'enregistrement ferait disparaitre sous les yeux de l'admin une
             // ligne qu'il etait en train de remplir. Elles sont signalees en
@@ -574,6 +589,23 @@ function TechnologieDialog({
                 C'est ce qui fait un arbre plutot qu'une liste. Les technos grisees creeraient un
                 cycle : elles dependent deja de celle-ci.
               </p>
+              {/*
+                ⚠️ Ne JAMAIS taire une condition qui vient d'ailleurs. Sans cette
+                ligne, l'admin verrait « aucun prerequis » sur une techno qu'une
+                autre declare debloquer — et chercherait longtemps pourquoi elle
+                ne s'ouvre pas.
+              */}
+              {venuesDAilleurs.length > 0 && (
+                <p className="mt-1 rounded border border-edge bg-ink/40 px-2 py-1 text-[11px] text-slate-400">
+                  Plus, declare depuis l'autre bout :{" "}
+                  <span className="text-slate-200">
+                    {venuesDAilleurs
+                      .map((c) => technologies.find((t) => t.code === c)?.nom ?? c)
+                      .join(", ")}
+                  </span>{" "}
+                  — a decocher dans « ce qu'elle ouvre » de ces technos-la.
+                </p>
+              )}
             </div>
           </div>
         </Section>
@@ -620,16 +652,44 @@ function TechnologieDialog({
           )}
         </Section>
 
-        <Section titre="Ce qu'elle debloque" aide="Les batiments qui deviennent constructibles.">
-          <ChoixTuiles
-            tuiles={tuiles}
-            choisies={debloque}
-            onChange={setDebloque}
-            vide="Aucune tuile au catalogue."
-          />
-          <p className="mt-1 text-[11px] text-slate-500">
-            Rien de coche = elle ne debloque aucun batiment. Elle peut n'avoir que des effets.
-          </p>
+        <Section
+          titre="Ce qu'elle ouvre"
+          aide="Les batiments qui deviennent constructibles, et les technos qu'elle rend cherchables."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="label">Batiments</p>
+              <ChoixTuiles
+                tuiles={tuiles}
+                choisies={debloque}
+                onChange={setDebloque}
+                vide="Aucune tuile au catalogue."
+              />
+              <p className="mt-1 text-[11px] text-slate-500">
+                Rien de coche = elle ne debloque aucun batiment. Elle peut n'avoir que des effets.
+              </p>
+            </div>
+            <div>
+              <p className="label">Technos</p>
+              <ChoixTechnos
+                technologies={technologies}
+                choisies={debloqueTechnos}
+                interdits={interdits}
+                onChange={setDebloqueTechnos}
+              />
+              {/*
+                ⚠️ C'est la MEME fleche que « Technos a avoir acquises », vue de
+                l'autre bout. Les deux sens se lisent en UNION, jamais en
+                concurrence : cocher ici revient exactement a cocher celle-ci
+                dans les prerequis de l'autre. D'ou le meme jeu d'interdits — un
+                cycle est un cycle, quel que soit le bout par lequel on l'ecrit.
+              */}
+              <p className="mt-1 text-[11px] text-slate-500">
+                Revient a citer celle-ci dans les prerequis de l'autre : c'est la meme fleche, ecrite
+                du cote qui t'arrange.
+              </p>
+            </div>
+          </div>
         </Section>
 
         <Section
@@ -921,6 +981,7 @@ function LignesRessource<T extends { ressource: string; quantite: number }>({
 function LigneTechno({
   techno,
   tuiles,
+  toutes,
   confirme,
   onModifier,
   onSupprimer,
@@ -929,6 +990,7 @@ function LigneTechno({
 }: {
   techno: Technologie;
   tuiles: Tuile[];
+  toutes: Technologie[];
   confirme: boolean;
   onModifier: () => void;
   onSupprimer: () => void;
@@ -959,7 +1021,7 @@ function LigneTechno({
         </span>
       )}
       <span className="min-w-0 flex-1 truncate text-xs text-slate-500">
-        {resumeTechno(techno, tuiles) || techno.description}
+        {resumeTechno(techno, tuiles, toutes) || techno.description}
       </span>
       {confirme ? (
         <span className="flex items-center gap-3">

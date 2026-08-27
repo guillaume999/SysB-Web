@@ -13,6 +13,7 @@
  * - `technos_requises` — les technos qu'il faut avoir **acquises** avant celle-ci
  *   (c'est ce qui fait un arbre, et pas une liste) ;
  * - `debloque` — les bâtiments qu'elle rend **constructibles** ;
+ * - `debloque_technos` — les technos qu'elle ouvre ;
  * - `cout` — `achat` payé UNE FOIS (acquise tout de suite, pas de durée de
  *   recherche), et `entretien` **consommé** à chaque période, définitivement ;
  * - `effets` — sur une tuile, sur une de ses productions : `+N` ou `+N %`.
@@ -147,6 +148,22 @@ export type Technologie = {
   technos_requises: string[];
   /** tileIds des bâtiments qu'elle rend constructibles. */
   debloque: number[];
+  /**
+   * `code`s des technos qu'elle ouvre.
+   *
+   * ⚠️ **C'est la MÊME flèche que `technos_requises`, vue de l'autre bout.**
+   * « A débloque B » et « B exige A » disent la chose. Ce n'est pas une
+   * contradiction en puissance parce qu'on les lit en **UNION**, jamais en
+   * concurrence : les prérequis effectifs de B sont ce que B déclare PLUS ce qui
+   * se déclare comme la débloquant (voir `prerequisEffectifs`). Écrire la flèche
+   * des deux côtés est donc redondant, jamais faux.
+   *
+   * ⚠️ Corollaire : **tout ce qui raisonne sur le graphe doit passer par
+   * `prerequisEffectifs`**, jamais lire `technos_requises` seul — sinon la
+   * moitié des arêtes est invisible, et le garde-fou des cycles laisse passer
+   * un cycle sur deux.
+   */
+  debloque_technos: string[];
   cout: CoutTechno;
   effets: EffetTechno[];
   created: string;
@@ -163,6 +180,7 @@ export interface ValeursTechnologie {
   batiments_requis: number[];
   technos_requises: string[];
   debloque: number[];
+  debloque_technos: string[];
   cout: CoutTechno;
   effets: EffetTechno[];
 }
@@ -278,6 +296,24 @@ export function codesDe(v: unknown): string[] {
 }
 
 /**
+ * Les prérequis RÉELS d'une techno : ce qu'elle déclare, **plus** ce qui se
+ * déclare comme la débloquant. C'est le seul point où le graphe se lit.
+ */
+export function prerequisEffectifs(code: string, technologies: Technologie[]): string[] {
+  const propre = codesDe(technologies.find((t) => t.code === code)?.technos_requises);
+  const parEnFace = technologies
+    .filter((t) => t.code !== code && codesDe(t.debloque_technos).includes(code))
+    .map((t) => t.code);
+  return Array.from(new Set([...propre, ...parEnFace])).sort();
+}
+
+/** Ceux qui ne viennent PAS de la fiche elle-même — l'écran les montre à part. */
+export function prerequisDeclaresAilleurs(code: string, technologies: Technologie[]): string[] {
+  const propre = new Set(codesDe(technologies.find((t) => t.code === code)?.technos_requises));
+  return prerequisEffectifs(code, technologies).filter((c) => !propre.has(c));
+}
+
+/**
  * Les technos dont `code` dépend, directement ou non.
  *
  * ⚠️ Sert à REFUSER un cycle à la saisie : « A exige B qui exige A » est un
@@ -290,14 +326,13 @@ export function codesDe(v: unknown): string[] {
  * n'en reviendrait pas.
  */
 export function dependancesDe(code: string, technologies: Technologie[]): Set<string> {
-  const parCode = new Map(technologies.map((t) => [t.code, t]));
   const vus = new Set<string>();
-  const file = [...codesDe(parCode.get(code)?.technos_requises)];
+  const file = [...prerequisEffectifs(code, technologies)];
   while (file.length) {
     const c = file.shift() as string;
     if (vus.has(c)) continue;
     vus.add(c);
-    file.push(...codesDe(parCode.get(c)?.technos_requises));
+    file.push(...prerequisEffectifs(c, technologies));
   }
   return vus;
 }
