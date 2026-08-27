@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
 import { messageErreur, pb } from "@/lib/pb";
 import {
@@ -27,6 +27,7 @@ export default function Ressources() {
   const [saving, setSaving] = useState(false);
   const [erreurDialog, setErreurDialog] = useState<string | null>(null);
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
+  const [tri, setTri] = useState<Tri | null>(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
@@ -43,6 +44,43 @@ export default function Ressources() {
   useEffect(() => {
     void charger();
   }, [charger]);
+
+  /**
+   * Trois etats par colonne : croissant, decroissant, puis **retour a l'ordre du
+   * jeu**. Sans le troisieme, le champ `ordre` deviendrait impossible a relire
+   * une fois qu'on a trie sur autre chose.
+   */
+  const basculerTri = (colonne: ColonneTri) =>
+    setTri((t) =>
+      t?.colonne !== colonne ? { colonne, sens: 1 } : t.sens === 1 ? { colonne, sens: -1 } : null,
+    );
+
+  /**
+   * Un tri d'AFFICHAGE : rien n'est ecrit en base, et `tri === null` rend
+   * exactement ce que PocketBase a renvoye, c'est-a-dire l'ordre du jeu
+   * (`ordre`, puis `nom`). Voir `loadRessources`.
+   */
+  const affichees = useMemo(() => {
+    if (!tri) return ressources;
+    const { colonne, sens } = tri;
+    return [...ressources].sort((a, b) => {
+      if (colonne === "ordre") {
+        const d = (a.ordre || 0) - (b.ordre || 0);
+        if (d !== 0) return d * sens;
+      } else {
+        const va = (a[colonne] ?? "").trim();
+        const vb = (b[colonne] ?? "").trim();
+        // Une case vide reste en bas dans les deux sens : la remonter en tete
+        // au premier clic sur « vignette » ne montrerait que du vide.
+        if ((va === "") !== (vb === "")) return va === "" ? 1 : -1;
+        const d = va.localeCompare(vb, "fr", { sensitivity: "base" });
+        if (d !== 0) return d * sens;
+      }
+      // Depart toujours identique a rang egal, sinon deux clics sur la meme
+      // colonne ne rendraient pas la meme liste.
+      return (a.ordre || 0) - (b.ordre || 0) || (a.nom ?? "").localeCompare(b.nom ?? "", "fr");
+    });
+  }, [ressources, tri]);
 
   const enregistrer = async (valeurs: ValeursRessource) => {
     if (!dialog) return;
@@ -84,20 +122,15 @@ export default function Ressources() {
             dans trois tuiles differentes.
           </p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn-ghost" onClick={() => void charger()}>
-            Recharger
-          </button>
-          <button
-            className="btn-primary"
-            onClick={() => {
-              setErreurDialog(null);
-              setDialog({ ressource: null });
-            }}
-          >
-            + Nouvelle ressource
-          </button>
-        </div>
+        <button
+          className="btn-primary"
+          onClick={() => {
+            setErreurDialog(null);
+            setDialog({ ressource: null });
+          }}
+        >
+          + Nouvelle ressource
+        </button>
       </header>
 
       {erreur && (
@@ -118,14 +151,28 @@ export default function Ressources() {
         </div>
       ) : (
         <div className="card overflow-x-auto">
+          {tri && (
+            <p className="flex flex-wrap items-center gap-2 border-b border-edge/60 px-3 py-2 text-xs text-slate-500">
+              Tri d'affichage seulement : l'ordre en jeu reste le champ{" "}
+              <code className="text-slate-400">ordre</code>.
+              <button className="text-accent hover:underline" onClick={() => setTri(null)}>
+                Revenir a l'ordre du jeu
+              </button>
+            </p>
+          )}
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
-                <th className="w-16 px-3 py-2 font-medium">ordre</th>
-                <th className="px-3 py-2 font-medium">code</th>
-                <th className="px-3 py-2 font-medium">nom</th>
-                <th className="w-28 px-3 py-2 font-medium">genre</th>
-                <th className="px-3 py-2 font-medium">vignette</th>
+                <EnTete colonne="ordre" libelle="ordre" tri={tri} onTri={basculerTri} largeur="w-16" />
+                <EnTete colonne="code" libelle="code" tri={tri} onTri={basculerTri} />
+                <EnTete colonne="nom" libelle="nom" tri={tri} onTri={basculerTri} />
+                <EnTete colonne="genre" libelle="genre" tri={tri} onTri={basculerTri} largeur="w-28" />
+                <EnTete
+                  colonne="chemin_icone"
+                  libelle="vignette"
+                  tri={tri}
+                  onTri={basculerTri}
+                />
                 <th className="w-40 px-3 py-2" />
               </tr>
             </thead>
@@ -138,7 +185,7 @@ export default function Ressources() {
                 </tr>
               )}
               {!chargement &&
-                ressources.map((r) => {
+                affichees.map((r) => {
                   const confirme = aSupprimer === r.id;
                   return (
                     <tr key={r.id} className="border-b border-edge/60 last:border-0 hover:bg-ink/40">
@@ -211,6 +258,54 @@ export default function Ressources() {
         />
       )}
     </div>
+  );
+}
+
+/** Les colonnes sur lesquelles on peut trier. La derniere colonne ne porte que des boutons. */
+type ColonneTri = "ordre" | "code" | "nom" | "genre" | "chemin_icone";
+type Tri = { colonne: ColonneTri; sens: 1 | -1 };
+
+/**
+ * Un en-tete cliquable. La fleche est toujours dessinee — grisee tant que la
+ * colonne ne trie pas : une affordance qui n'apparait qu'au survol ne se
+ * decouvre pas au doigt, et ne se decouvre pas du tout si on ne survole jamais.
+ */
+function EnTete({
+  colonne,
+  libelle,
+  tri,
+  onTri,
+  largeur,
+}: {
+  colonne: ColonneTri;
+  libelle: string;
+  tri: Tri | null;
+  onTri: (colonne: ColonneTri) => void;
+  largeur?: string;
+}) {
+  const actif = tri?.colonne === colonne;
+  return (
+    <th className={`px-3 py-2 font-medium ${largeur ?? ""}`}>
+      <button
+        type="button"
+        className={`flex items-center gap-1 uppercase tracking-wide hover:text-slate-200 ${
+          actif ? "text-slate-200" : ""
+        }`}
+        title={
+          actif
+            ? tri.sens === 1
+              ? "Trie du plus petit au plus grand. Clique pour inverser."
+              : "Trie du plus grand au plus petit. Clique pour revenir a l'ordre du jeu."
+            : `Trier sur ${libelle}`
+        }
+        onClick={() => onTri(colonne)}
+      >
+        {libelle}
+        <span className={`text-[10px] ${actif ? "text-accent" : "text-slate-600"}`}>
+          {actif ? (tri.sens === 1 ? "\u25b2" : "\u25bc") : "\u21c5"}
+        </span>
+      </button>
+    </th>
   );
 }
 
