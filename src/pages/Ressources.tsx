@@ -2,25 +2,41 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
 import { Vignette } from "@/components/Vignette";
 import { messageErreur, pb } from "@/lib/pb";
+import { libelleAge, loadAges, numerosDeclares, type Age } from "@/lib/ages";
+import { loadTuiles, type Tuile } from "@/lib/tuiles";
 import {
   COLLECTION_RESSOURCES,
   GENRES,
+  HORS_ARBRE,
   loadRessources,
+  rangerParAge,
   type GenreRessource,
+  type GroupeAge,
   type Ressource,
+  type RessourceRangee,
   type ValeursRessource,
 } from "@/lib/ressources";
 
 /**
- * Le vocabulaire des ressources du jeu.
+ * Le vocabulaire des ressources du jeu, **rangé comme l'arbre** — demande du
+ * 2026-08-27 : *« un affichage pour ressources comme pour technologie, avec les
+ * âges où ils apparaissent (en lien avec les tuiles) et catégories à
+ * l'intérieur »*.
  *
- * Une dizaine de records, saisis une fois. Tout le reste du catalogue y fait
- * reference par le `code` : les couts et les productions n'offrent que des listes
- * alimentees par cette table, pour qu'il soit impossible d'ecrire un code que le
- * jeu ne connaitra pas.
+ * Un cadre par âge, les catégories en onglets dedans, une carte par ressource.
+ *
+ * ⚠️ **L'âge et la catégorie ne se saisissent pas** : ils se déduisent des
+ * bâtiments qui produisent ou consomment la ressource — voir `rangerParAge`.
+ * Rien de neuf n'est stocké, et rien ne peut diverger du catalogue.
+ *
+ * ⚠️ **La table triable a disparu**, remplacée par cette vue (choix explicite).
+ * Le champ `ordre` reste lisible : il trie l'intérieur d'un onglet et s'affiche
+ * sur chaque carte, sinon il deviendrait impossible à régler.
  */
 export default function Ressources() {
   const [ressources, setRessources] = useState<Ressource[]>([]);
+  const [tuiles, setTuiles] = useState<Tuile[]>([]);
+  const [ages, setAges] = useState<Age[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -28,13 +44,23 @@ export default function Ressources() {
   const [saving, setSaving] = useState(false);
   const [erreurDialog, setErreurDialog] = useState<string | null>(null);
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
-  const [tri, setTri] = useState<Tri | null>(null);
 
   const charger = useCallback(async () => {
     setChargement(true);
     setErreur(null);
     try {
-      setRessources(await loadRessources());
+      // Chargement tolérant sur les deux tables d'appoint : une ressource reste
+      // lisible et modifiable même si le catalogue ou les âges ne répondent pas.
+      // Sans catalogue, tout tombe dans « hors arbre » — et le bandeau le dit,
+      // pour qu'on ne lise pas une panne réseau comme une base vide.
+      const [r, t, a] = await Promise.all([
+        loadRessources(),
+        loadTuiles().catch(() => [] as Tuile[]),
+        loadAges().catch(() => [] as Age[]),
+      ]);
+      setRessources(r);
+      setTuiles(t);
+      setAges(a);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement des ressources impossible."));
     } finally {
@@ -46,47 +72,15 @@ export default function Ressources() {
     void charger();
   }, [charger]);
 
-  /**
-   * Trois etats par colonne : croissant, decroissant, puis **retour a l'ordre du
-   * jeu**. Sans le troisieme, le champ `ordre` deviendrait impossible a relire
-   * une fois qu'on a trie sur autre chose.
-   */
-  const basculerTri = (colonne: ColonneTri) =>
-    setTri((t) =>
-      t?.colonne !== colonne ? { colonne, sens: 1 } : t.sens === 1 ? { colonne, sens: -1 } : null,
-    );
+  const groupes = useMemo(
+    () => rangerParAge(ressources, tuiles, numerosDeclares(ages)),
+    [ressources, tuiles, ages],
+  );
 
   /**
-   * Un tri d'AFFICHAGE : rien n'est ecrit en base, et `tri === null` rend
-   * exactement ce que PocketBase a renvoye, c'est-a-dire l'ordre du jeu
-   * (`ordre`, puis `nom`). Voir `loadRessources`.
-   */
-  const affichees = useMemo(() => {
-    if (!tri) return ressources;
-    const { colonne, sens } = tri;
-    return [...ressources].sort((a, b) => {
-      if (colonne === "ordre") {
-        const d = (a.ordre || 0) - (b.ordre || 0);
-        if (d !== 0) return d * sens;
-      } else {
-        const va = (a[colonne] ?? "").trim();
-        const vb = (b[colonne] ?? "").trim();
-        // Une case vide reste en bas dans les deux sens : la remonter en tete
-        // au premier clic sur « vignette » ne montrerait que du vide.
-        if ((va === "") !== (vb === "")) return va === "" ? 1 : -1;
-        const d = va.localeCompare(vb, "fr", { sensitivity: "base" });
-        if (d !== 0) return d * sens;
-      }
-      // Depart toujours identique a rang egal, sinon deux clics sur la meme
-      // colonne ne rendraient pas la meme liste.
-      return (a.ordre || 0) - (b.ordre || 0) || (a.nom ?? "").localeCompare(b.nom ?? "", "fr");
-    });
-  }, [ressources, tri]);
-
-  /**
-   * Le detail par genre, en infobulle du compteur : un total seul ne dit pas si
-   * les 4 genres sont representes, et c'est la premiere chose qu'on veut savoir
-   * en arrivant sur l'ecran.
+   * Le détail par genre, en infobulle du compteur : un total seul ne dit pas si
+   * les trois genres sont représentés, et c'est la première chose qu'on veut
+   * savoir en arrivant.
    */
   const repartition = useMemo(() => {
     const parts = GENRES.map((g) => ({
@@ -128,9 +122,14 @@ export default function Ressources() {
     }
   };
 
+  const ouvrir = (ressource: Ressource | null) => {
+    setErreurDialog(null);
+    setDialog({ ressource });
+  };
+
   return (
     <div>
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold text-white">Ressources</h1>
@@ -144,140 +143,86 @@ export default function Ressources() {
             )}
           </div>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Le vocabulaire du jeu : une ligne par ressource, saisie une fois. Les couts et les
-            productions des tuiles ne proposent que ce qui est declare ici, ce qui evite de se
-            retrouver avec <code className="text-slate-400">bois</code>,{" "}
-            <code className="text-slate-400">Bois</code> et <code className="text-slate-400">boi</code>{" "}
-            dans trois tuiles differentes.
+            Le vocabulaire du jeu, rangé dans l'âge où chaque ressource apparaît, et par catégorie
+            de bâtiment à l'intérieur. L'âge et la catégorie ne se saisissent pas : ils se lisent
+            sur les bâtiments qui la produisent ou la consomment.
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setErreurDialog(null);
-            setDialog({ ressource: null });
-          }}
-        >
+        <button className="btn-primary" onClick={() => ouvrir(null)}>
           + Nouvelle ressource
         </button>
       </header>
 
+      <Aide titre="Comment cet écran range les ressources">
+        <Terme nom="âge d'apparition">
+          Le plus petit âge où un bâtiment la <strong>produit</strong> ou la{" "}
+          <strong>consomme</strong>. Elle n'est listée qu'une fois, à cet âge-là ; un badge
+          « aussi âge 3, 4 » dit où elle sert encore.
+        </Terme>
+        <Terme nom="ce qui compte, et ce qui ne compte pas">
+          Seules les lignes de flux d'un palier — <code className="text-slate-400">production</code>{" "}
+          et <code className="text-slate-400">utilisation</code>. Le coût de construction, le
+          stockage et les règles d'appro ne rangent pas une ressource dans un âge : sinon la
+          population, citée dans une centaine de coûts, remonterait à l'âge 1 en prétendant y être
+          fabriquée.
+        </Terme>
+        <Terme nom="catégorie">
+          Celle du bâtiment qui la fait apparaître. À âge égal, le{" "}
+          <strong>producteur l'emporte</strong> sur le consommateur : une ressource se range là où
+          elle naît.
+        </Terme>
+        <Terme nom="hors arbre">
+          Ce qu'aucun bâtiment ne produit ni ne consomme. Ce n'est pas forcément une erreur — une
+          ressource de genre <code className="text-slate-400">mobilisé</code> se déclare en places
+          dans un coffre, elle n'est jamais fabriquée. Le décompte affiché sur la carte dit ce qui
+          la cite quand même, et fait ressortir les codes vraiment orphelins.
+        </Terme>
+        <Terme nom="ordre">
+          L'ordre d'affichage en jeu, dans la barre des ressources. Il trie l'intérieur d'un onglet
+          et se lit en petit sur chaque carte.
+        </Terme>
+      </Aide>
+
       {erreur && (
-        <p className="mb-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
+        <p className="mt-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
           {erreur}
         </p>
       )}
 
-      {!chargement && ressources.length === 0 ? (
-        <div className="card p-5 text-sm text-slate-400">
+      {!chargement && ressources.length > 0 && tuiles.length === 0 && (
+        <p className="mt-4 rounded border border-amber-900/60 bg-amber-950/30 p-3 text-sm text-amber-200/90">
+          <span className="font-medium">Le catalogue des tuiles n'a pas répondu.</span> Sans lui,
+          aucun âge ne peut être déduit et tout se retrouve « hors arbre ». Recharge la page — ce
+          n'est pas la base des ressources qui est vide.
+        </p>
+      )}
+
+      {chargement ? (
+        <p className="mt-4 text-sm text-slate-500">Chargement...</p>
+      ) : ressources.length === 0 ? (
+        <div className="card mt-4 p-5 text-sm text-slate-400">
           <p className="font-medium text-slate-200">Aucune ressource declaree.</p>
           <p className="mt-2 max-w-2xl">
             Commence par les bases : bois, pierre, or, ble, viande, et une entree{" "}
             <code className="text-slate-300">population</code> de genre{" "}
-            <code className="text-slate-300">population</code>. Sans elles, l'ecran des tuiles n'aura
+            <code className="text-slate-300">mobilise</code>. Sans elles, l'ecran des tuiles n'aura
             rien a proposer dans les couts et les productions.
           </p>
         </div>
       ) : (
-        <div className="card overflow-x-auto">
-          {tri && (
-            <p className="flex flex-wrap items-center gap-2 border-b border-edge/60 px-3 py-2 text-xs text-slate-500">
-              Tri d'affichage seulement : l'ordre en jeu reste le champ{" "}
-              <code className="text-slate-400">ordre</code>.
-              <button className="text-accent hover:underline" onClick={() => setTri(null)}>
-                Revenir a l'ordre du jeu
-              </button>
-            </p>
-          )}
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
-                <EnTete colonne="ordre" libelle="ordre" tri={tri} onTri={basculerTri} largeur="w-16" />
-                <EnTete colonne="code" libelle="code" tri={tri} onTri={basculerTri} />
-                <EnTete colonne="nom" libelle="nom" tri={tri} onTri={basculerTri} />
-                <EnTete colonne="genre" libelle="genre" tri={tri} onTri={basculerTri} largeur="w-28" />
-                <EnTete
-                  colonne="chemin_icone"
-                  libelle="vignette"
-                  tri={tri}
-                  onTri={basculerTri}
-                />
-                <th className="w-40 px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {chargement && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-slate-500">
-                    Chargement...
-                  </td>
-                </tr>
-              )}
-              {!chargement &&
-                affichees.map((r) => {
-                  const confirme = aSupprimer === r.id;
-                  return (
-                    <tr key={r.id} className="border-b border-edge/60 last:border-0 hover:bg-ink/40">
-                      <td className="px-3 py-2 tabular-nums text-slate-500">{r.ordre || 0}</td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-200">{r.code}</td>
-                      <td className="px-3 py-2 text-slate-300">{r.nom}</td>
-                      <td className="px-3 py-2">
-                        <span className="rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-400">
-                          {r.genre || "?"}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-[11px] text-slate-500">
-                        <span className="flex items-center gap-2">
-                          <Vignette chemin={r.chemin_icone} alt="" taille={24} />
-                          {r.chemin_icone?.trim() || (
-                            <span className="text-slate-600">a venir</span>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {confirme ? (
-                          <>
-                            <span className="mr-3 text-[11px] text-red-300">
-                              Les tuiles qui la citent garderont un code inconnu.
-                            </span>
-                            <button
-                              className="text-xs text-red-300 hover:underline"
-                              onClick={() => void supprimer(r)}
-                            >
-                              Confirmer
-                            </button>
-                            <button
-                              className="ml-3 text-xs text-slate-400 hover:text-white"
-                              onClick={() => setASupprimer(null)}
-                            >
-                              Annuler
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              className="text-xs text-accent hover:underline"
-                              onClick={() => {
-                                setErreurDialog(null);
-                                setDialog({ ressource: r });
-                              }}
-                            >
-                              Modifier
-                            </button>
-                            <button
-                              className="ml-3 text-xs text-slate-500 hover:text-red-400"
-                              onClick={() => setASupprimer(r.id)}
-                            >
-                              Supprimer
-                            </button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-            </tbody>
-          </table>
+        <div className="mt-4 space-y-4">
+          {groupes.map((groupe) => (
+            <SectionAge
+              key={groupe.numero}
+              groupe={groupe}
+              ages={ages}
+              aSupprimer={aSupprimer}
+              onModifier={ouvrir}
+              onSupprimer={setASupprimer}
+              onConfirmer={(r) => void supprimer(r)}
+              onAnnuler={() => setASupprimer(null)}
+            />
+          ))}
         </div>
       )}
 
@@ -295,52 +240,269 @@ export default function Ressources() {
   );
 }
 
-/** Les colonnes sur lesquelles on peut trier. La derniere colonne ne porte que des boutons. */
-type ColonneTri = "ordre" | "code" | "nom" | "genre" | "chemin_icone";
-type Tri = { colonne: ColonneTri; sens: 1 | -1 };
+/**
+ * Un âge : un cadre, ses catégories en onglets, et les cartes de l'onglet
+ * ouvert.
+ *
+ * ⚠️ L'onglet actif est un état LOCAL à la section. Le remonter au parent
+ * ferait qu'ouvrir « Matériaux » à l'âge 3 changerait aussi l'âge 5, alors que
+ * les deux listes de catégories n'ont rien à voir l'une avec l'autre.
+ *
+ * ⚠️ Il vaut `null` — « toutes » — et non la première catégorie : arriver sur un
+ * écran qui cache d'emblée les trois quarts de ses ressources donnerait à croire
+ * qu'elles manquent. Les onglets restreignent, ils ne révèlent pas.
+ */
+function SectionAge({
+  groupe,
+  ages,
+  aSupprimer,
+  onModifier,
+  onSupprimer,
+  onConfirmer,
+  onAnnuler,
+}: {
+  groupe: GroupeAge;
+  ages: Age[];
+  aSupprimer: string | null;
+  onModifier: (r: Ressource) => void;
+  onSupprimer: (id: string) => void;
+  onConfirmer: (r: Ressource) => void;
+  onAnnuler: () => void;
+}) {
+  const [onglet, setOnglet] = useState<string | null>(null);
+  const horsArbre = groupe.numero === HORS_ARBRE;
+
+  // Une catégorie fermée qui disparaît (dernière ressource déplacée, base
+  // rechargée) laisserait la section vide sans rien dire : on retombe sur
+  // « toutes » plutôt que d'afficher un onglet qui ne montre plus rien.
+  const ouvert = groupe.categories.some((c) => c.categorie === onglet) ? onglet : null;
+  const visibles = groupe.categories.filter((c) => ouvert === null || c.categorie === ouvert);
+
+  return (
+    <section className="card overflow-hidden">
+      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-edge px-4 py-2.5">
+        <h2 className="text-sm font-medium text-slate-200">
+          {horsArbre ? "Hors arbre — ni produite ni consommee" : libelleAge(groupe.numero, ages)}
+          <span className="ml-2 text-xs tabular-nums text-slate-500">{groupe.total}</span>
+        </h2>
+        {horsArbre && (
+          <span className="text-[11px] text-slate-500">
+            Aucun batiment ne la fabrique ni ne la consomme — ce qui est normal pour un genre
+            mobilise, et suspect pour un stock
+          </span>
+        )}
+      </header>
+
+      {groupe.total === 0 ? (
+        <p className="px-4 py-3 text-xs text-slate-600">Aucune ressource a cet age.</p>
+      ) : (
+        <>
+          {/* Les onglets ne s'affichent qu'a partir de deux categories : un seul
+              onglet au-dessus d'une seule liste n'apprend rien et se clique pour
+              rien. */}
+          {groupe.categories.length > 1 && (
+            <div className="flex flex-wrap gap-1.5 border-b border-edge/60 bg-ink/40 px-3 py-2">
+              <Onglet
+                libelle="Toutes"
+                n={groupe.total}
+                actif={ouvert === null}
+                onClick={() => setOnglet(null)}
+              />
+              {groupe.categories.map((c) => (
+                <Onglet
+                  key={c.categorie}
+                  libelle={c.categorie}
+                  n={c.ressources.length}
+                  actif={ouvert === c.categorie}
+                  onClick={() => setOnglet(ouvert === c.categorie ? null : c.categorie)}
+                />
+              ))}
+            </div>
+          )}
+
+          {visibles.map((c) => (
+            <div key={c.categorie}>
+              {ouvert === null && groupe.categories.length > 1 && (
+                <p className="border-b border-edge/40 bg-ink/20 px-4 py-1 text-[10px] uppercase tracking-wide text-slate-500">
+                  {c.categorie}
+                </p>
+              )}
+              <ul className="grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3">
+                {c.ressources.map((r) => (
+                  <CarteRessource
+                    key={r.ressource.id}
+                    rangee={r}
+                    confirme={aSupprimer === r.ressource.id}
+                    onModifier={() => onModifier(r.ressource)}
+                    onSupprimer={() => onSupprimer(r.ressource.id)}
+                    onConfirmer={() => onConfirmer(r.ressource)}
+                    onAnnuler={onAnnuler}
+                  />
+                ))}
+              </ul>
+            </div>
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** Un onglet de categorie : un cadre, pas un lien — il porte son compteur. */
+function Onglet({
+  libelle,
+  n,
+  actif,
+  onClick,
+}: {
+  libelle: string;
+  n: number;
+  actif: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md border px-2.5 py-1 text-xs transition-colors ${
+        actif
+          ? "border-accent bg-accent/15 text-white"
+          : "border-edge bg-panel text-slate-400 hover:border-slate-500 hover:text-slate-200"
+      }`}
+      title={actif ? "Clique pour revoir toutes les categories" : `N'afficher que ${libelle}`}
+    >
+      {libelle}
+      <span className="ml-1.5 tabular-nums text-slate-500">{n}</span>
+    </button>
+  );
+}
 
 /**
- * Un en-tete cliquable. La fleche est toujours dessinee — grisee tant que la
- * colonne ne trie pas : une affordance qui n'apparait qu'au survol ne se
- * decouvre pas au doigt, et ne se decouvre pas du tout si on ne survole jamais.
+ * La barre de couleur d'une carte dit le GENRE, pas la catégorie : c'est le
+ * genre qui change le comportement du moteur, et c'est ce qu'on cherche à
+ * repérer d'un coup d'œil dans une grille de soixante-dix cartes.
  */
-function EnTete({
-  colonne,
-  libelle,
-  tri,
-  onTri,
-  largeur,
+const COULEUR_GENRE: Record<string, string> = {
+  stock: "bg-emerald-500/70",
+  mobilise: "bg-amber-500/70",
+  indicateur: "bg-violet-500/70",
+};
+
+/**
+ * Une carte : la vignette, le nom, le code, et ce que la ressource FAIT dans
+ * l'arbre. Cliquer ouvre le formulaire — la carte entière, pas un lien
+ * « Modifier » de trois pixels.
+ */
+function CarteRessource({
+  rangee,
+  confirme,
+  onModifier,
+  onSupprimer,
+  onConfirmer,
+  onAnnuler,
 }: {
-  colonne: ColonneTri;
-  libelle: string;
-  tri: Tri | null;
-  onTri: (colonne: ColonneTri) => void;
-  largeur?: string;
+  rangee: RessourceRangee;
+  confirme: boolean;
+  onModifier: () => void;
+  onSupprimer: () => void;
+  onConfirmer: () => void;
+  onAnnuler: () => void;
 }) {
-  const actif = tri?.colonne === colonne;
+  const { ressource: r, producteurs, consommateurs, autresAges, citations } = rangee;
+
+  // L'infobulle nomme les batiments : le compteur dit combien, elle dit
+  // lesquels — sans ouvrir un ecran de plus.
+  const nomme = (sens: "produit" | "consomme") =>
+    rangee.usages
+      .filter((u) => u.sens === sens)
+      .map((u) => u.nom)
+      .join(", ");
+
   return (
-    <th className={`px-3 py-2 font-medium ${largeur ?? ""}`}>
-      <button
-        type="button"
-        className={`flex items-center gap-1 uppercase tracking-wide hover:text-slate-200 ${
-          actif ? "text-slate-200" : ""
-        }`}
-        title={
-          actif
-            ? tri.sens === 1
-              ? "Trie du plus petit au plus grand. Clique pour inverser."
-              : "Trie du plus grand au plus petit. Clique pour revenir a l'ordre du jeu."
-            : `Trier sur ${libelle}`
-        }
-        onClick={() => onTri(colonne)}
-      >
-        {libelle}
-        <span className={`text-[10px] ${actif ? "text-accent" : "text-slate-600"}`}>
-          {actif ? (tri.sens === 1 ? "\u25b2" : "\u25bc") : "\u21c5"}
-        </span>
-      </button>
-    </th>
+    <li className="relative flex overflow-hidden rounded-lg border border-edge bg-ink/40">
+      <span
+        aria-hidden
+        className={`w-1 shrink-0 ${COULEUR_GENRE[r.genre] ?? "bg-slate-600"}`}
+      />
+      <div className="min-w-0 flex-1 p-3">
+        <button
+          type="button"
+          onClick={onModifier}
+          className="flex w-full items-start gap-2.5 text-left"
+          title="Modifier cette ressource"
+        >
+          <Vignette chemin={r.chemin_icone} alt="" taille={32} />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-baseline gap-2">
+              <span className="truncate font-medium text-slate-100">{r.nom}</span>
+              <span className="shrink-0 font-mono text-[10px] text-slate-500">{r.code}</span>
+            </span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[10px] uppercase tracking-wide text-slate-500">
+              <span>{r.genre || "sans genre"}</span>
+              <span className="tabular-nums text-slate-600" title="Ordre d'affichage en jeu">
+                #{r.ordre || 0}
+              </span>
+            </span>
+          </span>
+        </button>
+
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+          {producteurs > 0 && (
+            <span className="text-emerald-300/90" title={nomme("produit")}>
+              produite par {producteurs}
+            </span>
+          )}
+          {consommateurs > 0 && (
+            <span className="text-sky-300/90" title={nomme("consomme")}>
+              consommee par {consommateurs}
+            </span>
+          )}
+          {citations && <span className="text-slate-500">{resumeCitations(citations)}</span>}
+          {autresAges.length > 0 && (
+            <span
+              className="rounded border border-edge px-1.5 py-0.5 text-[10px] text-slate-400"
+              title="Les ages suivants ou elle sert encore"
+            >
+              aussi age {autresAges.join(", ")}
+            </span>
+          )}
+        </p>
+
+        {confirme ? (
+          <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-red-300">
+            Les tuiles qui la citent garderont un code inconnu.
+            <button className="hover:underline" onClick={onConfirmer}>
+              Confirmer
+            </button>
+            <button className="text-slate-400 hover:text-white" onClick={onAnnuler}>
+              Annuler
+            </button>
+          </p>
+        ) : (
+          <button
+            className="absolute right-2 top-2 text-xs text-slate-600 hover:text-red-400"
+            onClick={onSupprimer}
+            title="Supprimer cette ressource"
+          >
+            &times;
+          </button>
+        )}
+      </div>
+    </li>
   );
+}
+
+/**
+ * Ce qui cite une ressource sans la faire vivre. Dire « rien ne la cite » quand
+ * c'est le cas est le vrai service rendu : c'est ce qui distingue un code
+ * orphelin d'une ressource seulement mobilisee.
+ */
+function resumeCitations(c: { cout: number; stockage: number; appro: number }): string {
+  const bouts: string[] = [];
+  if (c.cout > 0) bouts.push(`${c.cout} cout${c.cout > 1 ? "s" : ""}`);
+  if (c.stockage > 0) bouts.push(`${c.stockage} coffre${c.stockage > 1 ? "s" : ""}`);
+  if (c.appro > 0) bouts.push(`${c.appro} appro${c.appro > 1 ? "s" : ""}`);
+  return bouts.length === 0 ? "citee nulle part" : `citee par ${bouts.join(", ")}`;
 }
 
 /** Formulaire court : il vit dans le meme fichier plutot que d'ouvrir un module pour six champs. */
