@@ -266,7 +266,7 @@ le champ de bataille :
 
 ### 6.1 PALIER 1 — L'ÂGE DES PIONNIERS (installation & subsistance)
 
-À ce stade, l'habitat repose sur la **Cabane en bois** ou la **Tente de colon**. La population
+À ce stade, l'habitat repose sur la **Cabane en bois**. La population
 est peu nombreuse, directement dépendante de l'environnement immédiat. L'objectif
 est d'assurer la survie et d'accumuler les matériaux de construction de base.
 
@@ -368,8 +368,8 @@ Schéma global :
 +--------+----------------------------+-------------------------------+-------------------------------------------------------------------------+
 | Palier | Nom du Palier              | Type d'Habitation             | Thème Principal & Objectif                                              |
 +--------+----------------------------+-------------------------------+-------------------------------------------------------------------------+
-| 1      | Âge des Pionniers          | Cabane en bois / Tente de     | Survie & Subsistance (chasse, pêche, cueillette, matériaux bruts).      |
-|        |                            | colon                         |                                                                         |
+| 1      | Âge des Pionniers          | Cabane en bois                | Survie & Subsistance (chasse, pêche, cueillette, matériaux bruts).      |
+|        |                            |                               |                                                                         |
 +--------+----------------------------+-------------------------------+-------------------------------------------------------------------------+
 | 2      | Secteur Artisanal          | Maison en brique              | Transformation & Métiers (agriculture, maçonnerie, outils en fer).      |
 +--------+----------------------------+-------------------------------+-------------------------------------------------------------------------+
@@ -2032,7 +2032,7 @@ pas des valeurs définitives.
 
 ## 30. Âge 1 — L'Âge des Pionniers
 
-*Habitat : cabane en bois / tente de colon. On survit sur ce que la case donne.*
+*Habitat : cabane en bois. On survit sur ce que la case donne.*
 
 <!-- schema: flux-age-1 -->
 
@@ -2040,9 +2040,15 @@ pas des valeurs définitives.
 
 | Bâtiment | Coût | Travaillants | Consomme | Produit |
 |---|---|---|---|---|
-| Tente de Colon | 8 bois | — | — | loge 2 pionniers |
-| Cabane en Bois | 20 bois · 5 pierre | — | — | loge 4 pionniers |
+| Cabane en Bois | 20 bois · 5 pierre | — | 1 gibier **ou** poisson **ou** poisson sec · 1 bière | loge 4 pionniers |
 | Feu de Camp (Place du Village) | 5 bois · 5 pierre | — | 2 bois | +10 satisfaction · un seul par secteur |
+
+> **Les habitats mangent.** Un habitat consomme une ration par période : **un vivre au choix**,
+> plus une bière de confort. S'il n'est pas nourri, il cesse de faire grandir la population — il
+> ne la tue pas. Le **poisson sec** et la **viande crue** comptent comme vivres : ils ne sont plus
+> seulement des intrants du Séchoir et de la Boucherie. ⚠ Le moteur ne connaît que le ET : le
+> « ou » doit être tranché au moment de la saisie, un vivre par habitat, ou porté par plusieurs
+> lignes fractionnées.
 
 ### 30.2 Vivres
 
@@ -2096,7 +2102,7 @@ qui donne son prix au dispensaire de l'âge 3.
 
 | Bâtiment | Coût | Travaillants | Consomme | Produit |
 |---|---|---|---|---|
-| Maison en Brique | 30 briques · 10 bois | — | — | loge 8 colons |
+| Maison en Brique | 30 briques · 10 bois | — | 1 pain **ou** viande **ou** viande crue **ou** poisson sec · 1 bière | loge 8 colons |
 | Hôtel de Ville | 60 briques · 20 planches · 10 outils | 3 | 1 pain | plafond démographique +1 palier · ouvre un second secteur |
 
 ### 31.2 Vivres
