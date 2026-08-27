@@ -16,10 +16,9 @@ export const COLLECTION_RESSOURCES = "ressources";
 
 /**
  * - `stock` : s'accumule et se dépense (bois, or, viande).
- * - `flux` : n'existe qu'en débit, ne s'accumule pas (énergie, eau courante).
- * - `mobilise` : **se mobilise et se libère**, jamais consommé. La population
- *   en est le premier cas — un bâtiment occupe 6 habitants et les rend quand on
- *   l'éteint ou qu'on le détruit.
+ * - `mobilise` : **se mobilise et se libère**, jamais consommé. Un bâtiment
+ *   occupe 6 habitants — ou 20 d'électricité — et les rend quand on l'éteint ou
+ *   qu'on le détruit.
  * - `indicateur` : **calculé, jamais transporté** (la satisfaction). Ajouté le
  *   2026-08-26 sur la demande d'une « ressource utilisée comme indicateur » :
  *   elle garde son nom, son icône et sa place dans la barre de ressources, mais
@@ -30,20 +29,27 @@ export const COLLECTION_RESSOURCES = "ressources";
  * `population` jusqu'au 2026-08-26 ; base et code ont été migrés le jour même,
  * il ne reste aucune trace de l'ancien nom nulle part.)
  *
+ * ⚠️ **Un quatrième genre `flux` a existé jusqu'au 2026-08-27.** Il promettait
+ * « n'existe qu'en débit, ne s'accumule pas », mais le moteur le traitait comme
+ * un `stock` : la livraison de SysB passe par les coffres, et une ressource sans
+ * coffre ne peut pas être acheminée. Les cinq flux (eau, vapeur, électricité,
+ * énergie, foi) sont devenus des `mobilise` : une centrale DÉCLARE 20 places
+ * d'électricité, une usine en OCCUPE 5 tant qu'elle tourne, et les rend en
+ * veille. Aucune géométrie, aucun réseau à tracer — c'est le choix assumé.
+ *
  * ⚠️ **Un genre `mobilise` ne se déclare PAS en production : il se déclare en
  * STOCKAGE.** Une tuile qui stocke 12 population loge 12 habitants, présents dès
  * la pose. Le jeu lit ce plafond (`Tresorerie.Places`), il ne remplit aucun
  * coffre.
  *
- * ⚠️ **Deux genres ne voyagent jamais : `mobilise` et `indicateur`.** Les listes
- * d'approvisionnement les excluent — voir `GENRES_TRANSPORTABLES`. Un habitant
- * ne prend pas la navette, un pourcentage non plus.
+ * ⚠️ **Deux genres sur trois ne voyagent jamais : `mobilise` et `indicateur`.**
+ * Les listes d'approvisionnement les excluent — voir `GENRES_TRANSPORTABLES`.
+ * Un habitant ne prend pas la navette, un pourcentage non plus.
  */
-export type GenreRessource = "stock" | "flux" | "mobilise" | "indicateur";
+export type GenreRessource = "stock" | "mobilise" | "indicateur";
 
 export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[] = [
   { valeur: "stock", libelle: "stock", aide: "s'accumule et se dépense" },
-  { valeur: "flux", libelle: "flux", aide: "n'existe qu'en débit, ne s'accumule pas" },
   {
     valeur: "mobilise",
     libelle: "mobilisé",
@@ -57,7 +63,7 @@ export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[]
 ];
 
 /** Les genres qu'une navette peut porter. Ni les habitants, ni un pourcentage. */
-export const GENRES_TRANSPORTABLES: GenreRessource[] = ["stock", "flux"];
+export const GENRES_TRANSPORTABLES: GenreRessource[] = ["stock"];
 
 export function estTransportable(r: { genre: GenreRessource | "" }): boolean {
   return GENRES_TRANSPORTABLES.includes(r.genre as GenreRessource);
