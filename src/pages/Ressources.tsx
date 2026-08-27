@@ -82,6 +82,24 @@ export default function Ressources() {
     });
   }, [ressources, tri]);
 
+  /**
+   * Le detail par genre, en infobulle du compteur : un total seul ne dit pas si
+   * les 4 genres sont representes, et c'est la premiere chose qu'on veut savoir
+   * en arrivant sur l'ecran.
+   */
+  const repartition = useMemo(() => {
+    const parts = GENRES.map((g) => ({
+      libelle: g.libelle,
+      n: ressources.filter((r) => r.genre === g.valeur).length,
+    }));
+    const sansGenre = ressources.filter((r) => !r.genre).length;
+    if (sansGenre > 0) parts.push({ libelle: "sans genre", n: sansGenre });
+    return parts
+      .filter((p) => p.n > 0)
+      .map((p) => `${p.n} ${p.libelle}`)
+      .join(", ");
+  }, [ressources]);
+
   const enregistrer = async (valeurs: ValeursRessource) => {
     if (!dialog) return;
     setSaving(true);
@@ -113,7 +131,17 @@ export default function Ressources() {
     <div>
       <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">Ressources</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-semibold text-white">Ressources</h1>
+            {!chargement && ressources.length > 0 && (
+              <span
+                className="rounded-full border border-edge px-2 py-0.5 text-xs tabular-nums text-slate-400"
+                title={repartition}
+              >
+                {ressources.length}
+              </span>
+            )}
+          </div>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
             Le vocabulaire du jeu : une ligne par ressource, saisie une fois. Les couts et les
             productions des tuiles ne proposent que ce qui est declare ici, ce qui evite de se
