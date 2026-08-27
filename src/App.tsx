@@ -8,12 +8,13 @@ import Modeles3D from "@/pages/Modeles3D";
 import ListePlateaux from "@/pages/ListePlateaux";
 import PlateauEditeur from "@/pages/PlateauEditeur";
 import Ressources from "@/pages/Ressources";
+import Technologies from "@/pages/Technologies";
 import Tuiles from "@/pages/Tuiles";
 import { useAuth } from "@/lib/auth";
 
 /**
  * Le document de conception pèse ~115 Ko de texte inliné au build : chargé à la
- * demande, il ne ralentit pas l'ouverture des six écrans de contenu.
+ * demande, il ne ralentit pas l'ouverture des sept écrans de contenu.
  */
 const Conception = lazy(() => import("@/pages/Conception"));
 
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/3dmodeltuile" element={<Modeles3D />} />
         <Route path="/tuiles" element={<Tuiles />} />
         <Route path="/ressources" element={<Ressources />} />
+        <Route path="/technologies" element={<Technologies />} />
         <Route path="/modeles" element={<ListePlateaux source="templates" />} />
         <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />
         <Route path="/plateaux" element={<ListePlateaux source="plateaux" />} />
