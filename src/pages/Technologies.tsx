@@ -4,9 +4,12 @@ import { Vignette } from "@/components/Vignette";
 import ChoixTuiles from "@/components/ChoixTuiles";
 import { messageErreur, pb } from "@/lib/pb";
 import { loadRessources, parAlphabet, type Ressource } from "@/lib/ressources";
-import { formatDuree, loadTuiles, type Tuile } from "@/lib/tuiles";
+import { formatDuree, loadTuiles, tileIdsDe, type Tuile } from "@/lib/tuiles";
+// ⚠️ Les ages sont une collection depuis le 2026-08-27 au soir : ils ne sont
+// plus ecrits en dur dans `technologies.ts`. C'est l'onglet Ages qui dit
+// lesquels existent, et dans quel ordre les bandes se suivent.
+import { libelleAge, loadAges, type Age } from "@/lib/ages";
 import {
-  AGES,
   ageDeduit,
   batimentDe,
   categorieDe,
@@ -18,7 +21,6 @@ import {
   effetsDe,
   effetUtile,
   effetVide,
-  libelleAge,
   ligneAchatVide,
   ligneEntretienVide,
   loadTechnologies,
@@ -26,9 +28,7 @@ import {
   prerequisDeclaresAilleurs,
   prerequisEffectifs,
   SANS_CATEGORIE,
-  tileIdsDe,
   valeursAvecBatiment,
-  type Age,
   type CoutTechno,
   type EffetTechno,
   type ModeEffet,
@@ -52,6 +52,7 @@ export default function Technologies() {
   const [technologies, setTechnologies] = useState<Technologie[]>([]);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
+  const [ages, setAges] = useState<Age[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -67,14 +68,16 @@ export default function Technologies() {
       // Les tuiles et les ressources alimentent les listes du formulaire : on ne
       // saisit jamais un tileId ni un code de ressource a la main. Chargement
       // tolerant — une techno reste lisible meme si le catalogue ne repond pas.
-      const [t, tu, r] = await Promise.all([
+      const [t, tu, r, a] = await Promise.all([
         loadTechnologies(),
         loadTuiles().catch(() => [] as Tuile[]),
         loadRessources().catch(() => [] as Ressource[]),
+        loadAges().catch(() => [] as Age[]),
       ]);
       setTechnologies(t);
       setTuiles(tu);
       setRessources(r);
+      setAges(a);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement des technologies impossible."));
     } finally {
@@ -90,8 +93,10 @@ export default function Technologies() {
    * L'ordre de l'ecran, decide le 2026-08-27 au soir : **par age, puis par
    * categorie**, l'un et l'autre lus sur le BATIMENT ou la techno existe.
    *
-   * Les sept ages sont TOUJOURS la, meme vides : un age absent se lirait comme
-   * un age qui n'existe pas, alors qu'il n'attend qu'une saisie.
+   * **Tous les ages declares sont TOUJOURS la, meme vides** : un age absent se
+   * lirait comme un age qui n'existe pas, alors qu'il n'attend qu'une saisie.
+   * Depuis le 27/08 au soir la liste vient de la collection `ages` — sept
+   * aujourd'hui, huit le jour ou il en ajoutera un.
    *
    * ⚠️ Les BROUILLONS — sans batiment relie, donc sans age ni categorie — sont
    * en TETE, pas en fin. Ce sont les idees en cours : les enterrer sous sept
@@ -110,14 +115,16 @@ export default function Technologies() {
     };
 
     const brouillons = technologies.filter((t) => !t.batiment);
-    const parAge = AGES.map((age) => {
+    const declares = ages.map((a) => a.numero);
+    const parAge = declares.map((age) => {
       const liste = technologies.filter((t) => t.batiment && t.age === age);
-      return { age: age as number, categories: sousGroupes(liste), total: liste.length };
+      return { age, categories: sousGroupes(liste), total: liste.length };
     });
 
     // Une techno reliee a un batiment SANS age (une case de terrain, ou un
-    // batiment dont l'age n'a pas ete rempli) ne tomberait dans aucun des sept.
-    const horsAge = technologies.filter((t) => t.batiment && !AGES.includes(t.age as Age));
+    // batiment dont l'age n'a pas ete rempli) ne tomberait dans aucune bande —
+    // pas plus qu'une techno rangee sous un age qui n'est plus declare.
+    const horsAge = technologies.filter((t) => t.batiment && !declares.includes(t.age));
 
     return [
       ...(brouillons.length
@@ -128,7 +135,7 @@ export default function Technologies() {
         ? [{ age: 0, categories: sousGroupes(horsAge), total: horsAge.length }]
         : []),
     ];
-  }, [technologies, tuiles]);
+  }, [technologies, tuiles, ages]);
 
   const enregistrer = async (valeurs: ValeursTechnologie) => {
     if (!dialog) return;
@@ -214,7 +221,9 @@ export default function Technologies() {
             <section key={groupe.age} className="card overflow-hidden">
               <header className="flex items-center justify-between gap-3 border-b border-edge px-4 py-2.5">
                 <h2 className="text-sm font-medium text-slate-200">
-                  {groupe.age === -1 ? "Brouillons — sans batiment relie" : libelleAge(groupe.age)}
+                  {groupe.age === -1
+                    ? "Brouillons — sans batiment relie"
+                    : libelleAge(groupe.age, ages)}
                   <span className="ml-2 text-xs tabular-nums text-slate-500">{groupe.total}</span>
                 </h2>
                 {groupe.age === -1 && (
@@ -268,6 +277,7 @@ export default function Technologies() {
           technologies={technologies}
           tuiles={tuiles}
           ressources={ressources}
+          ages={ages}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}
@@ -315,6 +325,7 @@ function TechnologieDialog({
   technologies,
   tuiles,
   ressources,
+  ages,
   saving,
   erreur,
   onCancel,
@@ -324,6 +335,8 @@ function TechnologieDialog({
   technologies: Technologie[];
   tuiles: Tuile[];
   ressources: Ressource[];
+  /** Les ages declares : ils nomment la bande ou la techno ira se ranger. */
+  ages: Age[];
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
@@ -508,7 +521,7 @@ function TechnologieDialog({
             <p className="mt-1 text-xs text-slate-500">
               {tuileHote ? (
                 <>
-                  Elle sera rangee dans <span className="text-slate-300">{libelleAge(age)}</span>
+                  Elle sera rangee dans <span className="text-slate-300">{libelleAge(age, ages)}</span>
                   {categorie ? (
                     <>
                       , categorie <span className="text-slate-300">{categorie}</span>

@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "@/components/Layout";
+import Ages from "@/pages/Ages";
 import Home from "@/pages/Home";
 import Joueurs from "@/pages/Joueurs";
 import Login from "@/pages/Login";
@@ -14,7 +15,7 @@ import { useAuth } from "@/lib/auth";
 
 /**
  * Le document de conception pèse ~115 Ko de texte inliné au build : chargé à la
- * demande, il ne ralentit pas l'ouverture des sept écrans de contenu.
+ * demande, il ne ralentit pas l'ouverture des huit écrans de contenu.
  */
 const Conception = lazy(() => import("@/pages/Conception"));
 
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="/3dmodeltuile" element={<Modeles3D />} />
         <Route path="/tuiles" element={<Tuiles />} />
         <Route path="/ressources" element={<Ressources />} />
+        <Route path="/ages" element={<Ages />} />
         <Route path="/technologies" element={<Technologies />} />
         <Route path="/modeles" element={<ListePlateaux source="templates" />} />
         <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />

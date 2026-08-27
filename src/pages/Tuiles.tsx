@@ -1,10 +1,14 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { Vignette } from "@/components/Vignette";
 import { messageErreur, pb } from "@/lib/pb";
 import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
 import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
+// ⚠️ Les ages sont une COLLECTION depuis le 2026-08-27 au soir (onglet Ages) :
+// le catalogue les lit, il n'en tient pas un second jeu. Deux listes pour les
+// memes ages, et plus personne ne sait laquelle est la bonne.
+import { libelleAge, loadAges, type Age } from "@/lib/ages";
 import {
   COLLECTION_TUILES,
   cheminIcone,
@@ -243,6 +247,7 @@ export default function Tuiles() {
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [modeles, setModeles] = useState<Modele3D[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
+  const [ages, setAges] = useState<Age[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -359,6 +364,51 @@ export default function Tuiles() {
   }, [tuilesFiltrees, triCle, triSens, colonne, contexte]);
 
   /**
+   * Le catalogue rendu comme l'ecran des technologies : **des bandes d'age, avec
+   * les categories a l'interieur** (demande du 2026-08-27 au soir). L'arbre se
+   * lit par paliers ; une liste a plat de 150 tuiles ne dit rien de sa forme.
+   *
+   * Trois differences assumees avec l'ecran des technologies :
+   *
+   * 1. **Un age vide n'est PAS affiche.** La-bas les sept bandes sont toujours
+   *    la, pour inviter a la saisie ; ici un FILTRE est actif la moitie du temps,
+   *    et sept bandes vides seraient du bruit qui cache le resultat.
+   * 2. **« Sans age » va en DERNIER**, pas en tete : ce ne sont pas des
+   *    brouillons mais les cases de terrain (eau, foret, volcan), qui n'ont
+   *    aucune raison d'etre dans l'arbre.
+   * 3. **Le tri reste celui des entetes**, il joue A L'INTERIEUR d'une
+   *    categorie. Regrouper n'est pas classer : on garde les deux.
+   */
+  const groupes = useMemo(() => {
+    const parAge = new Map<number, Tuile[]>();
+    for (const t of tuilesTriees) {
+      // Plus de borne 1..7 en dur : un age vaut ce que l'onglet Ages declare,
+      // et un numero inconnu garde sa bande — marquee « non declare » — plutot
+      // que de tomber en silence dans « sans age ».
+      const age = t.age > 0 ? Math.trunc(t.age) : 0;
+      parAge.set(age, [...(parAge.get(age) ?? []), t]);
+    }
+    return [...parAge.entries()]
+      // 0 en dernier, les ages dans l'ordre : l'Infini envoie le zero au bout,
+      // quel que soit le nombre d'ages declares.
+      .sort((a, b) => (a[0] || Infinity) - (b[0] || Infinity))
+      .map(([age, liste]) => {
+        const parCat = new Map<string, Tuile[]>();
+        for (const t of liste) {
+          const c = (t.categorie ?? "").trim() || "sans categorie";
+          parCat.set(c, [...(parCat.get(c) ?? []), t]);
+        }
+        return {
+          age,
+          total: liste.length,
+          categories: [...parCat.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0], "fr", { sensitivity: "base" }))
+            .map(([categorie, tuiles]) => ({ categorie, tuiles })),
+        };
+      });
+  }, [tuilesTriees]);
+
+  /**
    * Le compte du catalogue. Le total seul ne dit pas grand-chose : une tuile en
    * brouillon n'est pas jouable, et une tuile `space` ne sortira jamais sur un
    * plateau au sol. On decompose donc, plutot que d'afficher un nombre qui
@@ -387,10 +437,20 @@ export default function Tuiles() {
     setChargement(true);
     setErreur(null);
     try {
-      const [t, m, r] = await Promise.all([loadTuiles(), loadModeles3D(), loadRessources()]);
+      // Les ages sont charges de facon TOLERANTE : le catalogue reste lisible
+      // meme si leur collection n'existe pas encore (patch pas encore lance).
+      // Les bandes s'appellent alors « Age 3 — non declare », ce qui se corrige,
+      // au lieu d'un ecran vide qui se cherche.
+      const [t, m, r, a] = await Promise.all([
+        loadTuiles(),
+        loadModeles3D(),
+        loadRessources(),
+        loadAges().catch(() => [] as Age[]),
+      ]);
       setTuiles(t);
       setModeles(m);
       setRessources(r);
+      setAges(a);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
@@ -627,78 +687,115 @@ export default function Tuiles() {
                 </tr>
               )}
               {!chargement &&
-                tuilesTriees.map((tuile) => {
-                  const confirme = aSupprimer === tuile.id;
-                  const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
-                  return (
-                    <tr
-                      key={tuile.id}
-                      className="border-b border-edge/60 align-top last:border-0 hover:bg-ink/40"
-                    >
-                      <td className="px-3 py-2">
-                        <Vignette chemin={cheminIcone(tuile)} alt="" taille={24} />
-                        <span
-                          className={`ml-2 align-middle ${
-                            tuile.actif ? "text-slate-200" : "text-slate-500"
-                          }`}
-                        >
-                          {tuile.nom}
+                groupes.map((groupe) => (
+                  <Fragment key={groupe.age}>
+                    {/* La bande d'age : une ligne pleine largeur DANS le tbody,
+                        plutot qu'un tableau par age — l'entete classant reste
+                        unique en haut, et les colonnes restent alignees d'un
+                        age a l'autre. */}
+                    <tr className="border-y border-edge bg-ink/60">
+                      <td colSpan={3} className="px-3 py-1.5">
+                        <span className="text-xs font-medium text-slate-200">
+                          {groupe.age === 0
+                            ? "Sans age — cases de terrain et tuiles non classees"
+                            : libelleAge(groupe.age, ages)}
                         </span>
-                        {!tuile.actif && (
-                          <span className="ml-2 rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-500">
-                            brouillon
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {confirme ? (
-                          <div className="inline-flex flex-col items-start gap-1">
-                            <span className="text-[11px] leading-tight text-red-300">
-                              {citants.length > 0
-                                ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
-                                : "Cet id ne sera jamais reattribue."}
-                            </span>
-                            <span>
-                              <button
-                                className="text-xs text-red-300 hover:underline"
-                                onClick={() => void supprimer(tuile)}
-                              >
-                                Confirmer
-                              </button>
-                              <button
-                                className="ml-3 text-xs text-slate-400 hover:text-white"
-                                onClick={() => setASupprimer(null)}
-                              >
-                                Annuler
-                              </button>
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              className="text-xs text-accent hover:underline"
-                              onClick={() => {
-                                setErreurDialog(null);
-                                setDialog({ tuile });
-                              }}
-                            >
-                              Modifier
-                            </button>
-                            <button
-                              className="ml-3 text-xs text-slate-500 hover:text-red-400"
-                              onClick={() => setASupprimer(tuile.id)}
-                            >
-                              Supprimer
-                            </button>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-400">
-                        {colonne.rendu(contexte(tuile))}
+                        <span className="ml-2 text-xs tabular-nums text-slate-500">
+                          {groupe.total}
+                        </span>
                       </td>
                     </tr>
-                  );
-                })}
+                    {groupe.categories.map((c) => (
+                      <Fragment key={c.categorie}>
+                        {/* Le sous-titre ne s'affiche que s'il y a plusieurs
+                            categories : un seul sous-titre au-dessus d'une seule
+                            liste n'apprend rien. */}
+                        {groupe.categories.length > 1 && (
+                          <tr className="bg-ink/30">
+                            <td
+                              colSpan={3}
+                              className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-500"
+                            >
+                              {c.categorie}
+                            </td>
+                          </tr>
+                        )}
+                        {c.tuiles.map((tuile) => {
+                          const confirme = aSupprimer === tuile.id;
+                          const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
+                          return (
+                            <tr
+                              key={tuile.id}
+                              className="border-b border-edge/60 align-top last:border-0 hover:bg-ink/40"
+                            >
+                              <td className="px-3 py-2">
+                                <Vignette chemin={cheminIcone(tuile)} alt="" taille={24} />
+                                <span
+                                  className={`ml-2 align-middle ${
+                                    tuile.actif ? "text-slate-200" : "text-slate-500"
+                                  }`}
+                                >
+                                  {tuile.nom}
+                                </span>
+                                {!tuile.actif && (
+                                  <span className="ml-2 rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-500">
+                                    brouillon
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                {confirme ? (
+                                  <div className="inline-flex flex-col items-start gap-1">
+                                    <span className="text-[11px] leading-tight text-red-300">
+                                      {citants.length > 0
+                                        ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
+                                        : "Cet id ne sera jamais reattribue."}
+                                    </span>
+                                    <span>
+                                      <button
+                                        className="text-xs text-red-300 hover:underline"
+                                        onClick={() => void supprimer(tuile)}
+                                      >
+                                        Confirmer
+                                      </button>
+                                      <button
+                                        className="ml-3 text-xs text-slate-400 hover:text-white"
+                                        onClick={() => setASupprimer(null)}
+                                      >
+                                        Annuler
+                                      </button>
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <button
+                                      className="text-xs text-accent hover:underline"
+                                      onClick={() => {
+                                        setErreurDialog(null);
+                                        setDialog({ tuile });
+                                      }}
+                                    >
+                                      Modifier
+                                    </button>
+                                    <button
+                                      className="ml-3 text-xs text-slate-500 hover:text-red-400"
+                                      onClick={() => setASupprimer(tuile.id)}
+                                    >
+                                      Supprimer
+                                    </button>
+                                  </>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-xs text-slate-400">
+                                {colonne.rendu(contexte(tuile))}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
+                    ))}
+                  </Fragment>
+                ))}
             </tbody>
           </table>
         </div>
@@ -710,6 +807,7 @@ export default function Tuiles() {
           tuiles={tuiles}
           modeles={modeles}
           ressources={ressources}
+          ages={ages}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}

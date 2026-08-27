@@ -34,11 +34,25 @@ export default function Home() {
         hint: "Le vocabulaire du jeu, cité par tous les coûts et productions.",
       },
       {
+        cle: "ages",
+        to: "/ages",
+        collection: "ages",
+        label: "Âges",
+        hint: "Les paliers du jeu : une tuile s'y range, une techno prend celui de son bâtiment.",
+      },
+      {
         cle: "tuiles",
         to: "/tuiles",
         collection: "tuiles",
         label: "Tuiles",
         hint: "Le catalogue jouable : un modèle 3D plus ses règles de jeu.",
+      },
+      {
+        cle: "technologies",
+        to: "/technologies",
+        collection: "technologies",
+        label: "Technologie",
+        hint: "L'arbre : ce qu'une techno coûte, exige et débloque. Le jeu ne la lit pas encore.",
       },
       {
         cle: "templates",

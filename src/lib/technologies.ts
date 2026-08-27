@@ -47,31 +47,12 @@ import { PERIODE_PAR_DEFAUT } from "@/lib/tuiles";
 export const COLLECTION_TECHNOLOGIES = "technologies";
 
 /**
- * Les sept âges de l'arbre (`SysB/arbre/arbre_sysb.json`). Écrits ici plutôt que
- * saisis librement : une techno qui se réclamerait d'un « âge 9 » ne trouverait
- * jamais sa colonne.
+ * ⚠️ **Les âges ne vivent plus ici.** Ils étaient écrits en dur (`AGES`,
+ * `NOMS_AGES`, `libelleAge`), recopiés de `arbre_sysb.json` ; depuis le
+ * 2026-08-27 au soir ils sont une collection à part — `src/lib/ages.ts`, onglet
+ * « Âges ». Ne pas en remettre une seconde liste ici : c'est exactement la
+ * double source qu'on vient de supprimer.
  */
-export const AGES = [1, 2, 3, 4, 5, 6, 7] as const;
-export type Age = (typeof AGES)[number];
-
-/**
- * Le nom de chaque âge, **recopié de `arbre_sysb.json`** — la source de vérité
- * de l'arbre. Ne pas les réinventer ici : deux jeux de noms pour les mêmes sept
- * âges, et plus personne ne sait lequel est le bon.
- */
-export const NOMS_AGES: Record<Age, string> = {
-  1: "Pionniers",
-  2: "Secteur artisanal",
-  3: "Société urbaine",
-  4: "Ère industrielle",
-  5: "Ère spatiale primordiale",
-  6: "Métropole spatiale",
-  7: "Cité spatiale transhumaine",
-};
-
-export function libelleAge(age: number): string {
-  return age in NOMS_AGES ? `Âge ${age} — ${NOMS_AGES[age as Age]}` : "sans âge";
-}
 
 // --- Le bâtiment où la techno existe, et ce qu'il donne ----------------------
 
@@ -96,10 +77,15 @@ export function batimentDe<T extends { tileId: number }>(
 /**
  * L'âge que la techno DOIT porter, lu sur son bâtiment. `0` si elle n'en a pas —
  * ou si le bâtiment n'a pas d'âge, ce qui arrive aux cases de terrain.
+ *
+ * ⚠️ Plus de borne 1–7 depuis que les âges sont une collection : c'est l'onglet
+ * « Âges » qui dit lesquels existent, et il peut en compter huit demain. Un
+ * numéro qui n'y figure pas n'est pas ramené à zéro en silence — l'écran le
+ * montre « non déclaré », ce qui se corrige ; un zéro muet se cherche.
  */
 export function ageDeduit(batiment: { age?: number } | undefined): number {
   const a = batiment?.age ?? 0;
-  return a >= 1 && a <= 7 ? a : 0;
+  return a > 0 ? Math.trunc(a) : 0;
 }
 
 /** La catégorie, lue sur le bâtiment. Vide = pas de bâtiment, ou tuile sans catégorie. */
@@ -282,12 +268,6 @@ export function effetUtile(e: EffetTechno): boolean {
 
 const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
 const texte = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-
-/** Une liste de tileIds : dédoublonnée, triée, sans zéro ni valeur non numérique. */
-export function tileIdsDe(v: unknown): number[] {
-  if (!Array.isArray(v)) return [];
-  return Array.from(new Set(v.map(entier).filter((n) => n > 0))).sort((a, b) => a - b);
-}
 
 /** Une liste de codes de techno : dédoublonnée, triée, sans vide. */
 export function codesDe(v: unknown): string[] {

@@ -5,8 +5,11 @@ import type { ReactNode } from "react";
 
 /**
  * Les écrans du site. L'ordre suit la chaîne de fabrication : on déclare un
- * modèle 3D, on nomme les ressources, puis on en fait des tuiles jouables — et
- * les technologies rangent ces tuiles par palier.
+ * modèle 3D, on nomme les ressources, on pose les âges, puis on en fait des
+ * tuiles jouables — et les technologies rangent ces tuiles par palier.
+ *
+ * ⚠️ « Âges » est placé AVANT « Tuiles » parce qu'il en est la base : une tuile
+ * se range dans un âge, et une techno prend celui de son bâtiment.
  *
  * Il n'y a plus d'écran générique piloté par un schéma : chaque collection a le
  * sien, taillé pour son contenu. Le schéma en dur et les écrans `CollectionPage`
@@ -15,6 +18,7 @@ import type { ReactNode } from "react";
 const PAGES = [
   { to: "/3dmodeltuile", label: "3DmodelTuile" },
   { to: "/ressources", label: "Ressources" },
+  { to: "/ages", label: "Âges" },
   { to: "/tuiles", label: "Tuiles" },
   { to: "/technologies", label: "Technologie" },
   { to: "/modeles", label: "Modèles" },
@@ -23,7 +27,7 @@ const PAGES = [
 ];
 
 /**
- * Les écrans qui ne pilotent aucune collection. Séparés des sept autres dans la
+ * Les écrans qui ne pilotent aucune collection. Séparés des huit autres dans la
  * barre : ici on lit, on n'écrit pas dans la base.
  */
 const DOCUMENTS = [{ to: "/conception", label: "Conception" }];

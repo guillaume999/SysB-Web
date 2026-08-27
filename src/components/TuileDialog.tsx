@@ -6,6 +6,7 @@ import TuileStockage from "@/components/TuileStockage";
 import { Vignette } from "@/components/Vignette";
 import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
 import type { Ressource } from "@/lib/ressources";
+import { SANS_AGE, libelleAge, type Age } from "@/lib/ages";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
@@ -53,6 +54,7 @@ export default function TuileDialog({
   tuiles,
   modeles,
   ressources,
+  ages,
   saving,
   erreur,
   onCancel,
@@ -62,6 +64,8 @@ export default function TuileDialog({
   tuiles: Tuile[];
   modeles: Modele3D[];
   ressources: Ressource[];
+  /** Les ages declares — onglet Ages. C'est eux que propose la liste, jamais un nombre libre. */
+  ages: Age[];
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
@@ -165,6 +169,11 @@ export default function TuileDialog({
   const couleurEffective =
     couleur || couleurAuto(Number.isFinite(idNumerique) ? idNumerique : 0);
 
+  // Un age enregistre que l'onglet Ages ne declare plus : la tuile le garde, la
+  // liste le montre en clair. Voir le commentaire du selecteur.
+  const ageNumerique = Number(age) || 0;
+  const ageInconnu = ageNumerique > 0 && !ages.some((a) => a.numero === ageNumerique);
+
   const bloque = saving || nom.trim() === "" || modele === "" || idHorsBornes || conflit !== null;
 
   const submit = (event: React.FormEvent) => {
@@ -174,7 +183,7 @@ export default function TuileDialog({
       tileId: idNumerique,
       nom: nom.trim(),
       code: code.trim(),
-      age: Math.min(7, Math.max(0, Number(age) || 0)),
+      age: Math.max(0, Number(age) || 0),
       chemin_icone: cheminIcone.trim(),
       modele,
       typeOfPlateau: type,
@@ -252,6 +261,12 @@ export default function TuileDialog({
                   le jeu affiche le prefab, pas cette couleur. Laisse le champ sur
                   &laquo; automatique &raquo; et une teinte stable est deduite du tileId ; regle-la
                   pour rendre lisibles les tuiles que tu peins le plus souvent.
+                </Terme>
+                <Terme nom="age">
+                  Le palier ou la tuile se range, choisi parmi les ages declares dans l'onglet
+                  Ages. <b>Aucun</b> est un choix valide : les cases de terrain (eau, foret,
+                  volcan) n'appartiennent a aucun age. C'est aussi cet age que prennent les
+                  technologies reliees a ce batiment — le changer les range ailleurs.
                 </Terme>
                 <Terme nom="code de l'arbre">
                   Le code de la tuile dans l'arbre techno — la seule jointure entre ce catalogue
@@ -334,6 +349,54 @@ export default function TuileDialog({
                   />
                   <p className="mt-1 text-xs text-slate-500">
                     L'octet ecrit dans les plateaux. Un id ne se recycle jamais.
+                  </p>
+                </div>
+
+                {/*
+                  L'age, juste a cote du tileId, sur sa demande du 27/08. Une
+                  LISTE, plus un nombre libre : les ages sont declares dans leur
+                  onglet, et taper « 9 » rangeait la tuile sous un age qui
+                  n'existe pas — sans que rien ne le dise.
+
+                  ⚠️ Un age deja en base mais plus declare n'est PAS efface en
+                  silence : il apparait en fin de liste, marque « non declare ».
+                  Le faire disparaitre changerait la valeur enregistree au
+                  premier « Enregistrer », sans que personne l'ait demande.
+                */}
+                <div>
+                  <label className="label" htmlFor="tuile-age">
+                    Age
+                  </label>
+                  <select
+                    id="tuile-age"
+                    className="input"
+                    value={age}
+                    onChange={(e) => setAge(e.target.value)}
+                  >
+                    <option value={SANS_AGE}>aucun — case de terrain</option>
+                    {ages.map((a) => (
+                      <option key={a.id} value={a.numero}>
+                        {libelleAge(a.numero, ages)}
+                      </option>
+                    ))}
+                    {ageInconnu && (
+                      <option value={age}>{libelleAge(Number(age), ages)}</option>
+                    )}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {ages.length === 0 ? (
+                      <>Aucun age declare : commence par l'onglet Ages.</>
+                    ) : ageInconnu ? (
+                      <span className="text-amber-300">
+                        L'age {age} n'est plus declare dans l'onglet Ages. Choisis-en un autre, ou
+                        redeclare-le la-bas.
+                      </span>
+                    ) : (
+                      <>
+                        ⚠️ C'est cet age que prennent les <b>technologies</b> reliees a ce
+                        batiment : le changer les range ailleurs.
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -456,26 +519,6 @@ export default function TuileDialog({
                 <p className="mt-1 text-xs text-slate-500">
                   Seulement pour l'editeur de plateaux du site : en jeu, c'est le prefab 3D qui est
                   affiche.
-                </p>
-              </div>
-
-              <div>
-                <label className="label" htmlFor="tuile-age">
-                  Age de l'arbre
-                </label>
-                <input
-                  id="tuile-age"
-                  type="number"
-                  min={0}
-                  max={7}
-                  className="input"
-                  value={age}
-                  onChange={(e) => setAge(e.target.value)}
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  1 a 7, ou <b>0</b> pour une case de terrain, qui n'appartient a aucun age.
-                  ⚠️ C'est cet age que prennent les <b>technologies</b> reliees a ce batiment :
-                  le changer les range ailleurs.
                 </p>
               </div>
 

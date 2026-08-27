@@ -39,6 +39,25 @@ export const COLLECTION_TUILES = "tuiles";
 export const TILE_ID_MIN = 1;
 export const TILE_ID_MAX = 255;
 
+/**
+ * Une liste de tileIds venue de la base : dédoublonnée, triée, sans zéro ni
+ * valeur non numérique.
+ *
+ * ⚠️ Vit ici plutôt que dans `technologies.ts`, où elle est née le 27/08 : les
+ * âges désignent eux aussi des bâtiments par tileId, et deux nettoyages
+ * légèrement différents finiraient par diverger.
+ */
+export function tileIdsDe(v: unknown): number[] {
+  if (!Array.isArray(v)) return [];
+  return Array.from(
+    new Set(
+      v
+        .map((x) => (typeof x === "number" && Number.isFinite(x) ? Math.trunc(x) : 0))
+        .filter((n) => n > 0),
+    ),
+  ).sort((a, b) => a - b);
+}
+
 // --- Placement : les règles de pose ----------------------------------------
 
 /**
