@@ -250,8 +250,6 @@ export interface RessourceRangee {
   /** La catégorie du bâtiment qui la fait apparaître — producteur d'abord. */
   categorie: string;
   usages: UsageRessource[];
-  producteurs: number;
-  consommateurs: number;
   /** Les âges suivants où elle sert encore, pour le badge « aussi 3, 4 ». */
   autresAges: number[];
   /** Renseigné seulement quand `age === HORS_ARBRE`. */
@@ -289,8 +287,6 @@ export function rangerRessource(
     age,
     categorie: ordonnes[0]?.categorie || SANS_CATEGORIE,
     usages,
-    producteurs: usages.filter((u) => u.sens === "produit").length,
-    consommateurs: usages.filter((u) => u.sens === "consomme").length,
     autresAges: ages.slice(1),
     citations: age === HORS_ARBRE ? citationsHorsFlux(ressource.code, tuiles) : null,
   };

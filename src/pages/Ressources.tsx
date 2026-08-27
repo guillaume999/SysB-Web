@@ -408,15 +408,12 @@ function CarteRessource({
   onConfirmer: () => void;
   onAnnuler: () => void;
 }) {
-  const { ressource: r, producteurs, consommateurs, autresAges, citations } = rangee;
+  const { ressource: r, autresAges, citations } = rangee;
+  const [tout, setTout] = useState(false);
 
-  // L'infobulle nomme les batiments : le compteur dit combien, elle dit
-  // lesquels — sans ouvrir un ecran de plus.
-  const nomme = (sens: "produit" | "consomme") =>
-    rangee.usages
-      .filter((u) => u.sens === sens)
-      .map((u) => u.nom)
-      .join(", ");
+  const produit = nomsDesBatiments(rangee, "produit");
+  const consomme = nomsDesBatiments(rangee, "consomme");
+  const caches = Math.max(0, produit.length - MAX_NOMS) + Math.max(0, consomme.length - MAX_NOMS);
 
   return (
     <li className="relative flex overflow-hidden rounded-lg border border-edge bg-ink/40">
@@ -446,27 +443,42 @@ function CarteRessource({
           </span>
         </button>
 
-        <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-          {producteurs > 0 && (
-            <span className="text-emerald-300/90" title={nomme("produit")}>
-              produite par {producteurs}
-            </span>
-          )}
-          {consommateurs > 0 && (
-            <span className="text-sky-300/90" title={nomme("consomme")}>
-              consommee par {consommateurs}
-            </span>
-          )}
-          {citations && <span className="text-slate-500">{resumeCitations(citations)}</span>}
-          {autresAges.length > 0 && (
-            <span
-              className="rounded border border-edge px-1.5 py-0.5 text-[10px] text-slate-400"
-              title="Les ages suivants ou elle sert encore"
+        <div className="mt-2 space-y-1 text-xs">
+          <LigneBatiments
+            libelle="produite par"
+            couleur="text-emerald-300/90"
+            batiments={produit}
+            tout={tout}
+          />
+          <LigneBatiments
+            libelle="consommee par"
+            couleur="text-sky-300/90"
+            batiments={consomme}
+            tout={tout}
+          />
+          {caches > 0 && (
+            <button
+              type="button"
+              className="text-[11px] text-accent hover:underline"
+              onClick={() => setTout(!tout)}
             >
-              aussi age {autresAges.join(", ")}
-            </span>
+              {tout ? "replier" : `voir les ${caches} autres`}
+            </button>
           )}
-        </p>
+          {(citations || autresAges.length > 0) && (
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {citations && <span className="text-slate-500">{resumeCitations(citations)}</span>}
+              {autresAges.length > 0 && (
+                <span
+                  className="rounded border border-edge px-1.5 py-0.5 text-[10px] text-slate-400"
+                  title="Les ages suivants ou elle sert encore"
+                >
+                  aussi age {autresAges.join(", ")}
+                </span>
+              )}
+            </p>
+          )}
+        </div>
 
         {confirme ? (
           <p className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-red-300">
@@ -489,6 +501,60 @@ function CarteRessource({
         )}
       </div>
     </li>
+  );
+}
+
+/**
+ * Combien de batiments on NOMME avant de replier. Quatre : au-dela, une carte
+ * de grille devient un paragraphe et l'ecran perd sa forme.
+ *
+ * ⚠️ Le reste n'est pas cache derriere une infobulle mais derriere un BOUTON.
+ * « produite par 3 » ne disait pas par qui, et c'est ce qu'on vient chercher
+ * (demande du 27/08) ; une infobulle ne se decouvre pas au doigt.
+ */
+const MAX_NOMS = 4;
+
+/**
+ * Les batiments d'un sens, **du plus ancien au plus recent** : sur un ecran
+ * range par ages, l'ordre de l'arbre est le seul qui veuille dire quelque
+ * chose. Le `tileId` departage, pour que deux chargements rendent la meme liste.
+ */
+function nomsDesBatiments(rangee: RessourceRangee, sens: "produit" | "consomme") {
+  return rangee.usages
+    .filter((u) => u.sens === sens)
+    .sort((a, b) => (a.age || 99) - (b.age || 99) || a.tileId - b.tileId);
+}
+
+/** Une ligne « produite par X, Y, Z ». Rien du tout si personne. */
+function LigneBatiments({
+  libelle,
+  couleur,
+  batiments,
+  tout,
+}: {
+  libelle: string;
+  couleur: string;
+  batiments: { tileId: number; nom: string; age: number; categorie: string }[];
+  tout: boolean;
+}) {
+  if (batiments.length === 0) return null;
+  const montres = tout ? batiments : batiments.slice(0, MAX_NOMS);
+  const reste = batiments.length - montres.length;
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-1.5">
+      <span className={`shrink-0 ${couleur}`}>{libelle}</span>
+      {montres.map((b, i) => (
+        <span
+          key={b.tileId}
+          className="text-slate-300"
+          title={`${b.categorie || "sans categorie"} — ${b.age > 0 ? "age " + b.age : "sans age"}`}
+        >
+          {b.nom}
+          {i < montres.length - 1 || reste > 0 ? "," : ""}
+        </span>
+      ))}
+      {reste > 0 && <span className="text-slate-500">+{reste}</span>}
+    </p>
   );
 }
 
