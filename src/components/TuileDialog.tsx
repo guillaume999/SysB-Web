@@ -81,6 +81,7 @@ export default function TuileDialog({
   const [couleur, setCouleur] = useState(tuile?.couleur ?? "");
   const [code, setCode] = useState(tuile?.code ?? "");
   const [cheminIcone, setCheminIcone] = useState(tuile?.chemin_icone ?? "");
+  const [age, setAge] = useState<string>(String(tuile?.age ?? 0));
   // ⚠️ `?? true` et non `?? false` : le `??` ne se declenche que sur une tuile
   //    ABSENTE, donc a la CREATION. Une tuile existante garde toujours son
   //    propre `actif`, y compris `false` — decocher puis rouvrir doit rendre la
@@ -173,6 +174,7 @@ export default function TuileDialog({
       tileId: idNumerique,
       nom: nom.trim(),
       code: code.trim(),
+      age: Math.min(7, Math.max(0, Number(age) || 0)),
       chemin_icone: cheminIcone.trim(),
       modele,
       typeOfPlateau: type,
@@ -454,6 +456,26 @@ export default function TuileDialog({
                 <p className="mt-1 text-xs text-slate-500">
                   Seulement pour l'editeur de plateaux du site : en jeu, c'est le prefab 3D qui est
                   affiche.
+                </p>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="tuile-age">
+                  Age de l'arbre
+                </label>
+                <input
+                  id="tuile-age"
+                  type="number"
+                  min={0}
+                  max={7}
+                  className="input"
+                  value={age}
+                  onChange={(e) => setAge(e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  1 a 7, ou <b>0</b> pour une case de terrain, qui n'appartient a aucun age.
+                  ⚠️ C'est cet age que prennent les <b>technologies</b> reliees a ce batiment :
+                  le changer les range ailleurs.
                 </p>
               </div>
 

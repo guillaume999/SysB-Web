@@ -1031,6 +1031,15 @@ export type Tuile = {
    */
   code: string;
   /**
+   * L'âge de l'arbre auquel ce bâtiment appartient, 1 à 7. `0` = pas d'âge, ce
+   * qui est le cas normal des cases de terrain (eau, forêt, volcan).
+   *
+   * ⚠️ Rempli le 2026-08-27 par l'import de l'arbre. Depuis le soir même, c'est
+   * **lui qui donne son âge à une technologie** (`technologies.batiment`) : le
+   * corriger ici range les technos ailleurs.
+   */
+  age: number;
+  /**
    * Chemin de la vignette sous `Assets/Resources/`, sans extension :
    * `Icones_Tuiles/<code>`. **Stocke en base depuis le 2026-08-27 au soir.**
    *
@@ -1093,6 +1102,7 @@ export interface ValeursTuile {
   tileId: number;
   nom: string;
   code: string;
+  age: number;
   chemin_icone: string;
   modele: string;
   typeOfPlateau: TypePlateau;
