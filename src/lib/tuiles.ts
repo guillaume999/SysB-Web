@@ -1030,6 +1030,16 @@ export type Tuile = {
    * (eau, foret, volcan) n'ont pas d'entree dans l'arbre.
    */
   code: string;
+  /**
+   * Chemin de la vignette sous `Assets/Resources/`, sans extension :
+   * `Icones_Tuiles/<code>`. **Stocke en base depuis le 2026-08-27 au soir.**
+   *
+   * ⚠️ Il a fait l'aller-retour : deduit du `code` d'abord, puis stocke, sur
+   * decision de l'utilisateur. Ne pas re-deduire ailleurs — `cheminIcone()` est
+   * le seul point de lecture, et il lit CE champ. Vide est permis : les cases de
+   * terrain (eau, foret, volcan) n'ont pas de dessin.
+   */
+  chemin_icone: string;
   /** Id du record `tuile3dmodel`. */
   modele: string;
   typeOfPlateau: TypePlateau;
@@ -1083,6 +1093,7 @@ export interface ValeursTuile {
   tileId: number;
   nom: string;
   code: string;
+  chemin_icone: string;
   modele: string;
   typeOfPlateau: TypePlateau;
   categorie: string;
@@ -1180,17 +1191,30 @@ export function tuilesCitant(tuiles: Tuile[], tileId: number): Tuile[] {
  * cote Unity : **`Icones_Tuiles/<code>`**, sans extension et sans
  * `Assets/Resources/`.
  *
- * ⚠️ **Il n'est PAS stocke en base** — il se DEDUIT du `code`, parce qu'il en a
- * toujours ete la simple traduction. Un champ `chemin_icone` a existe sur les
- * tuiles le 27/08, quelques heures : deux colonnes qui disent toujours la meme
- * chose finissent par se contredire. Les `ressources`, elles, gardent le leur —
- * leur code precede l'arbre.
+ * ⚠️ **Il est STOCKE en base** (`tuiles.chemin_icone`), depuis le 2026-08-27 au
+ * soir. Le champ avait ete retire le matin meme au profit d'une deduction sur le
+ * `code` ; l'utilisateur est revenu dessus. Cette fonction ne DEDUIT donc plus
+ * rien — elle lit — et reste le point unique pour que le jour ou la regle change
+ * encore, un seul endroit bouge.
  *
- * Chaine vide si la tuile n'a pas de code : les cases de terrain (eau, foret,
- * volcan) n'ont pas d'entree dans l'arbre, donc pas de dessin.
+ * ⚠️ Ne PAS remettre un repli `Icones_Tuiles/${code}` ici : ce serait exactement
+ * la double source qu'on voulait eviter, et une tuile a la vignette volontairement
+ * vide en retrouverait une.
+ *
+ * Chaine vide = pas de dessin, ce qui est le cas normal des cases de terrain
+ * (eau, foret, volcan) : elles n'ont pas d'entree dans l'arbre.
  */
-export function cheminIcone(tuile: { code?: string }): string {
-  const c = (tuile.code ?? "").trim();
+export function cheminIcone(tuile: { chemin_icone?: string }): string {
+  return (tuile.chemin_icone ?? "").trim();
+}
+
+/**
+ * Ce que `chemin_icone` VAUDRAIT pour ce code — la convention, pas la valeur.
+ * Sert uniquement a proposer un defaut dans le formulaire ; ce qui part en base
+ * reste ce que l'admin a sous les yeux.
+ */
+export function cheminIconeAttendu(code: string): string {
+  const c = code.trim();
   return c ? `Icones_Tuiles/${c}` : "";
 }
 

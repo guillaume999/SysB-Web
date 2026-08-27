@@ -9,7 +9,7 @@ import type { Ressource } from "@/lib/ressources";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
-  cheminIcone,
+  cheminIconeAttendu,
   contrainteDe,
   couleurAuto,
   logistiqueDe,
@@ -80,6 +80,7 @@ export default function TuileDialog({
   const [description, setDescription] = useState(tuile?.description ?? "");
   const [couleur, setCouleur] = useState(tuile?.couleur ?? "");
   const [code, setCode] = useState(tuile?.code ?? "");
+  const [cheminIcone, setCheminIcone] = useState(tuile?.chemin_icone ?? "");
   // ⚠️ `?? true` et non `?? false` : le `??` ne se declenche que sur une tuile
   //    ABSENTE, donc a la CREATION. Une tuile existante garde toujours son
   //    propre `actif`, y compris `false` — decocher puis rouvrir doit rendre la
@@ -153,8 +154,12 @@ export default function TuileDialog({
 
   // Le selecteur de couleur exige toujours un #rrggbb : quand le catalogue ne dit
   // rien, il montre la couleur automatique, celle que l'editeur utiliserait.
-  // La vignette n'est pas un champ : elle se lit du code, ici comme dans la liste.
-  const cheminDeduit = cheminIcone({ code: code.trim() });
+  //
+  // ⚠️ La vignette est un CHAMP depuis le 27/08 au soir (retour en arriere assume
+  // sur la deduction du matin). On garde quand meme la convention sous la main :
+  // une case vide propose `Icones_Tuiles/<code>` en un clic, pour que le cas
+  // courant ne se tape pas a la main 132 fois.
+  const cheminAttendu = cheminIconeAttendu(code);
 
   const couleurEffective =
     couleur || couleurAuto(Number.isFinite(idNumerique) ? idNumerique : 0);
@@ -168,6 +173,7 @@ export default function TuileDialog({
       tileId: idNumerique,
       nom: nom.trim(),
       code: code.trim(),
+      chemin_icone: cheminIcone.trim(),
       modele,
       typeOfPlateau: type,
       categorie: categorie.trim(),
@@ -451,19 +457,37 @@ export default function TuileDialog({
                 </p>
               </div>
 
-              {/* La vignette ne se saisit pas : elle DECOULE du code. Rien a stocker. */}
+              {/* La vignette EST un champ : ce qui est ecrit ici part en base. */}
               <div>
-                <p className="label">Vignette</p>
+                <label className="label" htmlFor="tuile-icone">
+                  Vignette
+                </label>
                 <div className="flex items-center gap-3">
-                  <Vignette chemin={cheminDeduit} alt="" taille={44} />
-                  <code className="text-xs text-slate-400">
-                    {cheminDeduit || "aucune — cette tuile n'a pas de code"}
-                  </code>
+                  <Vignette chemin={cheminIcone} alt="" taille={44} />
+                  <input
+                    id="tuile-icone"
+                    className="input font-mono text-xs"
+                    value={cheminIcone}
+                    onChange={(e) => setCheminIcone(e.target.value)}
+                    placeholder={cheminAttendu || "Icones_Tuiles/<code>"}
+                  />
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Deduite du code : <code>Icones_Tuiles/&lt;code&gt;</code>, le chemin que lit
-                  <code className="mx-1">Resources.Load</code>. Rien a saisir — change le code et
-                  le dessin suit. Le carre pointille veut dire qu'aucun fichier ne porte ce nom.
+                  Chemin sous <code>Assets/Resources/</code>, sans extension — ce que lit
+                  <code className="mx-1">Resources.Load</code>. Le carre pointille veut dire
+                  qu'aucun fichier ne porte ce nom.
+                  {cheminAttendu && cheminIcone.trim() !== cheminAttendu && (
+                    <>
+                      {" "}
+                      <button
+                        type="button"
+                        className="text-accent hover:underline"
+                        onClick={() => setCheminIcone(cheminAttendu)}
+                      >
+                        Utiliser {cheminAttendu}
+                      </button>
+                    </>
+                  )}
                 </p>
               </div>
 
