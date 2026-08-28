@@ -3,11 +3,17 @@ import { codeInconnu, libelleRessource, parAlphabet, type Ressource } from "@/li
 import {
   PERIODE_PAR_DEFAUT,
   TRANCHES_PAR_DEFAUT,
+  casesCouvertes,
   chantierPasEncoreApplique,
   fluxVide,
   formatDuree,
   palierVide,
+  pourcentageProximite,
   productionVide,
+  proximiteParDefaut,
+  proximitePosee,
+  proximiteUtile,
+  proximiteVide,
   rendEnVeille,
   rendementPourIndicateur,
   seuilsEnDouble,
@@ -19,7 +25,9 @@ import {
   type LigneProduction,
   type ModeCout,
   type Palier,
+  type Proximite,
   type Tranche,
+  type Tuile,
 } from "@/lib/tuiles";
 
 /**
@@ -45,10 +53,13 @@ import {
 export default function TuileCouts({
   paliers,
   ressources,
+  tuiles,
   onChange,
 }: {
   paliers: Palier[];
   ressources: Ressource[];
+  /** Le catalogue, pour la regle de proximite d'une consommation (28/08). */
+  tuiles: Tuile[];
   onChange: (paliers: Palier[]) => void;
 }) {
   const majPalier = (index: number, patch: Partial<Palier>) =>
@@ -62,6 +73,8 @@ export default function TuileCouts({
     onChange(paliers.filter((_, i) => i !== index).map((p, i) => ({ ...p, niveau: i + 1 })));
 
   const nomRessource = (code: string) => libelleRessource(ressources, code);
+  const nomTuile = (tileId: number) =>
+    tuiles.find((t) => t.tileId === tileId)?.nom ?? `tuile ${tileId}`;
   /**
    * Ce qu'une tuile peut fabriquer : tout sauf le genre `mobilise`, indicateurs
    * compris.
@@ -182,6 +195,25 @@ export default function TuileCouts({
           <br />
           ⚠️ La tuile déclare qu'elle <em>produit</em> la satisfaction dans l'onglet{" "}
           <strong>Stock &amp; appro</strong> ; ici on dit seulement <em>d'où elle vient</em>.
+        </Terme>
+        <Terme nom="+ proximité">
+          Même geste que <strong>+ indice</strong>, en bout d'une consommation : elle reste cachée
+          tant qu'on ne la demande pas. Elle dit combien de bâtiments d'un type il faut{" "}
+          <strong>autour de la tuile</strong> pour que la ligne tourne à plein — c'est ce qui
+          attache un abattoir à ses pâturages.
+          <br />
+          <em>10 bovins toutes les 120 s, besoin de 5 « Pâturage » à 2 de rayon = 100 %.</em>
+          <br />
+          <strong>Au prorata</strong>, jamais tout ou rien : 3 pâturages sur 5 valent 60 %. La
+          ligne ne demande alors plus que 6 bovins, et la tuile plafonne à 60 % de sa production —
+          sans cette seconde moitié, une ligne servie à plein de sa demande réduite produirait
+          100 % avec 3 pâturages, et la règle ne servirait à rien.
+          <br />
+          Le rayon se compte sur la grille <strong>hexagonale</strong> : 6 cases à 1, 18 à 2, 36 à
+          3. La phrase sous la règle te donne le compte exact.
+          <br />
+          ⚠️ <strong>Pas encore appliqué en jeu</strong> : le moteur ne regarde pas le voisinage.
+          Un avertissement orange le rappelle sous chaque règle posée.
         </Terme>
         <Terme nom="produit">
           Ce que la tuile <strong>fabrique</strong> pendant qu'elle tourne, <strong>au
@@ -337,6 +369,8 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                   lignes={palier.utilisation}
                   ressources={depensables}
                   toutes={ressources}
+                  tuiles={tuiles}
+                  nomTuile={nomTuile}
                   onChange={(utilisation) => majPalier(index, { utilisation })}
                 />
                 <Avertissement
@@ -895,6 +929,8 @@ function LignesFlux({
   lignes,
   ressources,
   toutes,
+  tuiles,
+  nomTuile,
   onChange,
 }: {
   lignes: LigneFlux[];
@@ -902,6 +938,9 @@ function LignesFlux({
   ressources: Ressource[];
   /** Le catalogue entier, pour nommer une ligne déjà saisie qui n'a plus sa place. */
   toutes?: Ressource[];
+  /** Le catalogue des tuiles, pour le batiment que la proximite demande autour. */
+  tuiles: Tuile[];
+  nomTuile: (tileId: number) => string;
   onChange: (lignes: LigneFlux[]) => void;
 }) {
   const maj = (i: number, patch: Partial<LigneFlux>) =>
@@ -916,8 +955,8 @@ function LignesFlux({
       ) : (
         <div className="space-y-2">
           {lignes.map((ligne, i) => (
-            <div key={i} className="flex flex-wrap items-center gap-2">
-              <>
+            <div key={i}>
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="number"
                   min={1}
@@ -990,6 +1029,19 @@ function LignesFlux({
                   </button>
                 )}
 
+                {/* ⚠️ Meme geste que le « + indice » : cache tant qu'on ne l'a
+                    pas demande. La plupart des consommations n'ont aucune
+                    regle de voisinage. */}
+                {!proximitePosee(ligne.proximite) && (
+                  <button
+                    type="button"
+                    className="text-xs text-accent hover:underline"
+                    onClick={() => maj(i, { proximite: proximiteParDefaut() })}
+                  >
+                    + proximité
+                  </button>
+                )}
+
                 <button
                   type="button"
                   className="ml-auto text-xs text-slate-500 hover:text-red-400"
@@ -997,7 +1049,18 @@ function LignesFlux({
                 >
                   retirer
                 </button>
-              </>
+              </div>
+
+              {proximitePosee(ligne.proximite) && (
+                <BlocProximite
+                  proximite={ligne.proximite}
+                  quantite={ligne.quantite}
+                  periode_s={ligne.periode_s}
+                  tuiles={tuiles}
+                  nomTuile={nomTuile}
+                  onChange={(proximite) => maj(i, { proximite })}
+                />
+              )}
             </div>
           ))}
           {periodes.length > 1 && (
@@ -1014,6 +1077,126 @@ function LignesFlux({
           onClick={() => onChange([...lignes, fluxVide(ressources[0]?.code ?? "")])}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * **La regle de proximite d'une consommation** — 2026-08-28.
+ *
+ * Mot de l'utilisateur : *« 10 bovin × 120 s × (besoin de 5 tile bovin a
+ * 2 rayon = 100 %) »*. Elle attache un batiment a son voisinage : un abattoir
+ * sans paturages autour n'a rien a abattre.
+ *
+ * ⚠️ **Au prorata** (choix du 28/08) : 3 sur 5 valent 60 %, pas zero. La ligne
+ * ne demande alors plus que 60 % de son debit, et la tuile plafonne a 60 % de
+ * sa production — c'est ce que la phrase de relecture montre en chiffres.
+ *
+ * ⚠️ Elle n'est **pas encore appliquee en jeu** : le moteur ne regarde pas le
+ * voisinage. L'avertissement orange part avec le mecanisme, pas avant.
+ */
+function BlocProximite({
+  proximite,
+  quantite,
+  periode_s,
+  tuiles,
+  nomTuile,
+  onChange,
+}: {
+  proximite: Proximite;
+  quantite: number;
+  periode_s: number;
+  tuiles: Tuile[];
+  nomTuile: (tileId: number) => string;
+  onChange: (proximite: Proximite) => void;
+}) {
+  const p = proximite;
+  const utile = proximiteUtile(p);
+  // Un tileId qui ne designe plus rien reste VISIBLE dans le menu, marque
+  // « inconnue » : le faire disparaitre changerait la ligne en silence au
+  // premier reenregistrement.
+  const orpheline = p.tileId > 0 && !tuiles.some((t) => t.tileId === p.tileId);
+  const maj = (patch: Partial<Proximite>) => onChange({ ...p, ...patch });
+  // Un exemple a une tuile pres du compte : c'est la que le prorata se voit.
+  const manquantes = Math.max(0, p.nombre - 1);
+  const pct = pourcentageProximite(p, manquantes);
+
+  return (
+    <div className="mt-1 rounded border border-edge/60 bg-ink/60 p-2">
+      <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+        besoin de
+        <input
+          type="number"
+          min={1}
+          step={1}
+          className="input h-8 w-16 py-0"
+          value={p.nombre}
+          onChange={(e) => maj({ nombre: Math.max(0, Number(e.target.value) || 0) })}
+        />
+        {/* Une liste, jamais un id tape a la main : c'est la convention du site. */}
+        <select
+          className={`input h-8 w-44 py-0 ${orpheline ? "border-amber-700 text-amber-300" : ""}`}
+          value={String(p.tileId)}
+          onChange={(e) => maj({ tileId: Number(e.target.value) || 0 })}
+        >
+          <option value="0">choisir un bâtiment</option>
+          {orpheline && <option value={p.tileId}>tuile {p.tileId} — inconnue</option>}
+          {[...tuiles]
+            .sort((a, b) => a.nom.localeCompare(b.nom))
+            .map((t) => (
+              <option key={t.id} value={t.tileId}>
+                {t.nom}
+              </option>
+            ))}
+        </select>
+        à
+        <input
+          type="number"
+          min={1}
+          step={1}
+          className="input h-8 w-16 py-0"
+          value={p.rayon}
+          onChange={(e) => maj({ rayon: Math.max(0, Number(e.target.value) || 0) })}
+        />
+        de rayon = 100 %
+        <button
+          type="button"
+          className="ml-auto text-slate-500 hover:text-red-400"
+          title="retirer la proximité"
+          onClick={() => onChange(proximiteVide())}
+        >
+          &times;
+        </button>
+      </div>
+
+      {utile ? (
+        <p className="mt-1 text-[11px] leading-tight text-slate-500">
+          Il faut <span className="tabular-nums text-slate-300">{p.nombre}</span>{" "}
+          <span className="text-slate-300">&laquo; {nomTuile(p.tileId)} &raquo;</span> dans les{" "}
+          <span className="tabular-nums">{casesCouvertes(p.rayon)}</span> cases à {p.rayon} de
+          rayon pour consommer les {quantite} par {formatDuree(periode_s)}.{" "}
+          <strong>Au prorata en dessous</strong> : avec{" "}
+          <span className="tabular-nums text-slate-300">{manquantes}</span> sur {p.nombre}, la
+          ligne ne demande plus que{" "}
+          <span className="tabular-nums text-slate-300">
+            {Math.round((quantite * pct) / 100)}
+          </span>{" "}
+          et la tuile plafonne à <span className="tabular-nums text-slate-300">{pct} %</span> de sa
+          production.
+        </p>
+      ) : (
+        <p className="mt-1 text-[11px] leading-tight text-amber-400">
+          Règle incomplète — il faut un bâtiment, un nombre et un rayon. Telle quelle, elle sera{" "}
+          <strong>ignorée en jeu</strong>.
+        </p>
+      )}
+
+      {/* ⚠️ Un champ enregistre mais pas encore branche cote jeu l'annonce ;
+          un champ qui ment ne dit rien. A retirer avec le mecanisme. */}
+      <p className="mt-1 text-[11px] leading-tight text-amber-400">
+        ⚠️ Enregistré mais <strong>pas encore appliqué en jeu</strong> : le moteur ne regarde pas
+        encore le voisinage d&apos;une tuile pour calculer sa consommation.
+      </p>
     </div>
   );
 }

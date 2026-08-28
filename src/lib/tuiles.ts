@@ -3,7 +3,8 @@
  *
  * ⚠️ **REMISE À ZÉRO DU 2026-08-26**, puis reconstruction en cours. Le rôle
  * logistique reste retiré du site. Sont revenus : les **règles de pose**
- * (`support`, `limite`, `gratuite`) et les **paliers de coût** — voir plus bas.
+ * (`support`, `limite`, `gratuite`, puis `batiments` et `technologie` le
+ * 2026-08-28) et les **paliers de coût** — voir plus bas.
  *
  * Les champs json `placement`, `niveaux` et `logistique` **ont été vidés en base
  * le 2026-08-26** sur les 25 tuiles du catalogue : plus rien ne subsiste, donc
@@ -61,12 +62,17 @@ export function tileIdsDe(v: unknown): number[] {
 // --- Placement : les règles de pose ----------------------------------------
 
 /**
- * Reconstruit le 2026-08-26, à partir d'une page blanche. Trois types pour
- * l'instant : **`support`** (ce que la case porte), **`limite`** (combien on
- * peut en avoir) et **`gratuite`** (les premiers ne coûtent rien). Les autres —
- * le voisinage surtout — sont ajoutés au fur et à mesure : le tableau
- * `placement` les accueillera sans rien casser, puisque chaque règle porte son
- * champ `regle`.
+ * Reconstruit le 2026-08-26, à partir d'une page blanche. Cinq types :
+ * **`support`** (ce que la case porte), **`limite`** (combien on peut en
+ * avoir), **`gratuite`** (les premiers ne coûtent rien), et depuis le
+ * 2026-08-28 **`batiments`** (il faut déjà en posséder N d'un type) et
+ * **`technologie`** (il faut avoir cherché, jusqu'à un niveau). Les autres —
+ * le voisinage d'une case, surtout — sont ajoutés au fur et à mesure : le
+ * tableau `placement` les accueille sans rien casser, puisque chaque règle
+ * porte son champ `regle`.
+ *
+ * ⚠️ Le voisinage d'une CONSOMMATION, lui, n'est pas ici : il vit sur la ligne
+ * de consommation, en `Proximite` — voir `LigneFlux`.
  *
  * ⚠️ **Toutes les règles ne sont PAS de même nature.** `support` et `limite`
  * sont des CONDITIONS : elles disent oui ou non, et doivent toutes être vraies
@@ -75,12 +81,22 @@ export function tileIdsDe(v: unknown): number[] {
  * la troisième celle de `CoutConstruction`, et le validateur doit **ignorer
  * explicitement** `gratuite` au lieu de la traiter en règle inconnue.
  */
-export type TypeRegle = "support" | "limite" | "gratuite";
+export type TypeRegle = "support" | "limite" | "gratuite" | "batiments" | "technologie";
 
 export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[] = [
   { valeur: "support", libelle: "support", aide: "ce que la case elle-même doit porter" },
   { valeur: "limite", libelle: "limite", aide: "nombre maximum d'exemplaires sur le plateau" },
   { valeur: "gratuite", libelle: "gratuité", aide: "les premiers exemplaires sont offerts" },
+  {
+    valeur: "batiments",
+    libelle: "bâtiments requis",
+    aide: "il faut déjà posséder N exemplaires d'un type de bâtiment",
+  },
+  {
+    valeur: "technologie",
+    libelle: "technologie requise",
+    aide: "il faut avoir cherché une technologie, jusqu'à un niveau donné",
+  },
 ];
 
 /**
@@ -109,9 +125,36 @@ export type BaseSupport = "liste" | "tout";
 /** Sur quoi porte une `limite`. Voir le champ `portee`. */
 export type PorteeLimite = "plateau" | "empire";
 
-/** Vrai tant que le jeu ne sait pas compter sur tous les plateaux du joueur. */
-export function porteePasEncoreAppliquee(r: ReglePlacement): boolean {
-  return r.regle === "limite" && r.portee === "empire";
+/**
+ * Ce qu'une règle est **enregistrée mais pas encore capable de faire en jeu**,
+ * en une phrase — chaîne vide quand tout est branché.
+ *
+ * ⚠️ **C'est la différence entre un champ pas encore branché et un champ qui
+ * ment.** Un champ saisi, affiché et jamais vérifié au moment d'agir est le
+ * piège qu'on s'est déjà tendu deux fois : ici il l'annonce, sous la règle, au
+ * moment où l'admin le choisit.
+ *
+ * ⚠️ **Retirer chaque phrase le jour où le mécanisme existe, jamais avant.**
+ * A remplacé `porteePasEncoreAppliquee()` le 2026-08-28, qui ne portait que le
+ * cas `empire` : même rôle, trois cas.
+ */
+export function pasEncoreAppliqueeEnJeu(r: ReglePlacement): string {
+  if (r.regle === "limite" && r.portee === "empire")
+    return (
+      "« dans tout l'empire » est enregistré mais pas encore appliqué en jeu : le jeu compte " +
+      "pour l'instant le seul plateau où tu poses."
+    );
+  if (r.regle === "batiments")
+    return (
+      "Enregistré mais pas encore appliqué en jeu : le jeu ne regarde pas encore ce que tu " +
+      "possèdes déjà avant de laisser poser."
+    );
+  if (r.regle === "technologie")
+    return (
+      "Enregistré mais pas encore appliqué en jeu : le jeu ne lit pas encore la collection des " +
+      "technologies — rien ne sait si une recherche est acquise, ni à quel niveau."
+    );
+  return "";
 }
 
 export interface ReglePlacement {
@@ -165,6 +208,41 @@ export interface ReglePlacement {
    * avoir qu'une seule, sinon un jour la question « laquelle gagne ? ».**
    */
   offerts: number;
+  // --- batiments (28/08) ---
+  /**
+   * `tileId` du bâtiment qu'il faut **déjà posséder** pour pouvoir poser
+   * celui-ci. `0` = aucun choisi, la règle est ignorée.
+   *
+   * ⚠️ **Un seul type par règle**, choix de l'utilisateur le 2026-08-28 :
+   * *« plusieurs règles, chaque règle un type, un nombre »*. « 3 fermes ET
+   * 2 moulins » s'écrit donc en deux règles — et non en une liste cochée avec
+   * un nombre commun, qui aurait laissé ambigu si le nombre valait par type ou
+   * au total.
+   *
+   * ⚠️ Contrairement au `support`, **`0` n'est pas la case vide ici** : une
+   * case vide ne se construit pas, on ne peut pas en « posséder trois ». Le
+   * sélecteur ne la propose pas.
+   */
+  batiment: number;
+  /** Combien d'exemplaires de `batiment` il faut posséder. `0` = règle ignorée. */
+  nombre: number;
+  // --- technologie (28/08) ---
+  /**
+   * `code` de la technologie qu'il faut avoir cherchée. Vide = règle ignorée.
+   *
+   * ⚠️ Par `code`, comme `technos_requises` dans `technologies` : le code est
+   * ce que l'utilisateur fixe une fois, un id PocketBase ne survivrait pas à
+   * une base recréée.
+   */
+  techno: string;
+  /**
+   * Niveau **minimal** de cette technologie. `1` = il suffit de l'avoir.
+   *
+   * Une techno déclare son nombre de niveaux dans l'onglet Technologie
+   * (`technologies.niveaux`) ; en demander plus rendrait la tuile impossible à
+   * poser, et l'écran le dit en orange.
+   */
+  niveau: number;
 }
 
 export function regleVide(regle: TypeRegle): ReglePlacement {
@@ -176,6 +254,10 @@ export function regleVide(regle: TypeRegle): ReglePlacement {
     max: regle === "limite" ? 1 : 0,
     portee: "plateau",
     offerts: regle === "gratuite" ? 1 : 0,
+    batiment: 0,
+    nombre: regle === "batiments" ? 1 : 0,
+    techno: "",
+    niveau: regle === "technologie" ? 1 : 0,
   };
 }
 
@@ -189,7 +271,7 @@ export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
     Array.isArray(v) ? Array.from(new Set(v.filter((n) => typeof n === "number"))).sort((a, b) => a - b) : [];
   const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
   const connu = (v: unknown): TypeRegle =>
-    v === "limite" || v === "gratuite" ? v : "support";
+    v === "limite" || v === "gratuite" || v === "batiments" || v === "technologie" ? v : "support";
   return {
     regle: connu(r.regle),
     base: r.base === "tout" ? "tout" : "liste",
@@ -198,6 +280,10 @@ export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
     max: Math.max(0, entier(r.max)),
     portee: r.portee === "empire" ? "empire" : "plateau",
     offerts: Math.max(0, entier(r.offerts)),
+    batiment: Math.max(0, entier(r.batiment)),
+    nombre: Math.max(0, entier(r.nombre)),
+    techno: typeof r.techno === "string" ? r.techno : "",
+    niveau: Math.max(0, entier(r.niveau)),
   };
 }
 
@@ -212,6 +298,8 @@ export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
 export function regleUtile(r: ReglePlacement): boolean {
   if (r.regle === "gratuite") return r.offerts > 0;
   if (r.regle === "limite") return r.max > 0;
+  if (r.regle === "batiments") return r.batiment > 0 && r.nombre > 0;
+  if (r.regle === "technologie") return r.techno !== "";
   return r.base === "liste" ? r.tileIds.length > 0 : r.sauf.length > 0;
 }
 
@@ -220,9 +308,33 @@ export function regleUtile(r: ReglePlacement): boolean {
  * dans le formulaire. La même phrase doit exister côté Unity, dans le message
  * de refus montré au joueur.
  */
-export function decrireRegle(r: ReglePlacement, nomDe: (tileId: number) => string): string {
+export function decrireRegle(
+  r: ReglePlacement,
+  nomDe: (tileId: number) => string,
+  /** Le nom d'une techno d'après son `code`. Par défaut le code lui-même. */
+  nomTechno: (code: string) => string = (c) => c,
+): string {
   const enumerer = (ids: number[], liaison: string) =>
     ids.map((id) => `« ${nomDe(id)} »`).join(` ${liaison} `);
+  if (r.regle === "batiments") {
+    if (r.batiment <= 0)
+      return "Aucun bâtiment choisi — cette règle n'exige rien, elle sera ignorée en jeu.";
+    if (r.nombre <= 0)
+      return "Aucun nombre demandé — cette règle n'exige rien, elle sera ignorée en jeu.";
+    return (
+      `Il faut déjà posséder ${r.nombre} « ${nomDe(r.batiment)} » sur ce plateau ` +
+      "pour pouvoir poser celle-ci."
+    );
+  }
+  if (r.regle === "technologie") {
+    if (r.techno === "")
+      return "Aucune technologie choisie — cette règle n'exige rien, elle sera ignorée en jeu.";
+    const n = Math.max(1, r.niveau);
+    return (
+      `Il faut avoir cherché « ${nomTechno(r.techno)} »` +
+      (n > 1 ? `, au moins jusqu'au niveau ${n}.` : ".")
+    );
+  }
   if (r.regle === "limite") {
     if (r.max <= 0)
       return "Aucun maximum — cette règle n'interdit rien, elle sera ignorée en jeu.";
@@ -308,6 +420,76 @@ export interface LigneCout {
  * ralenti de satisfaction est exact à 1 unité près avec une période commune, à
  * 3–4 quand elles sont mélangées.
  */
+/**
+ * **La règle de proximité d'une consommation** — demandée le 2026-08-28 :
+ * *« 10 bovin × 120 s × (besoin de 5 tuiles bovin à 2 rayon = 100 %) »*.
+ *
+ * Elle dit combien de bâtiments d'un type il faut **autour de la tuile** pour
+ * que la ligne tourne à plein. C'est ce qui attache un abattoir à ses
+ * pâturages : posé tout seul, il n'a rien à abattre.
+ *
+ * ⚠️ **Au prorata, jamais tout-ou-rien** (choix de l'utilisateur le 28/08) :
+ * 3 tuiles à portée sur les 5 demandées valent **60 %**. Un seuil brutal
+ * rendrait la 4ᵉ tuile inutile, et le reste du modèle compte déjà partout au
+ * prorata.
+ *
+ * ⚠️ **Le facteur porte sur la ligne, pas sur le stock.** Pour le moteur : la
+ * ligne ne **demande** plus que `quantite × facteur` — 6 bovins au lieu de
+ * 10 — et sa contribution à la couverture de la tuile se calcule **sur les 10
+ * nominaux**, donc la tuile plafonne à 60 %. Sans cette seconde moitié, une
+ * ligne servie à plein de sa demande réduite donnerait 100 % de production avec
+ * 3 pâturages : la règle ne servirait à rien.
+ *
+ * ⚠️ **Rien n'est appliqué en jeu aujourd'hui** — le moteur ne regarde pas le
+ * voisinage. L'écran le dit en orange sous la ligne ; retirer l'avertissement
+ * avec le mécanisme, pas avant.
+ */
+export interface Proximite {
+  /**
+   * `tileId` du bâtiment qu'il faut avoir autour. `0` = aucun choisi.
+   *
+   * ⚠️ **Pas de case vide ici**, contrairement aux règles de `support` : on
+   * compte des bâtiments construits, pas du terrain.
+   */
+  tileId: number;
+  /** Combien il en faut à portée pour valoir 100 %. `0` = pas de règle. */
+  nombre: number;
+  /**
+   * Rayon en cases, sur la grille **hexagonale** (voir l'en-tête du fichier) :
+   * un rayon r couvre 3r(r+1) cases autour du centre.
+   */
+  rayon: number;
+}
+
+/** Le défaut proposé par « + proximité » : les chiffres de l'exemple. */
+export function proximiteParDefaut(): Proximite {
+  return { tileId: 0, nombre: 5, rayon: 2 };
+}
+
+/** Aucune proximité du tout — ce que le « × » remet sur la ligne. */
+export function proximiteVide(): Proximite {
+  return { tileId: 0, nombre: 0, rayon: 0 };
+}
+
+/** Vrai si l'admin a commencé à en poser une : c'est ce qui affiche le bloc. */
+export function proximitePosee(p: Proximite): boolean {
+  return p.tileId > 0 || p.nombre > 0 || p.rayon > 0;
+}
+
+/** Vrai si elle est complète, donc si elle agirait. Sinon : ignorée, en orange. */
+export function proximiteUtile(p: Proximite): boolean {
+  return p.tileId > 0 && p.nombre > 0 && p.rayon > 0;
+}
+
+/**
+ * Ce que vaut la ligne, en %, avec `presentes` bâtiments à portée. Plafonné à
+ * 100 : en avoir huit quand cinq suffisent ne fait pas produire davantage.
+ */
+export function pourcentageProximite(p: Proximite, presentes: number): number {
+  if (!proximiteUtile(p)) return 100;
+  return Math.min(100, Math.round((Math.max(0, presentes) * 100) / p.nombre));
+}
+
 export interface LigneFlux {
   ressource: string;
   quantite: number;
@@ -331,10 +513,22 @@ export interface LigneFlux {
    * avec ses chiffres. **Ne pas le re-retirer sans le remplacer.**
    */
   part: number;
+  /**
+   * **La règle de proximité**, facultative — voir `Proximite`. Un
+   * `proximiteVide()` (tout à zéro) veut dire « pas de règle », et c'est le cas
+   * normal : la plupart des consommations n'en ont pas.
+   */
+  proximite: Proximite;
 }
 
 export function fluxVide(ressource: string): LigneFlux {
-  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT, part: 0 };
+  return {
+    ressource,
+    quantite: 1,
+    periode_s: PERIODE_PAR_DEFAUT,
+    part: 0,
+    proximite: proximiteVide(),
+  };
 }
 
 /**
@@ -628,6 +822,13 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
           part: Math.min(100, Math.max(0, entier(l?.part))),
+          // Une ligne enregistree avant le 28/08 n'a pas de proximite : elle
+          // revient a zero, c'est-a-dire « aucune regle ».
+          proximite: {
+            tileId: Math.max(0, entier(l?.proximite?.tileId)),
+            nombre: Math.max(0, entier(l?.proximite?.nombre)),
+            rayon: Math.max(0, entier(l?.proximite?.rayon)),
+          },
         }))
       : [],
     production: Array.isArray(o.production)
@@ -1197,8 +1398,20 @@ export function casesCouvertes(rayon: number): number {
  * règles en silence.
  */
 export function tuilesCitant(tuiles: Tuile[], tileId: number): Tuile[] {
-  return tuiles.filter((t) =>
-    placementDe(t).some((r) => r.tileIds.includes(tileId) || r.sauf.includes(tileId)),
+  return tuiles.filter(
+    (t) =>
+      placementDe(t).some(
+        (r) =>
+          r.tileIds.includes(tileId) ||
+          r.sauf.includes(tileId) ||
+          // ⚠️ Le bâtiment requis compte AUSSI : supprimer une ferme citée par
+          // « il faut 3 fermes » casserait la règle en silence.
+          (r.regle === "batiments" && r.batiment === tileId),
+      ) ||
+      // Et la proximité d'une consommation : « 5 pâturages à 2 cases ».
+      paliersDe(t).some((p) =>
+        p.utilisation.some((l) => proximiteUtile(l.proximite) && l.proximite.tileId === tileId),
+      ),
   );
 }
 

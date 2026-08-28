@@ -6,6 +6,7 @@ import TuileStockage from "@/components/TuileStockage";
 import { Vignette } from "@/components/Vignette";
 import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
 import type { Ressource } from "@/lib/ressources";
+import type { Technologie } from "@/lib/technologies";
 import { SANS_AGE, libelleAge, type Age } from "@/lib/ages";
 import {
   TILE_ID_MAX,
@@ -55,6 +56,7 @@ export default function TuileDialog({
   modeles,
   ressources,
   ages,
+  technologies,
   saving,
   erreur,
   onCancel,
@@ -66,6 +68,8 @@ export default function TuileDialog({
   ressources: Ressource[];
   /** Les ages declares — onglet Ages. C'est eux que propose la liste, jamais un nombre libre. */
   ages: Age[];
+  /** Les technos declarees — onglet Technologie, pour la regle « technologie requise ». */
+  technologies: Technologie[];
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
@@ -656,13 +660,19 @@ export default function TuileDialog({
             <TuilePlacement
               regles={placement}
               tuiles={tuiles}
+              technologies={technologies}
               tuileCourante={tuile?.id ?? null}
               onChange={setPlacement}
             />
           )}
 
           {onglet === "cout" && (
-            <TuileCouts paliers={paliers} ressources={ressources} onChange={setPaliers} />
+            <TuileCouts
+              paliers={paliers}
+              ressources={ressources}
+              tuiles={tuiles}
+              onChange={setPaliers}
+            />
           )}
 
           {onglet === "stock" && (

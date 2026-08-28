@@ -120,6 +120,22 @@ export type Technologie = {
    */
   age: number;
   ordre: number;
+  /**
+   * **Combien de niveaux cette recherche compte.** `1` = elle se cherche une
+   * fois et c'est tout — c'est le cas normal, et le défaut.
+   *
+   * ⚠️ Ajouté le 2026-08-28, pour que les règles de placement puissent exiger
+   * *« Métallurgie, au moins niveau 2 »* ([[sysb-regles-placement-v2]]). Sans
+   * lui, le niveau demandé par une tuile ne pourrait se comparer à rien.
+   *
+   * ⚠️ **Le `cout` déclaré est celui d'UN niveau** : chercher le niveau 2 le
+   * repaie. Rien de plus fin n'est saisissable — un barème par niveau
+   * demanderait une liste de coûts, et personne n'en a eu besoin.
+   *
+   * ⚠️ **Champ PocketBase à créer** (`number`) : sans lui, la valeur envoyée par
+   * le site est ignorée en silence et toutes les technos restent à 1.
+   */
+  niveaux: number;
   /** À quoi elle sert, en une phrase. Texte libre, lu par l'humain seulement. */
   description: string;
   /** tileIds des bâtiments qu'il faut posséder pour pouvoir la chercher. */
@@ -162,6 +178,7 @@ export interface ValeursTechnologie {
   batiment: number;
   age: number;
   ordre: number;
+  niveaux: number;
   description: string;
   batiments_requis: number[];
   technos_requises: string[];
@@ -209,6 +226,18 @@ export function valeursAvecBatiment(
   batiment: { age?: number } | undefined,
 ): ValeursTechnologie {
   return { ...v, age: ageDeduit(batiment) };
+}
+
+/** Une recherche qui ne se cherche qu'une fois — le cas normal. */
+export const NIVEAUX_PAR_DEFAUT = 1;
+
+/**
+ * Le nombre de niveaux d'une techno, jamais moins de 1. Un record d'avant le
+ * 2026-08-28 n'a pas le champ : il vaut 1, ce qu'il était de fait.
+ */
+export function niveauxDe(t: { niveaux?: number } | undefined): number {
+  const n = Math.trunc(t?.niveaux ?? 0);
+  return n > 0 ? n : NIVEAUX_PAR_DEFAUT;
 }
 
 export function coutVide(): CoutTechno {

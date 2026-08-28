@@ -9,6 +9,7 @@ import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressourc
 // le catalogue les lit, il n'en tient pas un second jeu. Deux listes pour les
 // memes ages, et plus personne ne sait laquelle est la bonne.
 import { libelleAge, loadAges, type Age } from "@/lib/ages";
+import { loadTechnologies, type Technologie } from "@/lib/technologies";
 import {
   COLLECTION_TUILES,
   cheminIcone,
@@ -248,6 +249,7 @@ export default function Tuiles() {
   const [modeles, setModeles] = useState<Modele3D[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [ages, setAges] = useState<Age[]>([]);
+  const [technologies, setTechnologies] = useState<Technologie[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -441,16 +443,21 @@ export default function Tuiles() {
       // meme si leur collection n'existe pas encore (patch pas encore lance).
       // Les bandes s'appellent alors « Age 3 — non declare », ce qui se corrige,
       // au lieu d'un ecran vide qui se cherche.
-      const [t, m, r, a] = await Promise.all([
+      // Les technos aussi, et pour la meme raison : leur collection peut etre
+      // vide, ou refusee ; le catalogue doit rester ouvrable. La regle
+      // « technologie requise » dit alors « aucune technologie declaree ».
+      const [t, m, r, a, tech] = await Promise.all([
         loadTuiles(),
         loadModeles3D(),
         loadRessources(),
         loadAges().catch(() => [] as Age[]),
+        loadTechnologies().catch(() => [] as Technologie[]),
       ]);
       setTuiles(t);
       setModeles(m);
       setRessources(r);
       setAges(a);
+      setTechnologies(tech);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
@@ -808,6 +815,7 @@ export default function Tuiles() {
           modeles={modeles}
           ressources={ressources}
           ages={ages}
+          technologies={technologies}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}

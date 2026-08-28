@@ -25,6 +25,7 @@ import {
   ligneEntretienVide,
   loadTechnologies,
   MODES_EFFET,
+  niveauxDe,
   prerequisDeclaresAilleurs,
   prerequisEffectifs,
   SANS_CATEGORIE,
@@ -400,6 +401,9 @@ function TechnologieDialog({
   const [ordre, setOrdre] = useState<string>(String(technologie?.ordre ?? ""));
   const ordreEffectif = ordre.trim() === "" ? ordreSuivant : Number(ordre) || 0;
 
+  // Combien de fois cette recherche se cherche. 1 = une seule, le cas normal.
+  const [niveaux, setNiveaux] = useState<number>(niveauxDe(technologie ?? undefined));
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
     window.addEventListener("keydown", onKey);
@@ -423,6 +427,7 @@ function TechnologieDialog({
             batiment,
             age,
             ordre: ordreEffectif,
+            niveaux: Math.max(1, Math.trunc(niveaux) || 1),
             description: description.trim(),
             batiments_requis: batimentsRequis,
             technos_requises: technosRequises,
@@ -457,6 +462,19 @@ function TechnologieDialog({
           <Terme nom="ordre">
             La place dans SON age, pas dans la table entiere. Laisse vide pour prendre le rang
             suivant ; les trous de 10 permettent d'intercaler plus tard.
+          </Terme>
+          <Terme nom="niveaux">
+            Combien de fois cette recherche se cherche. <strong>1</strong> = une seule, et c'est le
+            cas normal. Mets 3 pour une recherche qui s'ameliore : niveau 1, puis 2, puis 3.
+            <br />
+            Ce qui s'en sert : une tuile peut exiger <em>&laquo; cette techno, au moins niveau
+            2 &raquo;</em> dans son onglet <strong>Placement</strong>. Sans ce nombre, le niveau
+            qu'elle demande ne se comparerait a rien.
+            <br />
+            ⚠️ Le cout saisi plus bas est celui d'<strong>UN niveau</strong> : passer au suivant le
+            repaie.
+            <br />
+            ⚠️ Comme tout le reste de cet ecran, <strong>le jeu ne le lit pas encore</strong>.
           </Terme>
           <Terme nom="description">
             Une phrase pour toi, pas pour le moteur. Ce qu'elle coute et ce qu'elle debloque n'a
@@ -555,6 +573,32 @@ function TechnologieDialog({
             />
             <p className="mt-1 text-xs text-slate-500">
               Vide = {ordreSuivant}, le rang suivant de cet age.
+            </p>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="tech-niveaux">
+              Niveaux de recherche
+            </label>
+            <input
+              id="tech-niveaux"
+              type="number"
+              min={1}
+              step={1}
+              className="input"
+              value={niveaux}
+              onChange={(e) => setNiveaux(Math.max(1, Number(e.target.value) || 1))}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {niveaux <= 1 ? (
+                <>Elle se cherche une seule fois.</>
+              ) : (
+                <>
+                  Elle se cherche {niveaux} fois : niveaux 1 a {niveaux}, le cout saisi plus bas
+                  etant celui d'<span className="text-slate-300">un</span> niveau. Une tuile peut
+                  en exiger un minimum dans son onglet Placement.
+                </>
+              )}
             </p>
           </div>
         </div>
