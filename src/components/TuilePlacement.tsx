@@ -99,7 +99,7 @@ export default function TuilePlacement({
         Toutes les regles doivent etre vraies en meme temps.
       </p>
 
-      <Aide titre="Le support et son « sauf », la limite, la gratuite">
+      <Aide titre="Le support, la limite, la gratuite, les batiments et la techno requis">
         <Terme nom="support">
           Ne regarde pas le voisinage mais <strong>la case elle-meme</strong> : ce qu'il y a
           dessous au moment de construire.
@@ -357,11 +357,6 @@ export default function TuilePlacement({
                     </label>
                   )}
 
-                  {regle.regle === "technologie" && technologies.length === 0 && (
-                    <span className="text-[11px] text-amber-400">
-                      Aucune technologie declaree : commence par l'onglet Technologie.
-                    </span>
-                  )}
 
                   <button
                     type="button"
@@ -416,6 +411,12 @@ export default function TuilePlacement({
                 {pasEncoreAppliqueeEnJeu(regle) !== "" && (
                   <p className="mt-1 text-[11px] leading-tight text-amber-400">
                     ⚠️ {pasEncoreAppliqueeEnJeu(regle)}
+                  </p>
+                )}
+
+                {regle.regle === "technologie" && technologies.length === 0 && (
+                  <p className="mt-1 text-[11px] leading-tight text-amber-400">
+                    Aucune technologie declaree : commence par l&apos;onglet Technologie.
                   </p>
                 )}
 

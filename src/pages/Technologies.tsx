@@ -200,12 +200,13 @@ export default function Technologies() {
         pas avant.
       */}
       <p className="mb-5 rounded border border-amber-900/60 bg-amber-950/30 p-3 text-sm text-amber-200/90">
-        <span className="font-medium">Le jeu ne lit pas encore cette table.</span> La regle est
-        ecrite — prerequis, deblocages, cout, effets — mais rien ne l'applique : le magasin ne sait
-        pas refuser un batiment non debloque, le moteur ne sait pas appliquer un bonus, et rien ne
-        met une techno en veille quand son entretien n'est plus paye. Ce qui est saisi ici est le
-        vocabulaire ; le faire agir est un second chantier, dans le moteur. Le bouton
-        « Technologie » du jeu ouvre pour la meme raison un panneau vide.
+        <span className="font-medium">Le jeu les AFFICHE, il n'en applique AUCUNE.</span> Depuis le
+        28/08 le bouton « Technologie » du jeu lit bien cette table et montre les fiches — mais
+        rien n'agit : le magasin ne sait pas refuser un batiment non debloque, le moteur ne sait
+        pas appliquer un bonus, rien ne preleve l'entretien ni ne met une techno en veille, et il
+        n'existe nulle part ou retenir les technos qu'un joueur a acquises, ni leur niveau. Ce qui
+        est saisi ici est le vocabulaire ; le faire agir est un second chantier, dans le moteur —
+        c'est pourquoi les fiches du jeu ne sont pas cliquables.
       </p>
 
       {erreur && (

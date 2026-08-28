@@ -517,9 +517,9 @@ export default function Tuiles() {
               3DmodelTuile
             </Link>{" "}
             plus son identite de jeu : nom, categorie, couleur, comportement a la destruction. Le
-            meme modele peut servir a autant de tuiles que necessaire. Les regles de pose, les
-            niveaux et le role logistique sont en cours de refonte : ils ne se saisissent nulle
-            part pour l'instant.
+            meme modele peut servir a autant de tuiles que necessaire. La fenetre d'edition porte
+            aussi ses <strong>regles de pose</strong>, ses <strong>paliers de cout</strong> et son{" "}
+            <strong>stock &amp; appro</strong>, un onglet chacun.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
