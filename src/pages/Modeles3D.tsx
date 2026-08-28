@@ -130,8 +130,8 @@ export default function Modeles3D() {
     }
   };
 
-  /** nom + chemin + type + sections + tuiles + actions */
-  const nbColonnes = 5 + CHAMPS_SECTION.length;
+  /** nom (+ ses actions) + chemin + type + sections + tuiles */
+  const nbColonnes = 4 + CHAMPS_SECTION.length;
 
   return (
     <div>
@@ -240,7 +240,6 @@ export default function Modeles3D() {
                   </th>
                 ))}
                 <th className="w-32 px-3 py-2 font-medium">tuiles</th>
-                <th className="w-40 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -276,6 +275,53 @@ export default function Modeles3D() {
                         {alertes.length > 0 && (
                           <p className="mt-1 text-[10px] leading-tight text-amber-300">{alertes[0]}</p>
                         )}
+                        {/* Les actions sont ici, sous le nom : le tableau est large et
+                            une colonne tout à droite finissait hors de l'écran. */}
+                        <div className="mt-1">
+                          {confirme ? (
+                            <div className="flex flex-col gap-1">
+                              <span className="text-[11px] leading-tight text-red-300">
+                                Supprimer ?
+                                {usages.length > 0 &&
+                                  ` ${usages.length} tuile${usages.length > 1 ? "s" : ""} pointe${
+                                    usages.length > 1 ? "nt" : ""
+                                  } dessus.`}
+                              </span>
+                              <span>
+                                <button
+                                  className="text-xs text-red-300 hover:underline"
+                                  onClick={() => void supprimer(modele)}
+                                >
+                                  Confirmer
+                                </button>
+                                <button
+                                  className="ml-3 text-xs text-slate-400 hover:text-white"
+                                  onClick={() => setASupprimer(null)}
+                                >
+                                  Annuler
+                                </button>
+                              </span>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                className="text-xs text-accent hover:underline"
+                                onClick={() => {
+                                  setErreurDialog(null);
+                                  setDialog({ modele });
+                                }}
+                              >
+                                Modifier
+                              </button>
+                              <button
+                                className="ml-3 text-xs text-slate-500 hover:text-red-400"
+                                onClick={() => setASupprimer(modele.id)}
+                              >
+                                Supprimer
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <span className="font-mono text-xs text-slate-400">
@@ -294,51 +340,6 @@ export default function Modeles3D() {
                       ))}
                       <td className="px-3 py-2 text-xs text-slate-500">
                         {usages.length === 0 ? "—" : usages.map((t) => t.nom).join(", ")}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        {confirme ? (
-                          <div className="inline-flex flex-col items-end gap-1">
-                            <span className="text-[11px] leading-tight text-red-300">
-                              Supprimer ?
-                              {usages.length > 0 &&
-                                ` ${usages.length} tuile${usages.length > 1 ? "s" : ""} pointe${
-                                  usages.length > 1 ? "nt" : ""
-                                } dessus.`}
-                            </span>
-                            <span>
-                              <button
-                                className="text-xs text-red-300 hover:underline"
-                                onClick={() => void supprimer(modele)}
-                              >
-                                Confirmer
-                              </button>
-                              <button
-                                className="ml-3 text-xs text-slate-400 hover:text-white"
-                                onClick={() => setASupprimer(null)}
-                              >
-                                Annuler
-                              </button>
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            <button
-                              className="text-xs text-accent hover:underline"
-                              onClick={() => {
-                                setErreurDialog(null);
-                                setDialog({ modele });
-                              }}
-                            >
-                              Modifier
-                            </button>
-                            <button
-                              className="ml-3 text-xs text-slate-500 hover:text-red-400"
-                              onClick={() => setASupprimer(modele.id)}
-                            >
-                              Supprimer
-                            </button>
-                          </>
-                        )}
                       </td>
                     </tr>
                   );
