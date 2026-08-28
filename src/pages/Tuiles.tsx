@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { Vignette } from "@/components/Vignette";
 import { messageErreur, pb } from "@/lib/pb";
-import { cheminJeu, loadModeles3D, type Modele3D } from "@/lib/modeles3d";
+import { cheminJeu, loadModeles3D, problemeDeModele, type Modele3D } from "@/lib/modeles3d";
 import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
 // ⚠️ Les ages sont une COLLECTION depuis le 2026-08-27 au soir (onglet Ages) :
 // le catalogue les lit, il n'en tient pas un second jeu. Deux listes pour les
@@ -266,6 +266,8 @@ export default function Tuiles() {
   const [filtre, setFiltre] = useState("");
   const [filtreType, setFiltreType] = useState("tous");
   const [filtreEtat, setFiltreEtat] = useState("tous");
+  /** Ne garder que les tuiles dont le modele 3D cloche. Voir `problemeDeModele`. */
+  const [seulSansModele, setSeulSansModele] = useState(false);
 
   /** La 3e colonne, et le tri. Les deux survivent a un rechargement de page. */
   const [colonneCle, setColonneCle] = useState(() => lirePref(CLE_PREFS, "categorie"));
@@ -292,13 +294,15 @@ export default function Tuiles() {
 
   const parId = useMemo(() => new Map(modeles.map((m) => [m.id, m])), [modeles]);
 
+  /** Le modele 3D d'une tuile : celui que PocketBase a etendu, sinon le notre. */
+  const modeleDe = useCallback(
+    (tuile: Tuile): Modele3D | null => tuile.expand?.modele ?? parId.get(tuile.modele) ?? null,
+    [parId],
+  );
+
   const contexte = useCallback(
-    (tuile: Tuile): ContexteColonne => ({
-      tuile,
-      modele: tuile.expand?.modele ?? parId.get(tuile.modele) ?? null,
-      ressources,
-    }),
-    [parId, ressources],
+    (tuile: Tuile): ContexteColonne => ({ tuile, modele: modeleDe(tuile), ressources }),
+    [modeleDe, ressources],
   );
 
   /**
@@ -312,6 +316,7 @@ export default function Tuiles() {
       if (filtreType !== "tous" && t.typeOfPlateau !== filtreType) return false;
       if (filtreEtat === "actives" && !t.actif) return false;
       if (filtreEtat === "brouillons" && t.actif) return false;
+      if (seulSansModele && !problemeDeModele(modeleDe(t))) return false;
       if (q === "") return true;
       return (
         (t.nom ?? "").toLowerCase().includes(q) ||
@@ -319,14 +324,16 @@ export default function Tuiles() {
         String(t.tileId) === q
       );
     });
-  }, [tuiles, filtre, filtreType, filtreEtat]);
+  }, [tuiles, filtre, filtreType, filtreEtat, seulSansModele, modeleDe]);
 
-  const filtreActif = filtre.trim() !== "" || filtreType !== "tous" || filtreEtat !== "tous";
+  const filtreActif =
+    filtre.trim() !== "" || filtreType !== "tous" || filtreEtat !== "tous" || seulSansModele;
 
   const reinitialiser = () => {
     setFiltre("");
     setFiltreType("tous");
     setFiltreEtat("tous");
+    setSeulSansModele(false);
   };
 
   const tuilesTriees = useMemo(() => {
@@ -428,8 +435,10 @@ export default function Tuiles() {
       space,
       /** Ni ground ni space : une saisie a reprendre, elle ne se posera nulle part. */
       sansType: tuiles.length - ground - space,
+      /** Modele absent, ou prefab disparu du releve : rien ne s'affichera en jeu. */
+      sansModele: tuiles.filter((t) => problemeDeModele(modeleDe(t)) !== null).length,
     };
-  }, [tuiles]);
+  }, [tuiles, modeleDe]);
 
   /** La fleche de tri, ou rien si ce n'est pas la colonne classante. */
   const fleche = (cle: string) =>
@@ -631,6 +640,26 @@ export default function Tuiles() {
           {compte.sansType > 0 && (
             <span className="text-amber-400"> · {compte.sansType} sans type de plateau</span>
           )}
+          {/* Cliquable : sans ca, savoir qu'il y en a 3 ne dit toujours pas
+              LESQUELLES, et il faut parcourir tout le catalogue a la main. */}
+          {compte.sansModele > 0 && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="text-amber-400 hover:underline"
+                onClick={() => setSeulSansModele((v) => !v)}
+                title={
+                  seulSansModele
+                    ? "Reafficher tout le catalogue"
+                    : "N'afficher que ces tuiles"
+                }
+              >
+                <span className="tabular-nums">{compte.sansModele}</span> sans modele 3D valable
+                {seulSansModele ? " (affichees seules)" : ""}
+              </button>
+            </>
+          )}
         </p>
       )}
 
@@ -729,6 +758,7 @@ export default function Tuiles() {
                         )}
                         {c.tuiles.map((tuile) => {
                           const confirme = aSupprimer === tuile.id;
+                          const problemeModele = problemeDeModele(modeleDe(tuile));
                           const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
                           return (
                             <tr
@@ -748,6 +778,15 @@ export default function Tuiles() {
                                   <span className="ml-2 rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-slate-500">
                                     brouillon
                                   </span>
+                                )}
+                                {/* Sous le nom, et non dans la colonne au choix :
+                                    cette colonne peut afficher autre chose, et une
+                                    panne qui ne se voit qu'apres avoir choisi la
+                                    bonne colonne ne se voit pas. */}
+                                {problemeModele && (
+                                  <p className="mt-1 text-[10px] leading-tight text-amber-300">
+                                    {problemeModele}
+                                  </p>
                                 )}
                               </td>
                               <td className="px-3 py-2">

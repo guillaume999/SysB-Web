@@ -203,3 +203,26 @@ export function avertissementsDe(chemin: string, nom: string): string[] {
 export function avertissements(modele: Modele3D): string[] {
   return avertissementsDe(modele.chemin_prefab ?? "", modele.nom_prefab);
 }
+
+/**
+ * Ce qui cloche avec le modèle 3D d'une tuile, en une phrase — ou null si tout
+ * va bien. Sert à l'onglet Tuiles, qui doit le dire SUR la ligne : sans ça, une
+ * tuile dont le prefab a disparu du projet ne se distingue en rien des autres,
+ * et il faut ouvrir chaque fiche une par une pour retrouver les coupables.
+ *
+ * Deux pannes bien différentes, et le remède n'est pas le même :
+ *  - plus de modèle du tout (relation vide ou record supprimé) → il faut en
+ *    choisir un dans la fiche de la tuile ;
+ *  - le modèle existe, mais son prefab n'est plus dans le relevé Unity → soit
+ *    le prefab a été supprimé du jeu, soit le relevé est en retard
+ *    (menu `SySB → Relever les prefabs pour le site`).
+ */
+export function problemeDeModele(modele: Modele3D | null | undefined): string | null {
+  if (!modele) return "aucun modèle 3D : la tuile ne s'affichera pas sur le plateau";
+  if (!estPrefabConnu(modele.chemin_prefab ?? "", modele.nom_prefab))
+    return (
+      `prefab « ${cheminJeu(modele)} » absent du relevé Unity du ${RELEVE_PREFABS_DATE} : ` +
+      "supprimé du projet, ou relevé à refaire"
+    );
+  return null;
+}
