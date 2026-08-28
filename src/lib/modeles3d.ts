@@ -103,28 +103,19 @@ export function cheminJeu(modele: Modele3D): string {
  * les champs du formulaire restent libres, pour ne jamais bloquer l'admin quand
  * un prefab vient d'être ajouté côté Unity.
  */
-// <<< RELEVE_PREFABS  releve du 2026-08-26  —  genere, ne pas editer a la main
+// <<< RELEVE_PREFABS  releve du 2026-08-29  —  genere, ne pas editer a la main
 export const PREFABS_CONNUS: { chemin: string; nom: string }[] = [
+  { chemin: "Empire", nom: "BLEU_SELECTION" },
   { chemin: "Empire/Earth/Ground", nom: "BEIGE" },
   { chemin: "Empire/Earth/Ground", nom: "BLEU" },
-  { chemin: "Empire/Earth/Ground", nom: "BLEU_PECHEUR" },
-  { chemin: "Empire/Earth/Ground", nom: "Briquerie" },
-  { chemin: "Empire/Earth/Ground", nom: "CENTRE_VILLAGE" },
-  { chemin: "Empire/Earth/Ground", nom: "Distillerie" },
-  { chemin: "Empire/Earth/Ground", nom: "Entrepot_bois" },
-  { chemin: "Empire/Earth/Ground", nom: "Habitation_bois1" },
-  { chemin: "Empire/Earth/Ground", nom: "Habitation_bois2" },
+  { chemin: "Empire/Earth/Ground", nom: "Cabane_Communale" },
+  { chemin: "Empire/Earth/Ground", nom: "Cabane_Pecheur" },
+  { chemin: "Empire/Earth/Ground", nom: "Habitations_Bois" },
+  { chemin: "Empire/Earth/Ground", nom: "Hutte_Bucheron" },
+  { chemin: "Empire/Earth/Ground", nom: "Hutte_Chasseur" },
   { chemin: "Empire/Earth/Ground", nom: "MOUTON" },
-  { chemin: "Empire/Earth/Ground", nom: "RUCHER" },
-  { chemin: "Empire/Earth/Ground", nom: "STONE_AUTEL" },
   { chemin: "Empire/Earth/Ground", nom: "VERT" },
-  { chemin: "Empire/Earth/Ground", nom: "VERT_ARGILE" },
-  { chemin: "Empire/Earth/Ground", nom: "VERT_BAIES" },
   { chemin: "Empire/Earth/Ground", nom: "VERT_BLE" },
-  { chemin: "Empire/Earth/Ground", nom: "VERT_BUCHERON" },
-  { chemin: "Empire/Earth/Ground", nom: "VERT_CARRIERE" },
-  { chemin: "Empire/Earth/Ground", nom: "VERT_CHASSEUR" },
-  { chemin: "Empire/Earth/Ground", nom: "VERT_FORET" },
   { chemin: "Empire/Earth/Ground", nom: "VERT_MOULIN" },
   { chemin: "Empire/Earth/Ground", nom: "Vert_abattoir" },
   { chemin: "Empire/Earth/Ground", nom: "Vert_bovin" },
@@ -140,7 +131,7 @@ export const PREFABS_CONNUS: { chemin: string; nom: string }[] = [
   { chemin: "Empire/Earth/Space", nom: "Space_porte" },
   { chemin: "Empire/Earth/Space", nom: "Tile_transparente_doree" },
 ];
-export const RELEVE_PREFABS_DATE = "2026-08-26";
+export const RELEVE_PREFABS_DATE = "2026-08-29";
 // RELEVE_PREFABS >>>
 
 /** Dossiers distincts relevés dans le projet, pour l'autocomplétion du chemin. */
