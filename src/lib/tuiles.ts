@@ -125,37 +125,12 @@ export type BaseSupport = "liste" | "tout";
 /** Sur quoi porte une `limite`. Voir le champ `portee`. */
 export type PorteeLimite = "plateau" | "empire";
 
-/**
- * Ce qu'une règle est **enregistrée mais pas encore capable de faire en jeu**,
- * en une phrase — chaîne vide quand tout est branché.
- *
- * ⚠️ **C'est la différence entre un champ pas encore branché et un champ qui
- * ment.** Un champ saisi, affiché et jamais vérifié au moment d'agir est le
- * piège qu'on s'est déjà tendu deux fois : ici il l'annonce, sous la règle, au
- * moment où l'admin le choisit.
- *
- * ⚠️ **Retirer chaque phrase le jour où le mécanisme existe, jamais avant.**
- * A remplacé `porteePasEncoreAppliquee()` le 2026-08-28, qui ne portait que le
- * cas `empire` : même rôle, trois cas.
- */
-export function pasEncoreAppliqueeEnJeu(r: ReglePlacement): string {
-  if (r.regle === "limite" && r.portee === "empire")
-    return (
-      "« dans tout l'empire » est enregistré mais pas encore appliqué en jeu : le jeu compte " +
-      "pour l'instant le seul plateau où tu poses."
-    );
-  if (r.regle === "batiments")
-    return (
-      "Enregistré mais pas encore appliqué en jeu : le jeu ne regarde pas encore ce que tu " +
-      "possèdes déjà avant de laisser poser."
-    );
-  if (r.regle === "technologie")
-    return (
-      "Enregistré mais pas encore appliqué en jeu : le jeu ne lit pas encore la collection des " +
-      "technologies — rien ne sait si une recherche est acquise, ni à quel niveau."
-    );
-  return "";
-}
+// `pasEncoreAppliqueeEnJeu()` a vécu du 28/08 au matin au 28/08 au soir : ses
+// trois cas (limite « empire », `batiments`, `technologie`) sont appliqués par
+// le moteur Unity depuis le rattrapage du 28/08 (PlacementValidator,
+// CoutConstruction, TechnosJoueur). Une fonction sans cas est du code mort —
+// elle reviendra sous ce nom si une future règle est saisie avant d'être
+// branchée.
 
 export interface ReglePlacement {
   regle: TypeRegle;
@@ -440,9 +415,9 @@ export interface LigneCout {
  * ligne servie à plein de sa demande réduite donnerait 100 % de production avec
  * 3 pâturages : la règle ne servirait à rien.
  *
- * ⚠️ **Rien n'est appliqué en jeu aujourd'hui** — le moteur ne regarde pas le
- * voisinage. L'écran le dit en orange sous la ligne ; retirer l'avertissement
- * avec le mécanisme, pas avant.
+ * ✅ **Appliqué en jeu depuis le 28/08** (`ResolutionHorsLigne.FacteurProximite`) :
+ * la demande est réduite ET la couverture se calcule sur le nominal — les deux
+ * moitiés, sinon la règle ne sert à rien.
  */
 export interface Proximite {
   /**
@@ -752,10 +727,9 @@ export function coutConstruction(p: Palier): LigneCout[] {
   return p.cout.filter((l) => l.mode === "paye");
 }
 
-/** Vrai tant que les chantiers ne sont pas implémentés côté jeu. */
-export function chantierPasEncoreApplique(p: Palier): boolean {
-  return p.duree_construction_s > 0;
-}
+// `chantierPasEncoreApplique()` est parti le 28/08 avec l'arrivée des
+// chantiers en jeu (EtatCase.chantier : inerte jusqu'à la fin, production
+// comptée depuis la frontière, badge CHANTIER).
 
 /** Période par défaut d'un flux, en secondes. Voir l'avertissement de `LigneFlux`. */
 export const PERIODE_PAR_DEFAUT = 120;

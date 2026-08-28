@@ -5,7 +5,6 @@ import {
   CASE_VIDE,
   TYPES_REGLE,
   decrireRegle,
-  pasEncoreAppliqueeEnJeu,
   regleUtile,
   regleVide,
   type BaseSupport,
@@ -404,16 +403,9 @@ export default function TuilePlacement({
                   {decrireRegle(regle, nomTuile, nomTechno)}
                 </p>
 
-                {/* ⚠️ Un champ enregistre mais pas encore branche cote jeu. On
-                    le dit ici, sous la regle, au moment ou l'admin le choisit —
-                    c'est ce qui separe un champ « pas encore fait » d'un champ
-                    qui ment. A retirer avec le rattrapage Unity, pas avant. */}
-                {pasEncoreAppliqueeEnJeu(regle) !== "" && (
-                  <p className="mt-1 text-[11px] leading-tight text-amber-400">
-                    ⚠️ {pasEncoreAppliqueeEnJeu(regle)}
-                  </p>
-                )}
-
+                {/* Les avertissements « pas encore appliqué en jeu » (empire,
+                    batiments, technologie) sont partis le 28/08, AVEC leur
+                    mécanisme — le moteur applique les cinq règles. */}
                 {regle.regle === "technologie" && technologies.length === 0 && (
                   <p className="mt-1 text-[11px] leading-tight text-amber-400">
                     Aucune technologie declaree : commence par l&apos;onglet Technologie.

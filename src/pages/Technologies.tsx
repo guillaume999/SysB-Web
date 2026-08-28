@@ -41,10 +41,10 @@ import {
  * Le vocabulaire des technologies.
  *
  * Meme parti pris que l'ecran Ressources : une ligne par techno, saisie une
- * fois, designee partout ailleurs par son `code`. La difference est qu'ici
- * PERSONNE ne s'en sert encore — ni le site, ni le jeu. C'est assume et c'est
- * ecrit en orange en haut de l'ecran : on saisit le vocabulaire d'abord, la
- * regle viendra ensuite.
+ * fois, designee partout ailleurs par son `code`. Depuis le rattrapage Unity
+ * du 28/08, LE JEU LES APPLIQUE : verrou `debloque` au magasin, entretien
+ * consomme avec mise en veille, effets sur la production, recherche payee sur
+ * le plateau du batiment hote, acquis dans `users.technos`.
  *
  * ⚠️ Les technos sont groupees PAR AGE, pas listees a plat. Un arbre se lit par
  * paliers ; une table triable de 132 lignes ne dirait rien de sa forme.
@@ -195,19 +195,11 @@ export default function Technologies() {
       </header>
 
       {/*
-        L'avertissement de la maison : un ecran qui prend de la saisie sans que
-        rien ne la lise DOIT le dire. Le retirer le jour ou le mecanisme existe,
-        pas avant.
+        Le bandeau « le jeu n'en applique aucune » a vecu du 27/08 au 28/08 :
+        il est parti AVEC l'arrivee du mecanisme (regle de la maison), quand le
+        moteur Unity s'est mis a tout appliquer — verrou, entretien, veille,
+        effets, recherche.
       */}
-      <p className="mb-5 rounded border border-amber-900/60 bg-amber-950/30 p-3 text-sm text-amber-200/90">
-        <span className="font-medium">Le jeu les AFFICHE, il n'en applique AUCUNE.</span> Depuis le
-        28/08 le bouton « Technologie » du jeu lit bien cette table et montre les fiches — mais
-        rien n'agit : le magasin ne sait pas refuser un batiment non debloque, le moteur ne sait
-        pas appliquer un bonus, rien ne preleve l'entretien ni ne met une techno en veille, et il
-        n'existe nulle part ou retenir les technos qu'un joueur a acquises, ni leur niveau. Ce qui
-        est saisi ici est le vocabulaire ; le faire agir est un second chantier, dans le moteur —
-        c'est pourquoi les fiches du jeu ne sont pas cliquables.
-      </p>
 
       {erreur && (
         <p className="mb-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
@@ -475,7 +467,7 @@ function TechnologieDialog({
             ⚠️ Le cout saisi plus bas est celui d'<strong>UN niveau</strong> : passer au suivant le
             repaie.
             <br />
-            ⚠️ Comme tout le reste de cet ecran, <strong>le jeu ne le lit pas encore</strong>.
+            Le jeu le lit depuis le 28/08 : une carte au niveau maximum ne se recherche plus.
           </Terme>
           <Terme nom="description">
             Une phrase pour toi, pas pour le moteur. Ce qu'elle coute et ce qu'elle debloque n'a

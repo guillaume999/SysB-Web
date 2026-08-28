@@ -4,7 +4,6 @@ import {
   PERIODE_PAR_DEFAUT,
   TRANCHES_PAR_DEFAUT,
   casesCouvertes,
-  chantierPasEncoreApplique,
   fluxVide,
   formatDuree,
   palierVide,
@@ -115,8 +114,9 @@ export default function TuileCouts({
    * Les lignes déjà en base qui citent une ressource **existante mais qui n'a
    * pas sa place ici** — rendues par leur nom affichable.
    *
-   * On ne les efface pas : on les **dit**, comme le chantier pas encore branché
-   * et la portée `empire`. Un champ qui ment ne dit rien, un champ hors sujet
+   * On ne les efface pas : on les **dit** — même règle de maison que les
+   * anciens avertissements « pas encore appliqué » (partis le 28/08 avec leurs
+   * mécanismes). Un champ qui ment ne dit rien, un champ hors sujet
    * l'annonce ; retirer la saisie à la place de l'utilisateur lui reperdrait
    * l'information sans qu'il sache pourquoi.
    *
@@ -211,9 +211,6 @@ export default function TuileCouts({
           <br />
           Le rayon se compte sur la grille <strong>hexagonale</strong> : 6 cases à 1, 18 à 2, 36 à
           3. La phrase sous la règle te donne le compte exact.
-          <br />
-          ⚠️ <strong>Pas encore appliqué en jeu</strong> : le moteur ne regarde pas le voisinage.
-          Un avertissement orange le rappelle sous chaque règle posée.
         </Terme>
         <Terme nom="produit">
           Ce que la tuile <strong>fabrique</strong> pendant qu'elle tourne, <strong>au
@@ -262,9 +259,10 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
         <Terme nom="chantier">
           Le temps qu'il faut avant que le bâtiment serve. <code>0</code> = instantané.
           <br />
-          ⚠️ <strong>Pas encore appliqué en jeu</strong> : tout se construit sur-le-champ, et
-          l'état d'une case n'a pas de date de fin de chantier. Un avertissement orange le rappelle
-          dès que tu mets autre chose que zéro.
+          Appliqué en jeu depuis le 28/08 : pendant le chantier la case est <strong>inerte</strong>
+          (elle ne produit pas, ne consomme pas, ne loge et ne mobilise personne), un badge
+          CHANTIER la signale, et la production démarre à la fin des travaux — à l'heure serveur.
+          Détruire en plein chantier ne rembourse rien, et améliorer ouvre un chantier.
         </Terme>
         <Terme nom="mise en veille">
           Le joueur éteint un bâtiment : il <strong>rend tout ce qu'il occupe</strong> — la
@@ -342,12 +340,8 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                       : `soit ${formatDuree(palier.duree_construction_s)} avant que le bâtiment serve`}
                   </span>
                 </div>
-                {chantierPasEncoreApplique(palier) && (
-                  <p className="mt-1 text-[11px] leading-tight text-amber-400">
-                    ⚠️ Enregistré mais <strong>pas encore appliqué en jeu</strong> : les chantiers
-                    n'existent pas, tout se construit instantanément.
-                  </p>
-                )}
+                {/* L'avertissement « chantiers pas encore appliqués » est
+                    parti le 28/08, avec l'arrivée du mécanisme en jeu. */}
               </Section>
 
               {/* ── Pendant qu'il tourne ──────────────────────────────── */}
@@ -500,10 +494,9 @@ function ChoixRessource({
 /**
  * La ligne orange sous une section : « ces lignes ne veulent rien dire ici ».
  *
- * ⚠️ Même traitement que le chantier pas encore appliqué et la portée
- * `empire` — **on ne supprime jamais la saisie de l'utilisateur en silence**,
- * on la lui montre. Retirer la ligne à sa place, c'est reperdre l'information
- * sans qu'il sache pourquoi.
+ * ⚠️ **On ne supprime jamais la saisie de l'utilisateur en silence** — on la
+ * lui montre. Retirer la ligne à sa place, c'est reperdre l'information sans
+ * qu'il sache pourquoi.
  */
 function Avertissement({ noms, quoi }: { noms: string[]; quoi: string }) {
   if (noms.length === 0) return null;
@@ -1091,9 +1084,6 @@ function LignesFlux({
  * ⚠️ **Au prorata** (choix du 28/08) : 3 sur 5 valent 60 %, pas zero. La ligne
  * ne demande alors plus que 60 % de son debit, et la tuile plafonne a 60 % de
  * sa production — c'est ce que la phrase de relecture montre en chiffres.
- *
- * ⚠️ Elle n'est **pas encore appliquee en jeu** : le moteur ne regarde pas le
- * voisinage. L'avertissement orange part avec le mecanisme, pas avant.
  */
 function BlocProximite({
   proximite,
@@ -1190,13 +1180,6 @@ function BlocProximite({
           <strong>ignorée en jeu</strong>.
         </p>
       )}
-
-      {/* ⚠️ Un champ enregistre mais pas encore branche cote jeu l'annonce ;
-          un champ qui ment ne dit rien. A retirer avec le mecanisme. */}
-      <p className="mt-1 text-[11px] leading-tight text-amber-400">
-        ⚠️ Enregistré mais <strong>pas encore appliqué en jeu</strong> : le moteur ne regarde pas
-        encore le voisinage d&apos;une tuile pour calculer sa consommation.
-      </p>
     </div>
   );
 }
