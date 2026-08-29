@@ -20,6 +20,7 @@
  */
 
 import { pb } from "@/lib/pb";
+import type { TypePlateau } from "@/lib/modeles3d";
 
 export const COLLECTION_TEMPLATES = "templates";
 export const COLLECTION_PLATEAUX = "plateaux";
@@ -106,7 +107,7 @@ export type Plateau = {
   collectionId: string;
   collectionName: string;
   nom: string;
-  typeOfPlateau: "ground" | "space";
+  typeOfPlateau: TypePlateau;
   largeur: number;
   hauteur: number;
   tilesBase64: string;
@@ -124,7 +125,7 @@ export type Plateau = {
 
 export interface ValeursPlateau {
   nom: string;
-  typeOfPlateau: "ground" | "space";
+  typeOfPlateau: TypePlateau;
   largeur: number;
   hauteur: number;
   tilesBase64: string;

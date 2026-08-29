@@ -4,6 +4,7 @@ import Aide, { Terme } from "@/components/Aide";
 import AmorcageEditeur from "@/components/AmorcageEditeur";
 import GrillePlateau, { couleurTuile } from "@/components/GrillePlateau";
 import { messageErreur, pb } from "@/lib/pb";
+import { TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
 import {
   COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
@@ -66,7 +67,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
 
   // Le cadre
   const [nom, setNom] = useState("");
-  const [type, setType] = useState<"ground" | "space">("ground");
+  const [type, setType] = useState<TypePlateau>("ground");
   const [largeur, setLargeur] = useState(0);
   const [hauteur, setHauteur] = useState(0);
   const [actif, setActif] = useState(false);
@@ -338,12 +339,15 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
               className="input"
               value={type}
               onChange={(e) => {
-                setType(e.target.value as "ground" | "space");
+                setType(e.target.value as TypePlateau);
                 setModifie(true);
               }}
             >
-              <option value="ground">ground</option>
-              <option value="space">space</option>
+              {TYPES_PLATEAU.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
             </select>
           </div>
           <div>

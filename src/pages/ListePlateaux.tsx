@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import Aide, { Terme } from "@/components/Aide";
 import { useAuth } from "@/lib/auth";
 import { messageErreur, pb } from "@/lib/pb";
+import { TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
 import {
   COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
@@ -269,7 +270,7 @@ function DialogCreation({
 }) {
   const estModele = source === COLLECTION_TEMPLATES;
   const [nom, setNom] = useState(estModele ? "Modèle Terre" : "Mon plateau");
-  const [type, setType] = useState<"ground" | "space">("ground");
+  const [type, setType] = useState<TypePlateau>("ground");
   const [largeur, setLargeur] = useState("20");
   const [hauteur, setHauteur] = useState("20");
   const [saving, setSaving] = useState(false);
@@ -336,10 +337,13 @@ function DialogCreation({
                 id="pl-type"
                 className="input"
                 value={type}
-                onChange={(e) => setType(e.target.value as "ground" | "space")}
+                onChange={(e) => setType(e.target.value as TypePlateau)}
               >
-                <option value="ground">ground</option>
-                <option value="space">space</option>
+                {TYPES_PLATEAU.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
               </select>
             </div>
             <div>

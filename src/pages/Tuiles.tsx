@@ -3,7 +3,13 @@ import { Link } from "react-router-dom";
 import TuileDialog from "@/components/TuileDialog";
 import { Vignette } from "@/components/Vignette";
 import { messageErreur, pb } from "@/lib/pb";
-import { cheminJeu, loadModeles3D, problemeDeModele, type Modele3D } from "@/lib/modeles3d";
+import {
+  cheminJeu,
+  loadModeles3D,
+  problemeDeModele,
+  TYPES_PLATEAU,
+  type Modele3D,
+} from "@/lib/modeles3d";
 import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
 // ⚠️ Les ages sont une COLLECTION depuis le 2026-08-27 au soir (onglet Ages) :
 // le catalogue les lit, il n'en tient pas un second jeu. Deux listes pour les
@@ -425,16 +431,20 @@ export default function Tuiles() {
    */
   const compte = useMemo(() => {
     const actives = tuiles.filter((t) => t.actif).length;
-    const ground = tuiles.filter((t) => t.typeOfPlateau === "ground").length;
-    const space = tuiles.filter((t) => t.typeOfPlateau === "space").length;
+    // Un compte par type declare, plus le reste. ⚠️ Se derive de TYPES_PLATEAU :
+    // un type ajoute la-bas se compte ici sans qu'on y revienne.
+    const parType = TYPES_PLATEAU.map((t) => ({
+      type: t,
+      nombre: tuiles.filter((x) => x.typeOfPlateau === t).length,
+    }));
+    const types = parType.reduce((n, p) => n + p.nombre, 0);
     return {
       total: tuiles.length,
       actives,
       brouillons: tuiles.length - actives,
-      ground,
-      space,
-      /** Ni ground ni space : une saisie a reprendre, elle ne se posera nulle part. */
-      sansType: tuiles.length - ground - space,
+      parType,
+      /** Aucun type connu : une saisie a reprendre, elle ne se posera nulle part. */
+      sansType: tuiles.length - types,
       /** Modele absent, ou prefab disparu du releve : rien ne s'affichera en jeu. */
       sansModele: tuiles.filter((t) => problemeDeModele(modeleDe(t)) !== null).length,
     };
@@ -598,8 +608,11 @@ export default function Tuiles() {
             title="Type de plateau"
           >
             <option value="tous">tous les plateaux</option>
-            <option value="ground">ground</option>
-            <option value="space">space</option>
+            {TYPES_PLATEAU.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
           </select>
           <select
             className="input h-8 py-1 text-xs"
@@ -635,8 +648,12 @@ export default function Tuiles() {
           {compte.actives > 1 ? "s" : ""}, {compte.brouillons} brouillon
           {compte.brouillons > 1 ? "s" : ""}
           {" · "}
-          <span className="tabular-nums text-slate-300">{compte.ground}</span> ground,{" "}
-          <span className="tabular-nums text-slate-300">{compte.space}</span> space
+          {compte.parType.map((p, i) => (
+            <span key={p.type}>
+              {i > 0 ? ", " : ""}
+              <span className="tabular-nums text-slate-300">{p.nombre}</span> {p.type}
+            </span>
+          ))}
           {compte.sansType > 0 && (
             <span className="text-amber-400"> · {compte.sansType} sans type de plateau</span>
           )}

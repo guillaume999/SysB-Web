@@ -20,7 +20,19 @@ import { pb } from "@/lib/pb";
 
 export const COLLECTION_MODELES_3D = "tuile3dmodel";
 
-export type TypePlateau = "ground" | "space";
+export type TypePlateau = "ground" | "space" | "TPTplateau";
+
+/**
+ * Les types de plateau, dans l'ordre d'affichage. **Point unique** : les listes
+ * deroulantes du site (modele, tuile) et les comptes du catalogue les lisent
+ * ici. Ajouter un type ailleurs qu'ici, c'est le voir manquer dans un ecran sur
+ * deux.
+ *
+ * `TPTplateau` est arrive le 2026-08-29 : un plateau a lui seul, dans
+ * `PlateauScene`, avec son propre catalogue de tuiles
+ * (`Prefabs/Univers/Plateau/`). Il ne partage rien avec `ground`.
+ */
+export const TYPES_PLATEAU: TypePlateau[] = ["ground", "space", "TPTplateau"];
 
 /**
  * Dossier racine des prefabs sous `Assets/Resources/`. Il n'est pas stocké :
@@ -152,6 +164,9 @@ export function estPrefabConnu(chemin: string, nom: string): boolean {
  */
 export function typeDepuisChemin(chemin: string): TypePlateau | null {
   const segments = chemin.toLowerCase().split("/");
+  // ⚠️ `plateau` AVANT les deux autres : c'est le dossier propre a TPTplateau
+  // (`Univers/Plateau`), et il ne contient ni « ground » ni « space ».
+  if (segments.includes("plateau")) return "TPTplateau";
   if (segments.includes("space")) return "space";
   if (segments.includes("ground")) return "ground";
   return null;

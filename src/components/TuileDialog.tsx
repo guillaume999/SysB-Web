@@ -4,7 +4,13 @@ import TuileCouts from "@/components/TuileCouts";
 import TuilePlacement from "@/components/TuilePlacement";
 import TuileStockage from "@/components/TuileStockage";
 import { Vignette } from "@/components/Vignette";
-import { cheminJeu, libelle, typeDepuisChemin, type Modele3D } from "@/lib/modeles3d";
+import {
+  cheminJeu,
+  libelle,
+  typeDepuisChemin,
+  TYPES_PLATEAU,
+  type Modele3D,
+} from "@/lib/modeles3d";
 import type { Ressource } from "@/lib/ressources";
 import type { Technologie } from "@/lib/technologies";
 import { SANS_AGE, libelleAge, type Age } from "@/lib/ages";
@@ -473,8 +479,11 @@ export default function TuileDialog({
                       setType(e.target.value as TypePlateau);
                     }}
                   >
-                    <option value="ground">ground</option>
-                    <option value="space">space</option>
+                    {TYPES_PLATEAU.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
                   </select>
                   <p className="mt-1 text-xs text-slate-500">Deduit du dossier du modele.</p>
                 </div>
