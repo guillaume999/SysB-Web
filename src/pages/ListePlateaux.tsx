@@ -103,7 +103,8 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
       {estModele ? (
         <Aide titre="Comment marchent les modèles">
           <Terme nom="un par type">
-            Un modèle `ground`, un modèle `space`. Le joueur n'y touche jamais.
+            Un modèle par type de plateau — `ground`, `space`, `TPTplateau`. Le joueur n'y touche
+            jamais.
           </Terme>
           <Terme nom="la copie">
             À sa première venue sur un type, le jeu fabrique au joueur une copie personnelle du
