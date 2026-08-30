@@ -71,8 +71,9 @@ export function tileIdsDe(v: unknown): number[] {
  * tableau `placement` les accueille sans rien casser, puisque chaque règle
  * porte son champ `regle`.
  *
- * ⚠️ Le voisinage d'une CONSOMMATION, lui, n'est pas ici : il vit sur la ligne
- * de consommation, en `Proximite` — voir `LigneFlux`.
+ * ⚠️ Le voisinage d'une CONSOMMATION ou d'une PRODUCTION, lui, n'est pas ici :
+ * il vit sur la ligne elle-même, en `Proximite` — voir `LigneFlux` et
+ * `LigneProduction`.
  *
  * ⚠️ **Toutes les règles ne sont PAS de même nature.** `support` et `limite`
  * sont des CONDITIONS : elles disent oui ou non, et doivent toutes être vraies
@@ -396,38 +397,59 @@ export interface LigneCout {
  * 3–4 quand elles sont mélangées.
  */
 /**
- * **La règle de proximité d'une consommation** — demandée le 2026-08-28 :
- * *« 10 bovin × 120 s × (besoin de 5 tuiles bovin à 2 rayon = 100 %) »*.
+ * **La règle de proximité** — posée le 2026-08-28 sur les consommations
+ * (*« 10 bovin × 120 s × (besoin de 5 tuiles bovin à 2 rayon = 100 %) »*),
+ * étendue le 2026-08-30 aux **productions**, à **plusieurs tuiles au choix**
+ * et à **plusieurs règles par ligne**.
  *
- * Elle dit combien de bâtiments d'un type il faut **autour de la tuile** pour
- * que la ligne tourne à plein. C'est ce qui attache un abattoir à ses
- * pâturages : posé tout seul, il n'a rien à abattre.
+ * Elle dit combien de bâtiments il faut **autour de la tuile** pour que la
+ * ligne tourne à plein. C'est ce qui attache un abattoir à ses pâturages :
+ * posé tout seul, il n'a rien à abattre.
  *
- * ⚠️ **Au prorata, jamais tout-ou-rien** (choix de l'utilisateur le 28/08) :
- * 3 tuiles à portée sur les 5 demandées valent **60 %**. Un seuil brutal
- * rendrait la 4ᵉ tuile inutile, et le reste du modèle compte déjà partout au
- * prorata.
+ * ⚠️ **Les tuiles cochées sont un OU, et leurs présences s'ADDITIONNENT**
+ * (demande du 30/08 : *« il faut pouvoir choisir différentes tuiles, dont le
+ * total fait X, et c'est un OU »*). « 5 au total parmi Pâturage ou Bergerie »
+ * est rempli par 3 pâturages + 2 bergeries. Le **ET** s'écrit avec **deux
+ * règles** sur la même ligne — c'est tout le sens de `Proximite[]`.
  *
- * ⚠️ **Le facteur porte sur la ligne, pas sur le stock.** Pour le moteur : la
- * ligne ne **demande** plus que `quantite × facteur` — 6 bovins au lieu de
- * 10 — et sa contribution à la couverture de la tuile se calcule **sur les 10
- * nominaux**, donc la tuile plafonne à 60 %. Sans cette seconde moitié, une
- * ligne servie à plein de sa demande réduite donnerait 100 % de production avec
- * 3 pâturages : la règle ne servirait à rien.
+ * ⚠️ **Au prorata, jamais tout-ou-rien** (choix du 28/08) : 3 tuiles à portée
+ * sur les 5 demandées valent **60 %**. Un seuil brutal rendrait la 4ᵉ tuile
+ * inutile, et le reste du modèle compte déjà partout au prorata.
  *
- * ✅ **Appliqué en jeu depuis le 28/08** (`ResolutionHorsLigne.FacteurProximite`) :
- * la demande est réduite ET la couverture se calcule sur le nominal — les deux
- * moitiés, sinon la règle ne sert à rien.
+ * ⚠️ **Plusieurs règles se cumulent par le MINIMUM** (choix du 30/08) : 80 %
+ * d'un côté et 50 % de l'autre donnent **50 %**. C'est le maillon faible qui
+ * commande — ni le produit (qui s'effondrerait dès trois règles), ni la
+ * moyenne (qui laisserait une règle à zéro ne coûter que la moitié).
+ *
+ * ⚠️ **Sa portée n'est PAS la même des deux côtés** (choix du 30/08) :
+ *
+ * - sur une **consommation**, le facteur porte sur SA ligne : elle ne demande
+ *   plus que `quantite × facteur` — 6 bovins au lieu de 10 — et sa
+ *   contribution à la couverture de la tuile se calcule **sur les 10
+ *   nominaux**, donc la tuile plafonne à 60 %. Sans cette seconde moitié, une
+ *   ligne servie à plein de sa demande réduite donnerait 100 % de production
+ *   avec 3 pâturages : la règle ne servirait à rien ;
+ * - sur une **production**, le facteur plafonne **tout le palier** — toutes
+ *   ses lignes, productions comme consommations. Ce n'est donc pas vraiment
+ *   une règle « de ligne » : la ligne n'est que l'endroit où on l'écrit.
+ *
+ * ⚠️ **Le format a changé le 30/08, et Unity lit encore l'ancien**
+ * (`ResolutionHorsLigne.FacteurProximite`) : `tileId` (un seul) est devenu
+ * `tileIds` (une liste), et le champ d'une ligne est passé de `proximite` (un
+ * objet) à `proximites` (une liste). `normaliserProximites` relit l'ancien
+ * format, mais plus rien ne l'écrit — **le jeu doit être rattrapé**, sinon les
+ * proximités déjà saisies cessent d'agir.
  */
 export interface Proximite {
   /**
-   * `tileId` du bâtiment qu'il faut avoir autour. `0` = aucun choisi.
+   * Les `tileId` qui comptent, en **OU** : on additionne leurs présences à
+   * portée. Liste vide = pas encore choisi.
    *
    * ⚠️ **Pas de case vide ici**, contrairement aux règles de `support` : on
    * compte des bâtiments construits, pas du terrain.
    */
-  tileId: number;
-  /** Combien il en faut à portée pour valoir 100 %. `0` = pas de règle. */
+  tileIds: number[];
+  /** Combien il en faut à portée, **tous types cochés confondus**, pour 100 %. */
   nombre: number;
   /**
    * Rayon en cases, sur la grille **hexagonale** (voir l'en-tête du fichier) :
@@ -438,31 +460,76 @@ export interface Proximite {
 
 /** Le défaut proposé par « + proximité » : les chiffres de l'exemple. */
 export function proximiteParDefaut(): Proximite {
-  return { tileId: 0, nombre: 5, rayon: 2 };
+  return { tileIds: [], nombre: 5, rayon: 2 };
 }
 
-/** Aucune proximité du tout — ce que le « × » remet sur la ligne. */
-export function proximiteVide(): Proximite {
-  return { tileId: 0, nombre: 0, rayon: 0 };
-}
-
-/** Vrai si l'admin a commencé à en poser une : c'est ce qui affiche le bloc. */
+/**
+ * Vrai si l'admin a commencé à en poser une. Une règle entièrement vide n'est
+ * pas une règle : elle part à l'enregistrement.
+ */
 export function proximitePosee(p: Proximite): boolean {
-  return p.tileId > 0 || p.nombre > 0 || p.rayon > 0;
+  return p.tileIds.length > 0 || p.nombre > 0 || p.rayon > 0;
 }
 
 /** Vrai si elle est complète, donc si elle agirait. Sinon : ignorée, en orange. */
 export function proximiteUtile(p: Proximite): boolean {
-  return p.tileId > 0 && p.nombre > 0 && p.rayon > 0;
+  return p.tileIds.length > 0 && p.nombre > 0 && p.rayon > 0;
 }
 
 /**
- * Ce que vaut la ligne, en %, avec `presentes` bâtiments à portée. Plafonné à
- * 100 : en avoir huit quand cinq suffisent ne fait pas produire davantage.
+ * Ce que vaut UNE règle, en %, avec `presentes` bâtiments à portée (les tuiles
+ * cochées additionnées). Plafonné à 100 : en avoir huit quand cinq suffisent
+ * ne fait pas produire davantage.
  */
 export function pourcentageProximite(p: Proximite, presentes: number): number {
   if (!proximiteUtile(p)) return 100;
   return Math.min(100, Math.round((Math.max(0, presentes) * 100) / p.nombre));
+}
+
+/**
+ * Ce que valent **toutes** les règles d'une ligne : la plus contraignante
+ * commande (voir l'en-tête). `presentes[i]` va avec `regles[i]`.
+ */
+export function pourcentageProximites(regles: Proximite[], presentes: number[]): number {
+  let pct = 100;
+  regles.forEach((p, i) => {
+    if (proximiteUtile(p)) pct = Math.min(pct, pourcentageProximite(p, presentes[i] ?? 0));
+  });
+  return pct;
+}
+
+/**
+ * Relit le champ d'une ligne, dans les **deux** formats : `proximites` (depuis
+ * le 30/08) ou l'ancien `proximite` unique, replié dans une liste d'un
+ * élément. Les règles entièrement vides sont écartées — c'était la façon
+ * d'écrire « pas de règle » avant qu'une liste puisse être vide.
+ */
+export function normaliserProximites(ligne: unknown): Proximite[] {
+  const o = (ligne ?? {}) as { proximites?: unknown; proximite?: unknown };
+  const bruts = Array.isArray(o.proximites)
+    ? o.proximites
+    : o.proximite != null
+      ? [o.proximite]
+      : [];
+  return bruts.map(normaliserProximite).filter(proximitePosee);
+}
+
+function normaliserProximite(brut: unknown): Proximite {
+  const p = (brut ?? {}) as {
+    tileIds?: unknown;
+    tileId?: unknown;
+    nombre?: unknown;
+    rayon?: unknown;
+  };
+  const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
+  // ⚠️ L'ancien `tileId` unique devient une liste d'un élément : sans ça, toute
+  // proximité saisie avant le 30/08 perdrait son bâtiment en silence.
+  const ids = Array.isArray(p.tileIds) ? p.tileIds.map(entier) : [entier(p.tileId)];
+  return {
+    tileIds: Array.from(new Set(ids.filter((n) => n > 0))).sort((a, b) => a - b),
+    nombre: Math.max(0, entier(p.nombre)),
+    rayon: Math.max(0, entier(p.rayon)),
+  };
 }
 
 export interface LigneFlux {
@@ -489,11 +556,11 @@ export interface LigneFlux {
    */
   part: number;
   /**
-   * **La règle de proximité**, facultative — voir `Proximite`. Un
-   * `proximiteVide()` (tout à zéro) veut dire « pas de règle », et c'est le cas
-   * normal : la plupart des consommations n'en ont pas.
+   * **Les règles de proximité** de cette consommation — voir `Proximite`.
+   * Liste vide = aucune règle, et c'est le cas normal. Plusieurs règles se
+   * lisent en **ET**, la plus contraignante commande.
    */
-  proximite: Proximite;
+  proximites: Proximite[];
 }
 
 export function fluxVide(ressource: string): LigneFlux {
@@ -502,7 +569,7 @@ export function fluxVide(ressource: string): LigneFlux {
     quantite: 1,
     periode_s: PERIODE_PAR_DEFAUT,
     part: 0,
-    proximite: proximiteVide(),
+    proximites: [],
   };
 }
 
@@ -669,10 +736,26 @@ export interface LigneProduction {
    * tombent dans la même tranche.
    */
   indicateur: string;
+  /**
+   * **Les règles de proximité** de cette production — ajoutées le 30/08 :
+   * *« dans ce que produit un bâtiment, rajoute l'indice de proximité »*.
+   *
+   * ⚠️ Contrairement à celles d'une consommation, elles ne freinent pas que
+   * leur ligne : le facteur plafonne **tout le palier**. La ligne n'est que
+   * l'endroit où on l'écrit.
+   */
+  proximites: Proximite[];
 }
 
 export function productionVide(ressource: string): LigneProduction {
-  return { ressource, quantite: 10, periode_s: PERIODE_PAR_DEFAUT, tranches: [], indicateur: "" };
+  return {
+    ressource,
+    quantite: 10,
+    periode_s: PERIODE_PAR_DEFAUT,
+    tranches: [],
+    indicateur: "",
+    proximites: [],
+  };
 }
 
 export interface Palier {
@@ -796,13 +879,9 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           quantite: Math.max(0, entier(l?.quantite)),
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
           part: Math.min(100, Math.max(0, entier(l?.part))),
-          // Une ligne enregistree avant le 28/08 n'a pas de proximite : elle
-          // revient a zero, c'est-a-dire « aucune regle ».
-          proximite: {
-            tileId: Math.max(0, entier(l?.proximite?.tileId)),
-            nombre: Math.max(0, entier(l?.proximite?.nombre)),
-            rayon: Math.max(0, entier(l?.proximite?.rayon)),
-          },
+          // Les DEUX formats sont relus : l'objet unique d'avant le 30/08 et
+          // la liste d'aujourd'hui. Plus vieux encore : aucune regle, donc [].
+          proximites: normaliserProximites(l),
         }))
       : [],
     production: Array.isArray(o.production)
@@ -812,6 +891,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
           tranches: normaliserTranches(l),
           indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
+          proximites: normaliserProximites(l),
         }))
       : [],
   };
@@ -827,12 +907,20 @@ export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
     niveau: i + 1,
     duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
     cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
-    utilisation: p.utilisation.filter((l) => l.ressource !== "" && l.quantite > 0),
+    utilisation: p.utilisation
+      .filter((l) => l.ressource !== "" && l.quantite > 0)
+      // Une proximite ouverte puis abandonnee n'est pas une regle : elle part
+      // ici, plutot que d'aller occuper une place en base.
+      .map((l) => ({ ...l, proximites: l.proximites.filter(proximitePosee) })),
     production: p.production
       .filter((l) => l.ressource !== "")
       // Tri a l'enregistrement : le jeu lit un escalier deja ordonne, il n'a
       // pas a re-trier pour tomber sur le meme rendement que l'ecran.
-      .map((l) => ({ ...l, tranches: tranchesTriees(l.tranches) })),
+      .map((l) => ({
+        ...l,
+        tranches: tranchesTriees(l.tranches),
+        proximites: l.proximites.filter(proximitePosee),
+      })),
   }));
 }
 
@@ -1382,9 +1470,11 @@ export function tuilesCitant(tuiles: Tuile[], tileId: number): Tuile[] {
           // « il faut 3 fermes » casserait la règle en silence.
           (r.regle === "batiments" && r.batiment === tileId),
       ) ||
-      // Et la proximité d'une consommation : « 5 pâturages à 2 cases ».
+      // Et les proximités, des DEUX côtés : « 5 pâturages à 2 cases ».
       paliersDe(t).some((p) =>
-        p.utilisation.some((l) => proximiteUtile(l.proximite) && l.proximite.tileId === tileId),
+        [...p.utilisation, ...p.production].some((l) =>
+          l.proximites.some((x) => proximiteUtile(x) && x.tileIds.includes(tileId)),
+        ),
       ),
   );
 }

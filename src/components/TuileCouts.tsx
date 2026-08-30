@@ -1,4 +1,5 @@
 import Aide, { Terme } from "@/components/Aide";
+import ChoixTuiles from "@/components/ChoixTuiles";
 import { codeInconnu, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
   PERIODE_PAR_DEFAUT,
@@ -8,11 +9,10 @@ import {
   formatDuree,
   palierVide,
   pourcentageProximite,
+  pourcentageProximites,
   productionVide,
   proximiteParDefaut,
-  proximitePosee,
   proximiteUtile,
-  proximiteVide,
   rendEnVeille,
   rendementPourIndicateur,
   seuilsEnDouble,
@@ -197,17 +197,27 @@ export default function TuileCouts({
           <strong>Stock &amp; appro</strong> ; ici on dit seulement <em>d'où elle vient</em>.
         </Terme>
         <Terme nom="+ proximité">
-          Même geste que <strong>+ indice</strong>, en bout d'une consommation : elle reste cachée
-          tant qu'on ne la demande pas. Elle dit combien de bâtiments d'un type il faut{" "}
-          <strong>autour de la tuile</strong> pour que la ligne tourne à plein — c'est ce qui
-          attache un abattoir à ses pâturages.
+          Même geste que <strong>+ indice</strong>, en bout d'une ligne — consommation{" "}
+          <em>ou</em> production : elle reste cachée tant qu'on ne la demande pas. Elle dit
+          combien de bâtiments il faut <strong>autour de la tuile</strong> pour qu'on tourne à
+          plein — c'est ce qui attache un abattoir à ses pâturages.
           <br />
           <em>10 bovins toutes les 120 s, besoin de 5 « Pâturage » à 2 de rayon = 100 %.</em>
           <br />
-          <strong>Au prorata</strong>, jamais tout ou rien : 3 pâturages sur 5 valent 60 %. La
-          ligne ne demande alors plus que 6 bovins, et la tuile plafonne à 60 % de sa production —
-          sans cette seconde moitié, une ligne servie à plein de sa demande réduite produirait
-          100 % avec 3 pâturages, et la règle ne servirait à rien.
+          <strong>Plusieurs tuiles cochées = un OU, et elles s'additionnent.</strong> « 5 au total
+          parmi Pâturage ou Bergerie » est rempli par 3 pâturages + 2 bergeries. Pour un{" "}
+          <strong>ET</strong> — 5 pâturages <em>et</em> 3 bergeries — clique une deuxième fois sur{" "}
+          <strong>+ proximité</strong> : les règles s'empilent sur la ligne et doivent toutes être
+          remplies.
+          <br />
+          <strong>Au prorata</strong>, jamais tout ou rien : 3 pâturages sur 5 valent 60 %. Et
+          quand il y a plusieurs règles, <strong>c'est la plus contraignante qui commande</strong>{" "}
+          — 80 % d'un côté, 50 % de l'autre, la ligne vaut 50 %.
+          <br />
+          ⚠️ <strong>Sa portée n'est pas la même des deux côtés.</strong> Sur une{" "}
+          <em>consommation</em>, elle ne freine que sa ligne : celle-ci ne demande plus que 6
+          bovins, et la tuile plafonne à 60 % faute d'être servie. Sur une <em>production</em>,
+          elle plafonne <strong>tout le palier</strong> — ses productions comme ses consommations.
           <br />
           Le rayon se compte sur la grille <strong>hexagonale</strong> : 6 cases à 1, 18 à 2, 36 à
           3. La phrase sous la règle te donne le compte exact.
@@ -378,6 +388,8 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                   productibles={productibles}
                   indicateurs={indicateurs}
                   nomRessource={nomRessource}
+                  tuiles={tuiles}
+                  nomTuile={nomTuile}
                   onChange={(production) => majPalier(index, { production })}
                 />
 
@@ -602,12 +614,17 @@ function LignesProduction({
   productibles,
   indicateurs,
   nomRessource,
+  tuiles,
+  nomTuile,
   onChange,
 }: {
   lignes: LigneProduction[];
   productibles: Ressource[];
   indicateurs: Ressource[];
   nomRessource: (code: string) => string;
+  /** Le catalogue, pour les tuiles que la proximite demande autour (30/08). */
+  tuiles: Tuile[];
+  nomTuile: (tileId: number) => string;
   onChange: (lignes: LigneProduction[]) => void;
 }) {
   const maj = (i: number, patch: Partial<LigneProduction>) =>
@@ -621,6 +638,7 @@ function LignesProduction({
         <div className="space-y-2">
           {lignes.map((ligne, i) => {
             const estIndicateur = indicateurs.some((r) => r.code === ligne.ressource);
+            const avecProximite = ligne.proximites.some(proximiteUtile);
             return (
               <div key={i} className="rounded border border-edge/60 bg-ink/40 p-2">
                 <div className="flex flex-wrap items-center gap-2">
@@ -711,6 +729,19 @@ function LignesProduction({
                           + indice
                         </button>
                       )}
+
+                      {/* ⚠️ La proximite d'une PRODUCTION ne freine pas que sa
+                          ligne : elle plafonne tout le palier. Elle s'ecrit
+                          quand meme ici — c'est la demande telle qu'elle est
+                          venue le 30/08, « dans ce que produit un batiment ».
+                          Un indicateur n'en recoit pas : il n'a aucun debit a
+                          plafonner, sa valeur se calcule. */}
+                      <BoutonProximite
+                        deja={ligne.proximites.length}
+                        onClick={() =>
+                          maj(i, { proximites: [...ligne.proximites, proximiteParDefaut()] })
+                        }
+                      />
                     </>
                   )}
                   <button
@@ -722,64 +753,93 @@ function LignesProduction({
                   </button>
                 </div>
 
-                {estIndicateur ? (
+                {estIndicateur && (
                   <p className="mt-1 text-[11px] leading-tight text-accent">
                     Rien à saisir : la valeur de cet indicateur <strong>se calcule</strong> à
                     partir des indices posés sur les consommations ci-dessus. Entièrement servie,
                     la tuile le produit à 100 % ; à moitié, à 50 %.
                   </p>
-                ) : (
-                  <>
-                    {ligne.tranches.length > 0 && (
-                      <Escalier
-                        tranches={ligne.tranches}
-                        quantite={ligne.quantite}
-                        indicateur={ligne.indicateur}
-                        nomRessource={nomRessource}
-                        onChange={(tranches) => maj(i, { tranches })}
-                      />
-                    )}
-                    <p className="mt-1 text-[11px] leading-tight text-slate-500">
-                      C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
-                      <span className="text-slate-300">la couverture de ses intrants</span>{" "}
-                      {/* L'exemple a moitie : c'est le cas que l'utilisateur cite
-                          lui-meme (« si il n'y a que 25 bovins sur 50 »), et un
-                          chiffre se verifie d'un coup d'oeil, pas une formule. */}
-                      <span className="text-slate-400">
-                        (à moitié approvisionné :{" "}
-                        <span className="tabular-nums text-slate-300">
-                          {Math.round(ligne.quantite / 2)}
-                        </span>
-                        )
+                )}
+
+                {!estIndicateur && ligne.tranches.length > 0 && (
+                  <Escalier
+                    tranches={ligne.tranches}
+                    quantite={ligne.quantite}
+                    indicateur={ligne.indicateur}
+                    nomRessource={nomRessource}
+                    onChange={(tranches) => maj(i, { tranches })}
+                  />
+                )}
+
+                {/* Rendu meme sur un indicateur : une regle deja en base ne
+                    doit jamais devenir invisible, on ne saurait plus qu'elle
+                    agit. */}
+                <BlocsProximite
+                  proximites={ligne.proximites}
+                  contexte="produit"
+                  quantite={ligne.quantite}
+                  periode_s={ligne.periode_s}
+                  tuiles={tuiles}
+                  nomTuile={nomTuile}
+                  onChange={(proximites) => maj(i, { proximites })}
+                />
+
+                {!estIndicateur && (
+                  <p className="mt-1 text-[11px] leading-tight text-slate-500">
+                    C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
+                    <span className="text-slate-300">la couverture de ses intrants</span>{" "}
+                    {/* L'exemple a moitie : c'est le cas que l'utilisateur cite
+                        lui-meme (« si il n'y a que 25 bovins sur 50 »), et un
+                        chiffre se verifie d'un coup d'oeil, pas une formule. */}
+                    <span className="text-slate-400">
+                      (à moitié approvisionné :{" "}
+                      <span className="tabular-nums text-slate-300">
+                        {Math.round(ligne.quantite / 2)}
                       </span>
-                      {ligne.tranches.length > 0 ? (
-                        ligne.indicateur !== "" ? (
-                          <>
-                            , puis × <span className="text-slate-300">le rendement de la tranche</span>{" "}
-                            de {nomRessource(ligne.indicateur)}{" "}
-                            <span className="text-slate-400">
-                              — la valeur lue est celle de{" "}
-                              <span className="text-slate-300">la période précédente</span>.
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            , puis ×{" "}
-                            <span className="text-slate-300">
-                              {rendementPourIndicateur(ligne.tranches, 100)} % de rendement
-                            </span>{" "}
-                            — aucun indice choisi, c'est un plafond fixe.
-                          </>
-                        )
+                      )
+                    </span>
+                    {avecProximite && (
+                      <>
+                        , puis ×{" "}
+                        <span className="text-slate-300">le facteur de proximité</span>{" "}
+                        <span className="text-slate-400">
+                          (il plafonne <strong>tout le palier</strong>, pas cette seule ligne)
+                        </span>
+                      </>
+                    )}
+                    {ligne.tranches.length > 0 ? (
+                      ligne.indicateur !== "" ? (
+                        <>
+                          , puis × <span className="text-slate-300">le rendement de la tranche</span>{" "}
+                          de {nomRessource(ligne.indicateur)}{" "}
+                          <span className="text-slate-400">
+                            — la valeur lue est celle de{" "}
+                            <span className="text-slate-300">la période précédente</span>.
+                          </span>
+                        </>
                       ) : (
                         <>
-                          {" "}
-                          — <span className="text-accent">rien ne la plafonne</span>.
+                          , puis ×{" "}
+                          <span className="text-slate-300">
+                            {rendementPourIndicateur(ligne.tranches, 100)} % de rendement
+                          </span>{" "}
+                          — aucun indice choisi, c'est un plafond fixe.
                         </>
-                      )}{" "}
-                      Et sans sa main-d'œuvre, elle est nulle.
-                    </p>
-                  </>
+                      )
+                    ) : avecProximite ? (
+                      <>
+                        , et <span className="text-accent">aucun indice</span> ne la freine en
+                        plus.
+                      </>
+                    ) : (
+                      <>
+                        {" "}
+                        — <span className="text-accent">rien ne la plafonne</span>.
+                      </>
+                    )}
+{" "}
+                    Et sans sa main-d'œuvre, elle est nulle.
+                  </p>
                 )}
               </div>
             );
@@ -1024,16 +1084,15 @@ function LignesFlux({
 
                 {/* ⚠️ Meme geste que le « + indice » : cache tant qu'on ne l'a
                     pas demande. La plupart des consommations n'ont aucune
-                    regle de voisinage. */}
-                {!proximitePosee(ligne.proximite) && (
-                  <button
-                    type="button"
-                    className="text-xs text-accent hover:underline"
-                    onClick={() => maj(i, { proximite: proximiteParDefaut() })}
-                  >
-                    + proximité
-                  </button>
-                )}
+                    regle de voisinage. Depuis le 30/08 le bouton RESTE : un
+                    deuxieme clic empile une seconde regle, et c'est comme ca
+                    qu'on ecrit un ET. */}
+                <BoutonProximite
+                  deja={ligne.proximites.length}
+                  onClick={() =>
+                    maj(i, { proximites: [...ligne.proximites, proximiteParDefaut()] })
+                  }
+                />
 
                 <button
                   type="button"
@@ -1044,16 +1103,15 @@ function LignesFlux({
                 </button>
               </div>
 
-              {proximitePosee(ligne.proximite) && (
-                <BlocProximite
-                  proximite={ligne.proximite}
-                  quantite={ligne.quantite}
-                  periode_s={ligne.periode_s}
-                  tuiles={tuiles}
-                  nomTuile={nomTuile}
-                  onChange={(proximite) => maj(i, { proximite })}
-                />
-              )}
+              <BlocsProximite
+                proximites={ligne.proximites}
+                contexte="consomme"
+                quantite={ligne.quantite}
+                periode_s={ligne.periode_s}
+                tuiles={tuiles}
+                nomTuile={nomTuile}
+                onChange={(proximites) => maj(i, { proximites })}
+              />
             </div>
           ))}
           {periodes.length > 1 && (
@@ -1075,44 +1133,167 @@ function LignesFlux({
 }
 
 /**
- * **La regle de proximite d'une consommation** — 2026-08-28.
+ * **Le bouton qui ouvre une regle de proximite** — 2026-08-28, devenu
+ * empilable le 2026-08-30.
  *
- * Mot de l'utilisateur : *« 10 bovin × 120 s × (besoin de 5 tile bovin a
- * 2 rayon = 100 %) »*. Elle attache un batiment a son voisinage : un abattoir
- * sans paturages autour n'a rien a abattre.
- *
- * ⚠️ **Au prorata** (choix du 28/08) : 3 sur 5 valent 60 %, pas zero. La ligne
- * ne demande alors plus que 60 % de son debit, et la tuile plafonne a 60 % de
- * sa production — c'est ce que la phrase de relecture montre en chiffres.
+ * ⚠️ Il ne disparait PLUS quand une regle est posee, contrairement au
+ * « + indice » : un second clic ajoute une SECONDE regle, et c'est comme ca
+ * qu'on ecrit un ET (*« c'est un OU, une autre regle fera un ET »*). Le
+ * libelle change pour que le geste se devine sans avoir a l'essayer.
  */
-function BlocProximite({
-  proximite,
+function BoutonProximite({ deja, onClick }: { deja: number; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="text-xs text-accent hover:underline"
+      title={
+        deja === 0
+          ? "une règle de voisinage sur cette ligne"
+          : "une règle de PLUS : elles devront toutes être remplies (ET)"
+      }
+      onClick={onClick}
+    >
+      {deja === 0 ? "+ proximité" : "+ une autre proximité"}
+    </button>
+  );
+}
+
+/**
+ * **Toutes les regles de proximite d'une ligne**, empilees — 2026-08-30.
+ *
+ * Elles se lisent en **ET**, et c'est **la plus contraignante qui commande**
+ * (choix de l'utilisateur : 80 % d'un cote et 50 % de l'autre donnent 50 %).
+ * La phrase de synthese ne s'affiche qu'a partir de deux regles utiles : avec
+ * une seule, celle du bloc suffit et la repeter ferait du bruit.
+ */
+function BlocsProximite({
+  proximites,
+  contexte,
   quantite,
   periode_s,
   tuiles,
   nomTuile,
   onChange,
 }: {
+  proximites: Proximite[];
+  contexte: Contexte;
+  quantite: number;
+  periode_s: number;
+  tuiles: Tuile[];
+  nomTuile: (tileId: number) => string;
+  onChange: (proximites: Proximite[]) => void;
+}) {
+  if (proximites.length === 0) return null;
+
+  // L'exemple est pris a UNE tuile du compte : c'est la que le prorata se voit,
+  // et, a plusieurs regles, que le minimum se lit.
+  const presentes = proximites.map((p) => Math.max(0, p.nombre - 1));
+  const utiles = proximites.filter(proximiteUtile);
+  const total = pourcentageProximites(proximites, presentes);
+  const detail = proximites
+    .map((p, i) => (proximiteUtile(p) ? `${pourcentageProximite(p, presentes[i])} %` : null))
+    .filter((x): x is string => x !== null)
+    .join(" et ");
+
+  return (
+    <div className="mt-1 space-y-1">
+      {proximites.map((p, i) => (
+        <div key={i}>
+          {i > 0 && (
+            <p className="my-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              et
+            </p>
+          )}
+          <BlocProximite
+            proximite={p}
+            contexte={contexte}
+            quantite={quantite}
+            periode_s={periode_s}
+            tuiles={tuiles}
+            nomTuile={nomTuile}
+            onChange={(modifiee) => onChange(proximites.map((x, k) => (k === i ? modifiee : x)))}
+            onRetirer={() => onChange(proximites.filter((_, k) => k !== i))}
+          />
+        </div>
+      ))}
+
+      {utiles.length > 1 && (
+        <p className="text-[11px] leading-tight text-slate-500">
+          Ces {utiles.length} règles doivent être remplies <strong>en même temps</strong>, et
+          c'est <strong>la plus contraignante qui commande</strong> : avec les exemples ci-dessus
+          ({detail}), on retient{" "}
+          <span className="tabular-nums text-slate-300">{total} %</span>.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Ou la regle est ecrite — ce qui change sa PORTEE, pas seulement sa phrase. */
+type Contexte = "consomme" | "produit";
+
+/**
+ * **Une regle de proximite** — 2026-08-28, elargie le 2026-08-30.
+ *
+ * Mot de l'utilisateur au depart : *« 10 bovin × 120 s × (besoin de 5 tile
+ * bovin a 2 rayon = 100 %) »*. Elle attache un batiment a son voisinage : un
+ * abattoir sans paturages autour n'a rien a abattre.
+ *
+ * Le 30/08 : **plusieurs tuiles au choix, dont le total fait N** — un OU, leurs
+ * presences s'additionnent (3 paturages + 2 bergeries remplissent « 5 »).
+ *
+ * ⚠️ **Des cases a cocher, jamais un menu** : c'est la convention du site pour
+ * une liste de tuiles, et le `<select>` d'origine ne savait en porter qu'une.
+ *
+ * ⚠️ **Au prorata** (choix du 28/08) : 3 sur 5 valent 60 %, pas zero. Ce que ce
+ * facteur plafonne, en revanche, depend du cote ou la regle est ecrite — voir
+ * `Contexte` et la phrase de relecture.
+ */
+function BlocProximite({
+  proximite,
+  contexte,
+  quantite,
+  periode_s,
+  tuiles,
+  nomTuile,
+  onChange,
+  onRetirer,
+}: {
   proximite: Proximite;
+  contexte: Contexte;
   quantite: number;
   periode_s: number;
   tuiles: Tuile[];
   nomTuile: (tileId: number) => string;
   onChange: (proximite: Proximite) => void;
+  onRetirer: () => void;
 }) {
   const p = proximite;
   const utile = proximiteUtile(p);
-  // Un tileId qui ne designe plus rien reste VISIBLE dans le menu, marque
-  // « inconnue » : le faire disparaitre changerait la ligne en silence au
-  // premier reenregistrement.
-  const orpheline = p.tileId > 0 && !tuiles.some((t) => t.tileId === p.tileId);
+  // Un tileId qui ne designe plus rien ne peut pas s'afficher dans la liste a
+  // cocher — il n'est plus au catalogue. On le NOMME donc en dessous : le
+  // laisser disparaitre changerait la regle en silence au premier
+  // reenregistrement, meme garde que `ChoixRessource`.
+  const orphelines = p.tileIds.filter((id) => !tuiles.some((t) => t.tileId === id));
   const maj = (patch: Partial<Proximite>) => onChange({ ...p, ...patch });
   // Un exemple a une tuile pres du compte : c'est la que le prorata se voit.
   const manquantes = Math.max(0, p.nombre - 1);
   const pct = pourcentageProximite(p, manquantes);
+  const liste = p.tileIds.map((id) => `« ${nomTuile(id)} »`).join(" ou ");
+  // La phrase se compose en JS, pas en JSX : un « telle{s} quelle{s} » decoupe
+  // en accolades s'ecrirait « telle s quelle s » a l'ecran (JSX recolle les
+  // lignes avec un espace).
+  const phraseOrphelines =
+    orphelines.length === 0
+      ? ""
+      : orphelines.length === 1
+        ? `tuile ${orphelines[0]} — plus au catalogue. Elle reste comptée telle quelle.`
+        : `${orphelines
+            .map((id) => `tuile ${id}`)
+            .join(", ")} — plus au catalogue. Elles restent comptées telles quelles.`;
 
   return (
-    <div className="mt-1 rounded border border-edge/60 bg-ink/60 p-2">
+    <div className="rounded border border-edge/60 bg-ink/60 p-2">
       <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
         besoin de
         <input
@@ -1123,22 +1304,31 @@ function BlocProximite({
           value={p.nombre}
           onChange={(e) => maj({ nombre: Math.max(0, Number(e.target.value) || 0) })}
         />
-        {/* Une liste, jamais un id tape a la main : c'est la convention du site. */}
-        <select
-          className={`input h-8 w-44 py-0 ${orpheline ? "border-amber-700 text-amber-300" : ""}`}
-          value={String(p.tileId)}
-          onChange={(e) => maj({ tileId: Number(e.target.value) || 0 })}
+        tuiles <strong className="font-medium text-slate-400">au total</strong>, au choix parmi :
+        <button
+          type="button"
+          className="ml-auto text-slate-500 hover:text-red-400"
+          title="retirer cette règle de proximité"
+          onClick={onRetirer}
         >
-          <option value="0">choisir un bâtiment</option>
-          {orpheline && <option value={p.tileId}>tuile {p.tileId} — inconnue</option>}
-          {[...tuiles]
-            .sort((a, b) => a.nom.localeCompare(b.nom))
-            .map((t) => (
-              <option key={t.id} value={t.tileId}>
-                {t.nom}
-              </option>
-            ))}
-        </select>
+          &times;
+        </button>
+      </div>
+
+      <div className="mt-1">
+        <ChoixTuiles
+          tuiles={tuiles}
+          choisies={p.tileIds}
+          onChange={(tileIds) => maj({ tileIds })}
+          vide="Aucune tuile au catalogue à proposer."
+        />
+      </div>
+
+      {phraseOrphelines !== "" && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-400">{phraseOrphelines}</p>
+      )}
+
+      <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-500">
         à
         <input
           type="number"
@@ -1149,35 +1339,42 @@ function BlocProximite({
           onChange={(e) => maj({ rayon: Math.max(0, Number(e.target.value) || 0) })}
         />
         de rayon = 100 %
-        <button
-          type="button"
-          className="ml-auto text-slate-500 hover:text-red-400"
-          title="retirer la proximité"
-          onClick={() => onChange(proximiteVide())}
-        >
-          &times;
-        </button>
+        {p.rayon > 0 && (
+          <span className="text-[11px] text-slate-600">
+            (<span className="tabular-nums">{casesCouvertes(p.rayon)}</span> cases)
+          </span>
+        )}
       </div>
 
       {utile ? (
         <p className="mt-1 text-[11px] leading-tight text-slate-500">
-          Il faut <span className="tabular-nums text-slate-300">{p.nombre}</span>{" "}
-          <span className="text-slate-300">&laquo; {nomTuile(p.tileId)} &raquo;</span> dans les{" "}
+          Il faut <span className="tabular-nums text-slate-300">{p.nombre}</span> tuiles au total
+          parmi <span className="text-slate-300">{liste}</span> dans les{" "}
           <span className="tabular-nums">{casesCouvertes(p.rayon)}</span> cases à {p.rayon} de
-          rayon pour consommer les {quantite} par {formatDuree(periode_s)}.{" "}
-          <strong>Au prorata en dessous</strong> : avec{" "}
-          <span className="tabular-nums text-slate-300">{manquantes}</span> sur {p.nombre}, la
-          ligne ne demande plus que{" "}
-          <span className="tabular-nums text-slate-300">
-            {Math.round((quantite * pct) / 100)}
-          </span>{" "}
-          et la tuile plafonne à <span className="tabular-nums text-slate-300">{pct} %</span> de sa
-          production.
+          rayon pour {contexte === "consomme" ? "consommer" : "produire"} les {quantite} par{" "}
+          {formatDuree(periode_s)}. <strong>Au prorata en dessous</strong> : avec{" "}
+          <span className="tabular-nums text-slate-300">{manquantes}</span> sur {p.nombre},{" "}
+          {contexte === "consomme" ? (
+            <>
+              la ligne ne demande plus que{" "}
+              <span className="tabular-nums text-slate-300">
+                {Math.round((quantite * pct) / 100)}
+              </span>{" "}
+              et la tuile plafonne à{" "}
+              <span className="tabular-nums text-slate-300">{pct} %</span> de sa production.
+            </>
+          ) : (
+            <>
+              <strong>tout le palier</strong> plafonne à{" "}
+              <span className="tabular-nums text-slate-300">{pct} %</span> — ses productions comme
+              ses consommations, pas seulement cette ligne.
+            </>
+          )}
         </p>
       ) : (
         <p className="mt-1 text-[11px] leading-tight text-amber-400">
-          Règle incomplète — il faut un bâtiment, un nombre et un rayon. Telle quelle, elle sera{" "}
-          <strong>ignorée en jeu</strong>.
+          Règle incomplète — il faut au moins une tuile cochée, un nombre et un rayon. Telle
+          quelle, elle sera <strong>ignorée en jeu</strong>.
         </p>
       )}
     </div>
