@@ -246,7 +246,7 @@ export default function TuileStockage({
                 <input
                   type="number"
                   min={0}
-                  step={50}
+                  step={1}
                   disabled={!aToutes}
                   className="input h-7 w-24 py-0.5 text-xs disabled:opacity-30"
                   value={toutes}
@@ -286,7 +286,7 @@ export default function TuileStockage({
                     <input
                       type="number"
                       min={0}
-                      step={10}
+                      step={1}
                       disabled={!coche}
                       className="input h-7 w-24 py-0.5 text-xs disabled:opacity-30"
                       value={coche ? propre.max : toutes}
