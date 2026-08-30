@@ -19,6 +19,7 @@ import {
   TILE_ID_MIN,
   SEPARATEUR_CATEGORIES,
   categoriesDe,
+  categoriesRenommees,
   categoriesVersTexte,
   cheminIconeAttendu,
   contrainteDe,
@@ -33,6 +34,7 @@ import {
   prochainTileId,
   toutesLesCategories,
   tuilesParModele,
+  tuilesPortant,
   type Logistique,
   type Palier,
   type ReglePlacement,
@@ -69,6 +71,8 @@ export default function TuileDialog({
   technologies,
   saving,
   erreur,
+  categorieOccupee,
+  onCategorie,
   onCancel,
   onSubmit,
 }: {
@@ -82,6 +86,14 @@ export default function TuileDialog({
   technologies: Technologie[];
   saving: boolean;
   erreur: string | null;
+  /** La categorie que la page est en train de reecrire dans tout le catalogue, ou null. */
+  categorieOccupee: string | null;
+  /**
+   * Renomme (`nouvelle`) ou retire (`null`) une categorie **dans toutes les
+   * tuiles qui la portent**. C'est la page qui ecrit ; la fenetre se contente
+   * de mettre sa propre liste d'accord.
+   */
+  onCategorie: (ancienne: string, nouvelle: string | null) => Promise<void>;
   onCancel: () => void;
   onSubmit: (valeurs: ValeursTuile) => void;
 }) {
@@ -221,6 +233,53 @@ export default function TuileDialog({
     setNouvelleCategorie("");
   };
 
+  // ─── Renommer / supprimer une categorie DANS TOUT LE CATALOGUE ────────────
+  //
+  //  ⚠️ Il n'y a pas de table des categories : une categorie n'existe que parce
+  //  que des tuiles la portent. « Renommer » veut donc dire reecrire le champ
+  //  `categorie` de chacune — c'est une action sur le CATALOGUE ENTIER, lancee
+  //  depuis la fenetre d'une seule tuile. D'ou le bloc a part, la phrase qui le
+  //  dit en toutes lettres, et la confirmation qui annonce le nombre.
+  //
+  //  ⚠️ Renommer vers un nom existant FUSIONNE les deux, et c'est la raison
+  //  d'etre du bouton : c'est ce qui repare `Nourriture`/`Vivres`,
+  //  `Habitat`/`Habitations`, `PRODUCTION`/`Production`.
+
+  const [gestion, setGestion] = useState<string | null>(null);
+  const [renommeEn, setRenommeEn] = useState("");
+  const [aConfirmer, setAConfirmer] = useState<"renommer" | "supprimer" | null>(null);
+
+  const occupee = categorieOccupee !== null;
+  const portee = gestion === null ? 0 : tuilesPortant(tuiles, gestion);
+
+  // Le nouveau nom, nettoye comme a la creation : la virgule separe deux
+  // categories, elle ne peut pas vivre a l'interieur d'une.
+  const nouveauNom = renommeEn.split(SEPARATEUR_CATEGORIES).join(" ").trim();
+  const renommagePossible =
+    gestion !== null && nouveauNom !== "" && nouveauNom !== gestion && !occupee;
+
+  const ouvrirGestion = (c: string) => {
+    setGestion(c);
+    setRenommeEn(c);
+    setAConfirmer(null);
+  };
+
+  const appliquerGestion = async (nouvelle: string | null) => {
+    if (gestion === null) return;
+    const ancienne = gestion;
+    setAConfirmer(null);
+
+    // La liste de CETTE tuile suit tout de suite : la page reecrit la base, mais
+    // elle ne connait pas le formulaire ouvert. Sans ca, la pastille garderait
+    // l'ancien nom jusqu'a la fermeture — et l'enregistrement le RENVERRAIT.
+    setCategories((avant) => categoriesRenommees(avant, ancienne, nouvelle));
+
+    await onCategorie(ancienne, nouvelle);
+
+    if (nouvelle === null) setGestion(null);
+    else ouvrirGestion(nouvelle);
+  };
+
   const bloque = saving || nom.trim() === "" || modele === "" || idHorsBornes || conflit !== null;
 
   const submit = (event: React.FormEvent) => {
@@ -305,6 +364,14 @@ export default function TuileDialog({
                   qui evite un &laquo; Habitations &raquo; a cote d'un &laquo; Habitat &raquo;.
                   L'onglet &laquo; Tout &raquo; du magasin, lui, compte toujours chaque batiment
                   une seule fois.
+                </Terme>
+                <Terme nom="renommer une categorie">
+                  Il n'y a pas de table des categories : une categorie n'existe QUE parce que des
+                  tuiles la portent. La renommer, c'est donc reecrire toutes ces tuiles \u2014 ce que
+                  fait le bouton, d'un coup, pour le catalogue entier et pas seulement pour celle
+                  que tu edites. La renommer vers un nom qui existe deja FUSIONNE les deux : c'est
+                  ainsi qu'on repare &laquo; Nourriture &raquo; et &laquo; Vivres &raquo;. Et tant
+                  qu'une seule tuile porte encore l'ancien nom, il reparait dans la liste.
                 </Terme>
                 <Terme nom="description">L'infobulle montree au joueur.</Terme>
                 <Terme nom="couleur">
@@ -605,6 +672,123 @@ export default function TuileDialog({
                         categories.length > 1 ? "chacun de ces onglets" : "cet onglet"
                       }.`}
                 </p>
+
+                {/*
+                  ⚠️ CE BLOC N'AGIT PAS SUR CETTE TUILE, mais sur TOUTES celles
+                  qui portent la categorie. Il n'y a pas de table des
+                  categories : elles n'existent que parce que des tuiles les
+                  portent, donc les renommer, c'est reecrire ces tuiles-la. La
+                  phrase et le compte sont la pour que ca ne surprenne personne.
+                */}
+                {categoriesProposees.length > 0 && (
+                  <div className="mt-3 rounded-md border border-edge p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-slate-400">Renommer ou supprimer</span>
+                      <select
+                        className="input w-auto py-1 text-xs"
+                        value={gestion ?? ""}
+                        onChange={(e) =>
+                          e.target.value === "" ? setGestion(null) : ouvrirGestion(e.target.value)
+                        }
+                        disabled={occupee}
+                      >
+                        <option value="">une categorie…</option>
+                        {categoriesProposees.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+
+                      {gestion !== null && (
+                        <>
+                          <span className="text-xs text-slate-500">en</span>
+                          <input
+                            className="input w-auto flex-1 py-1 text-xs"
+                            value={renommeEn}
+                            onChange={(e) => {
+                              setRenommeEn(e.target.value);
+                              setAConfirmer(null);
+                            }}
+                            disabled={occupee}
+                          />
+                          <button
+                            type="button"
+                            className="btn-ghost whitespace-nowrap py-1 text-xs"
+                            onClick={() => setAConfirmer("renommer")}
+                            disabled={!renommagePossible}
+                          >
+                            Renommer partout
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ghost whitespace-nowrap py-1 text-xs text-rose-300"
+                            onClick={() => setAConfirmer("supprimer")}
+                            disabled={occupee}
+                          >
+                            Supprimer partout
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {gestion !== null && aConfirmer === null && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {portee === 0
+                          ? `\u00ab ${gestion} \u00bb n'est portee par aucune tuile enregistree.`
+                          : `\u00ab ${gestion} \u00bb est portee par ${portee} tuile${
+                              portee > 1 ? "s" : ""
+                            }. Ces deux boutons les reecrivent TOUTES, tout de suite \u2014 pas seulement celle-ci.`}
+                      </p>
+                    )}
+
+                    {/* Renommer vers un nom deja pris n'est pas une erreur : c'est
+                        la fusion, et c'est le geste attendu sur les doublons. */}
+                    {gestion !== null &&
+                      aConfirmer === null &&
+                      renommagePossible &&
+                      categoriesProposees.some(
+                        (c) => c.toLocaleLowerCase("fr") === nouveauNom.toLocaleLowerCase("fr"),
+                      ) &&
+                      nouveauNom.toLocaleLowerCase("fr") !== gestion.toLocaleLowerCase("fr") && (
+                        <p className="mt-1 text-xs text-amber-300">
+                          {`\u00ab ${nouveauNom} \u00bb existe deja : les deux seront FUSIONNEES en une seule.`}
+                        </p>
+                      )}
+
+                    {gestion !== null && aConfirmer !== null && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="text-amber-300">
+                          {aConfirmer === "renommer"
+                            ? `Renommer \u00ab ${gestion} \u00bb en \u00ab ${nouveauNom} \u00bb sur ${portee} tuile${
+                                portee > 1 ? "s" : ""
+                              } ?`
+                            : `Retirer \u00ab ${gestion} \u00bb de ${portee} tuile${
+                                portee > 1 ? "s" : ""
+                              } ? Rien ne dira plus qu'elles etaient rangees la.`}
+                        </span>
+                        <button
+                          type="button"
+                          className="btn-ghost py-1 text-xs"
+                          onClick={() =>
+                            void appliquerGestion(aConfirmer === "renommer" ? nouveauNom : null)
+                          }
+                          disabled={occupee}
+                        >
+                          {occupee ? "En cours…" : "Confirmer"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost py-1 text-xs"
+                          onClick={() => setAConfirmer(null)}
+                          disabled={occupee}
+                        >
+                          Annuler
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* La couleur ne sert qu'a l'editeur de plateaux : en jeu, c'est le prefab. */}

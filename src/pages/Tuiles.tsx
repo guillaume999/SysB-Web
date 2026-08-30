@@ -17,6 +17,7 @@ import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressourc
 import { libelleAge, loadAges, type Age } from "@/lib/ages";
 import { loadTechnologies, type Technologie } from "@/lib/technologies";
 import {
+  categorieRenommeeDans,
   COLLECTION_TUILES,
   cheminIcone,
   contrainteDe,
@@ -264,6 +265,11 @@ export default function Tuiles() {
   const [erreurDialog, setErreurDialog] = useState<string | null>(null);
   const [aSupprimer, setASupprimer] = useState<string | null>(null);
 
+  // La categorie en cours de reecriture dans TOUT le catalogue, ou null. Elle
+  // grise les boutons du formulaire : une rafale de 28 PATCH ne doit pas se
+  // relancer par-dessus elle-meme.
+  const [categorieOccupee, setCategorieOccupee] = useState<string | null>(null);
+
   /**
    * Le filtre. Volontairement NON retenu d'une visite a l'autre, contrairement
    * a la colonne et au tri : rouvrir la page sur une liste amputee, sans se
@@ -502,6 +508,47 @@ export default function Tuiles() {
       setErreurDialog(messageErreur(e, "Enregistrement refuse."));
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * Renomme (`nouvelle`) ou retire (`null`) une categorie **dans tout le
+   * catalogue**, puis recharge.
+   *
+   * ⚠️ **Il n'y a pas de table des categories** : une categorie n'existe que
+   * parce que des tuiles la portent. « Renommer » veut donc dire « reecrire le
+   * champ `categorie` de chacune », et c'est la seule facon d'en changer une.
+   *
+   * ⚠️ **La tuile ouverte est reecrite comme les autres.** On pourrait croire
+   * qu'il faut l'epargner pour ne pas ecraser ce qui n'est pas encore
+   * enregistre : non. Le PATCH ne touche QUE le champ `categorie` en base, il
+   * ne voit pas le formulaire ; et le formulaire, lui, met sa propre liste a
+   * jour de son cote. L'epargner laisserait au contraire l'ancien nom en base
+   * si l'utilisateur ferme la fenetre sans enregistrer — et une categorie que
+   * porte encore une seule tuile REAPPARAIT dans la liste.
+   */
+  const majCategorie = async (ancienne: string, nouvelle: string | null) => {
+    setCategorieOccupee(ancienne);
+    setErreurDialog(null);
+    try {
+      const aEcrire: { id: string; ligne: string }[] = [];
+      for (const t of tuiles) {
+        const ligne = categorieRenommeeDans(t, ancienne, nouvelle);
+        if (ligne !== null) aEcrire.push({ id: t.id, ligne });
+      }
+
+      // ⚠️ EN SERIE, pas en `Promise.all`. Vingt-huit ecritures simultanees sur
+      // un PocketBase en SQLite, derriere un tunnel Cloudflare, c'est le genre
+      // de rafale qui rend un 429 a mi-chemin — et un renommage a moitie fait
+      // laisse les deux noms en base, ce qui est pire que ne rien faire.
+      for (const { id, ligne } of aEcrire)
+        await pb.collection(COLLECTION_TUILES).update(id, { categorie: ligne });
+
+      await charger();
+    } catch (e) {
+      setErreurDialog(messageErreur(e, "Renommage refuse."));
+    } finally {
+      setCategorieOccupee(null);
     }
   };
 
@@ -874,6 +921,8 @@ export default function Tuiles() {
           technologies={technologies}
           saving={saving}
           erreur={erreurDialog}
+          categorieOccupee={categorieOccupee}
+          onCategorie={majCategorie}
           onCancel={() => setDialog(null)}
           onSubmit={(v) => void enregistrer(v)}
         />

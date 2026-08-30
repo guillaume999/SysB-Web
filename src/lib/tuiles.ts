@@ -1592,6 +1592,64 @@ export function toutesLesCategories(tuiles: { categorie?: string }[]): string[] 
   return [...par.values()].sort((a, b) => a.localeCompare(b, "fr"));
 }
 
+/**
+ * La meme liste, avec `ancienne` renommee en `nouvelle` — ou RETIREE quand
+ * `nouvelle` vaut `null`.
+ *
+ * ⚠️ **Renommer vers un nom deja porte est une FUSION**, et c'est voulu : c'est
+ * exactement ce qui repare `Nourriture` / `Vivres`. Le dedoublonnage de
+ * `categoriesDe` s'en charge — sans lui, une tuile qui portait les deux se
+ * retrouverait avec « Vivres, Vivres ».
+ *
+ * ⚠️ La comparaison est insensible a la casse, comme partout ailleurs : c'est
+ * ce qui permet de normaliser `PRODUCTION` en `Production`, qui est le cas le
+ * plus courant et serait sinon refuse comme « meme nom ».
+ */
+export function categoriesRenommees(
+  categories: string[],
+  ancienne: string,
+  nouvelle: string | null,
+): string[] {
+  const cle = ancienne.toLocaleLowerCase("fr");
+  const apres: string[] = [];
+  for (const c of categories) {
+    if (c.toLocaleLowerCase("fr") !== cle) {
+      apres.push(c);
+      continue;
+    }
+    if (nouvelle !== null) apres.push(nouvelle);
+  }
+  return categoriesDe(apres.join(SEPARATEUR_CATEGORIES));
+}
+
+/**
+ * Ce qu'il faut ecrire dans le champ `categorie` de cette tuile pour y renommer
+ * (ou en retirer) une categorie — et **`null` si elle ne la portait pas**.
+ *
+ * Le `null` n'est pas un detail : c'est lui qui dit a l'appelant de ne PAS
+ * ecrire. Renommer une categorie portee par 2 tuiles doit envoyer 2 requetes,
+ * pas 141.
+ */
+export function categorieRenommeeDans(
+  tuile: { categorie?: string },
+  ancienne: string,
+  nouvelle: string | null,
+): string | null {
+  const cle = ancienne.toLocaleLowerCase("fr");
+  const avant = categoriesDe(tuile);
+  if (!avant.some((c) => c.toLocaleLowerCase("fr") === cle)) return null;
+  return categoriesVersTexte(categoriesRenommees(avant, ancienne, nouvelle));
+}
+
+/** Combien de tuiles du catalogue portent cette categorie. */
+export function tuilesPortant(tuiles: { categorie?: string }[], categorie: string): number {
+  const cle = categorie.toLocaleLowerCase("fr");
+  let n = 0;
+  for (const t of tuiles)
+    if (categoriesDe(t).some((c) => c.toLocaleLowerCase("fr") === cle)) n += 1;
+  return n;
+}
+
 export function couleurAuto(tileId: number): string {
   return hslVersHex((tileId * 137.508) % 360, 0.55, 0.45);
 }
