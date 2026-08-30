@@ -17,6 +17,9 @@ import { SANS_AGE, libelleAge, type Age } from "@/lib/ages";
 import {
   TILE_ID_MAX,
   TILE_ID_MIN,
+  SEPARATEUR_CATEGORIES,
+  categoriesDe,
+  categoriesVersTexte,
   cheminIconeAttendu,
   contrainteDe,
   couleurAuto,
@@ -28,6 +31,7 @@ import {
   placementDe,
   placementPourEnregistrer,
   prochainTileId,
+  toutesLesCategories,
   tuilesParModele,
   type Logistique,
   type Palier,
@@ -90,7 +94,10 @@ export default function TuileDialog({
   const [nom, setNom] = useState(tuile?.nom ?? "");
   const [modele, setModele] = useState(tuile?.modele ?? "");
   const [type, setType] = useState<TypePlateau>(tuile?.typeOfPlateau ?? "ground");
-  const [categorie, setCategorie] = useState(tuile?.categorie ?? "");
+  // ⚠️ PLUSIEURS CATEGORIES DEPUIS LE 2026-08-30, toutes egales : l'etat est une
+  //    LISTE, le champ en base reste UNE ligne separee par des virgules.
+  const [categories, setCategories] = useState<string[]>(() => categoriesDe(tuile));
+  const [nouvelleCategorie, setNouvelleCategorie] = useState("");
   const [description, setDescription] = useState(tuile?.description ?? "");
   const [couleur, setCouleur] = useState(tuile?.couleur ?? "");
   const [code, setCode] = useState(tuile?.code ?? "");
@@ -184,6 +191,36 @@ export default function TuileDialog({
   const ageNumerique = Number(age) || 0;
   const ageInconnu = ageNumerique > 0 && !ages.some((a) => a.numero === ageNumerique);
 
+  /**
+   * Ce que les cases a cocher proposent : les categories DEJA employees par le
+   * catalogue, plus celles de cette tuile — une categorie qu'elle est seule a
+   * porter ne doit pas disparaitre de l'ecran a la premiere decoche.
+   */
+  const categoriesProposees = useMemo(() => {
+    const connues = toutesLesCategories(tuiles);
+    const vues = new Set(connues.map((c) => c.toLocaleLowerCase("fr")));
+    return [...connues, ...categories.filter((c) => !vues.has(c.toLocaleLowerCase("fr")))];
+  }, [tuiles, categories]);
+
+  const basculerCategorie = (c: string) => {
+    const cle = c.toLocaleLowerCase("fr");
+    setCategories((avant) =>
+      avant.some((v) => v.toLocaleLowerCase("fr") === cle)
+        ? avant.filter((v) => v.toLocaleLowerCase("fr") !== cle)
+        : [...avant, c],
+    );
+  };
+
+  const ajouterCategorie = () => {
+    // Une virgule couperait la categorie en deux au premier enregistrement :
+    // on la refuse ici plutot que de la decouvrir en base.
+    const c = nouvelleCategorie.split(SEPARATEUR_CATEGORIES).join(" ").trim();
+    if (c === "") return;
+    if (!categories.some((v) => v.toLocaleLowerCase("fr") === c.toLocaleLowerCase("fr")))
+      setCategories([...categories, c]);
+    setNouvelleCategorie("");
+  };
+
   const bloque = saving || nom.trim() === "" || modele === "" || idHorsBornes || conflit !== null;
 
   const submit = (event: React.FormEvent) => {
@@ -197,7 +234,7 @@ export default function TuileDialog({
       chemin_icone: cheminIcone.trim(),
       modele,
       typeOfPlateau: type,
-      categorie: categorie.trim(),
+      categorie: categoriesVersTexte(categories),
       description: description.trim(),
       couleur: couleur.trim(),
       actif,
@@ -262,8 +299,12 @@ export default function TuileDialog({
                   forcer.
                 </Terme>
                 <Terme nom="categorie">
-                  Le regroupement dans le menu de construction du jeu. Texte libre : les tuiles
-                  partageant la meme categorie se retrouvent ensemble.
+                  Le regroupement dans le menu de construction du jeu. Une tuile peut en porter
+                  PLUSIEURS, et elles sont toutes egales : elle apparait alors sous chacun de ses
+                  onglets. Coche celles qui existent deja plutot que d'en retaper une — c'est ce
+                  qui evite un &laquo; Habitations &raquo; a cote d'un &laquo; Habitat &raquo;.
+                  L'onglet &laquo; Tout &raquo; du magasin, lui, compte toujours chaque batiment
+                  une seule fois.
                 </Terme>
                 <Terme nom="description">L'infobulle montree au joueur.</Terme>
                 <Terme nom="couleur">
@@ -488,21 +529,82 @@ export default function TuileDialog({
                   <p className="mt-1 text-xs text-slate-500">Deduit du dossier du modele.</p>
                 </div>
 
-                <div>
-                  <label className="label" htmlFor="tuile-categorie">
-                    Categorie
-                  </label>
+              </div>
+
+              {/*
+                ⚠️ LES CATEGORIES SONT UNE LISTE DEPUIS LE 2026-08-30, et elles
+                sont TOUTES EGALES : la tuile apparaitra sous chacun de ses
+                onglets dans le magasin. D'ou les cases a cocher plutot qu'un
+                champ libre — le catalogue en compte deja dix-sept, dont trois
+                paires qui ne different que par l'orthographe, et un champ libre
+                est ce qui les a fabriquees.
+              */}
+              <div>
+                <p className="label">Categories</p>
+                <div className="flex flex-wrap gap-2">
+                  {categoriesProposees.map((c) => {
+                    const prise = categories.some(
+                      (v) => v.toLocaleLowerCase("fr") === c.toLocaleLowerCase("fr"),
+                    );
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => basculerCategorie(c)}
+                        aria-pressed={prise}
+                        className={
+                          prise
+                            ? "rounded-full border border-accent bg-accent/20 px-3 py-1 text-sm text-white"
+                            : "rounded-full border border-edge px-3 py-1 text-sm text-slate-400 hover:border-slate-500 hover:text-slate-200"
+                        }
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                  {categoriesProposees.length === 0 && (
+                    <p className="text-xs text-slate-500">
+                      Aucune categorie dans le catalogue : ecris la premiere ci-dessous.
+                    </p>
+                  )}
+                </div>
+                <div className="mt-2 flex gap-2">
                   <input
                     id="tuile-categorie"
                     className="input"
-                    value={categorie}
-                    onChange={(e) => setCategorie(e.target.value)}
-                    placeholder="Production"
+                    value={nouvelleCategorie}
+                    onChange={(e) => setNouvelleCategorie(e.target.value)}
+                    onKeyDown={(e) => {
+                      // Entree ajoute la categorie — sans ca elle validerait le
+                      // formulaire entier, la tuile enregistree sans elle.
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      ajouterCategorie();
+                    }}
+                    placeholder="Une categorie qui n'existe pas encore"
                   />
-                  <p className="mt-1 text-xs text-slate-500">
-                    Regroupement dans le menu de construction.
-                  </p>
+                  <button
+                    type="button"
+                    className="btn-ghost whitespace-nowrap"
+                    onClick={ajouterCategorie}
+                    disabled={nouvelleCategorie.trim() === ""}
+                  >
+                    Ajouter
+                  </button>
                 </div>
+                {nouvelleCategorie.includes(SEPARATEUR_CATEGORIES) && (
+                  <p className="mt-1 text-xs text-amber-300">
+                    Pas de virgule dans un nom de categorie : c'est elle qui les separe. Ajoute-les
+                    une par une.
+                  </p>
+                )}
+                <p className="mt-1 text-xs text-slate-500">
+                  {categories.length === 0
+                    ? "Aucune : la tuile sera rangee sous \u00ab Divers \u00bb dans le jeu."
+                    : `Rangee sous ${categories.join(", ")} \u2014 elle apparaitra sous ${
+                        categories.length > 1 ? "chacun de ces onglets" : "cet onglet"
+                      }.`}
+                </p>
               </div>
 
               {/* La couleur ne sert qu'a l'editeur de plateaux : en jeu, c'est le prefab. */}

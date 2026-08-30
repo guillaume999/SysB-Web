@@ -4,7 +4,7 @@ import { Vignette } from "@/components/Vignette";
 import ChoixTuiles from "@/components/ChoixTuiles";
 import { messageErreur, pb } from "@/lib/pb";
 import { loadRessources, parAlphabet, type Ressource } from "@/lib/ressources";
-import { formatDuree, loadTuiles, tileIdsDe, type Tuile } from "@/lib/tuiles";
+import { categoriesDe, formatDuree, loadTuiles, tileIdsDe, type Tuile } from "@/lib/tuiles";
 // ⚠️ Les ages sont une collection depuis le 2026-08-27 au soir : ils ne sont
 // plus ecrits en dur dans `technologies.ts`. C'est l'onglet Ages qui dit
 // lesquels existent, et dans quel ordre les bandes se suivent.
@@ -107,8 +107,12 @@ export default function Technologies() {
     const sousGroupes = (liste: Technologie[]) => {
       const par = new Map<string, Technologie[]>();
       for (const t of liste) {
-        const c = categorieDe(batimentDe(t, tuiles)) || SANS_CATEGORIE;
-        par.set(c, [...(par.get(c) ?? []), t]);
+        // ⚠️ Le batiment hote peut porter PLUSIEURS categories depuis le
+        //    2026-08-30 : sa techno se lit alors sous chacune, comme lui. Sans
+        //    ca, l'ecran inventerait une section « Vivres, Confort ».
+        const cs = categoriesDe(batimentDe(t, tuiles));
+        for (const c of cs.length ? cs : [SANS_CATEGORIE])
+          par.set(c, [...(par.get(c) ?? []), t]);
       }
       return [...par.entries()]
         .sort((a, b) => a[0].localeCompare(b[0], "fr", { sensitivity: "base" }))

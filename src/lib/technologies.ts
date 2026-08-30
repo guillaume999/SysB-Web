@@ -88,7 +88,14 @@ export function ageDeduit(batiment: { age?: number } | undefined): number {
   return a > 0 ? Math.trunc(a) : 0;
 }
 
-/** La catégorie, lue sur le bâtiment. Vide = pas de bâtiment, ou tuile sans catégorie. */
+/**
+ * La catégorie, lue sur le bâtiment. Vide = pas de bâtiment, ou tuile sans catégorie.
+ *
+ * ⚠️ Depuis le 2026-08-30 un bâtiment peut en porter PLUSIEURS : ce que rend
+ * cette fonction est alors la LIGNE entière (« Vivres, Confort »), bonne à
+ * AFFICHER et rien d'autre. Pour ranger, découper avec `categoriesDe` — voir
+ * l'écran Technologie.
+ */
 export function categorieDe(batiment: { categorie?: string } | undefined): string {
   return (batiment?.categorie ?? "").trim();
 }

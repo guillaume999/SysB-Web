@@ -11,7 +11,7 @@
  */
 
 import { pb } from "@/lib/pb";
-import { logistiqueDe, paliersDe, type Tuile } from "@/lib/tuiles";
+import { categoriesDe, logistiqueDe, paliersDe, type Tuile } from "@/lib/tuiles";
 /**
  * Le libellé d'une catégorie vide vient de là pour qu'il n'en existe qu'un.
  * ⚠️ Sa vraie place serait `tuiles.ts` — la catégorie appartient à la tuile —
@@ -247,7 +247,14 @@ export interface RessourceRangee {
   ressource: Ressource;
   /** Le plus petit âge où un bâtiment la produit ou la consomme. `0` = aucun. */
   age: number;
-  /** La catégorie du bâtiment qui la fait apparaître — producteur d'abord. */
+  /**
+   * La catégorie du bâtiment qui la fait apparaître — producteur d'abord.
+   *
+   * ⚠️ Depuis le 2026-08-30 un bâtiment peut en porter PLUSIEURS : ce champ est
+   * alors la ligne entière, « Vivres, Confort ». Le découper avec
+   * `categoriesDe` avant de s'en servir comme d'une clé — la ressource se range
+   * sous CHACUNE, comme le bâtiment lui-même.
+   */
   categorie: string;
   usages: UsageRessource[];
   /** Les âges suivants où elle sert encore, pour le badge « aussi 3, 4 ». */
@@ -328,7 +335,11 @@ export function rangerParAge(
   const groupe = (numero: number): GroupeAge => {
     const liste = rangees.filter((r) => r.age === numero);
     const par = new Map<string, RessourceRangee[]>();
-    for (const r of liste) par.set(r.categorie, [...(par.get(r.categorie) ?? []), r]);
+    // ⚠️ Une ressource née d'un bâtiment à plusieurs catégories se range sous
+    //    CHACUNE (2026-08-30). `total` reste le compte de ressources DISTINCTES
+    //    de l'âge : c'est lui qui ne doit pas bouger, pas la somme des groupes.
+    for (const r of liste)
+      for (const c of categoriesDe(r.categorie)) par.set(c, [...(par.get(c) ?? []), r]);
     const categories = [...par.entries()]
       .sort((a, b) => a[0].localeCompare(b[0], "fr", { sensitivity: "base" }))
       .map(([categorie, dedans]) => ({

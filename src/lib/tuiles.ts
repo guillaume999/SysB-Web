@@ -1524,6 +1524,74 @@ export function cheminIconeAttendu(code: string): string {
   return c ? `Icones_Tuiles/${c}` : "";
 }
 
+// --- Categories --------------------------------------------------------------
+
+/**
+ * Le separateur entre deux categories d'une MEME tuile.
+ *
+ * ⚠️ **Decision du 2026-08-30 : une tuile peut porter PLUSIEURS categories**,
+ * et elles sont TOUTES EGALES — aucune n'est « la principale ». Elles tiennent
+ * dans le champ texte `tuiles.categorie` deja en base, separees par une
+ * virgule : « Vivres, Confort ». Aucun champ nouveau, aucune migration, et une
+ * tuile qui n'en a qu'une reste ecrite exactement comme avant.
+ *
+ * ⚠️ Consequence assumee, dite par l'utilisateur : dans le magasin, une tuile
+ * apparait sous CHACUN de ses onglets. La somme des comptes d'onglets depasse
+ * donc le total — c'est l'onglet « Tout » qui garde le nombre exact de
+ * batiments, et lui seul compte des tuiles distinctes.
+ *
+ * ⚠️ Une categorie ne peut donc pas contenir de virgule. Le formulaire la
+ * refuse a la saisie ; ne pas contourner ca en changeant le separateur ici
+ * seulement — la meme decoupe existe en C# (`Categories.cs`) et les deux
+ * doivent rester d'accord.
+ */
+export const SEPARATEUR_CATEGORIES = ",";
+
+/**
+ * Les categories d'une tuile, dans l'ordre saisi, nettoyees et sans doublon.
+ * Une tuile sans categorie rend un tableau VIDE : c'est a l'ecran de decider
+ * comment il nomme ce cas (« Divers » en jeu, `SANS_CATEGORIE` sur le site).
+ */
+export function categoriesDe(
+  tuile: { categorie?: string } | string | null | undefined,
+): string[] {
+  const brut = typeof tuile === "string" ? tuile : (tuile?.categorie ?? "");
+  const vues = new Set<string>();
+  const liste: string[] = [];
+  for (const morceau of brut.split(SEPARATEUR_CATEGORIES)) {
+    const c = morceau.trim();
+    if (c === "") continue;
+    const cle = c.toLocaleLowerCase("fr");
+    if (vues.has(cle)) continue;
+    vues.add(cle);
+    liste.push(c);
+  }
+  return liste;
+}
+
+/** Ce qui part en base : la liste remise en une ligne, nettoyee au passage. */
+export function categoriesVersTexte(categories: string[]): string {
+  return categoriesDe(categories.join(SEPARATEUR_CATEGORIES)).join(SEPARATEUR_CATEGORIES + " ");
+}
+
+/**
+ * Toutes les categories deja employees par le catalogue, triees.
+ *
+ * Sert au formulaire, qui les propose en cases a cocher : c'est le seul moyen
+ * d'eviter qu'une 141e tuile inaugure « Habitations » a cote d'« Habitat ».
+ * Le dedoublonnage est insensible a la casse — deux orthographes qui ne
+ * different QUE par la casse sont la meme categorie, ici comme en jeu.
+ */
+export function toutesLesCategories(tuiles: { categorie?: string }[]): string[] {
+  const par = new Map<string, string>();
+  for (const t of tuiles)
+    for (const c of categoriesDe(t)) {
+      const cle = c.toLocaleLowerCase("fr");
+      if (!par.has(cle)) par.set(cle, c);
+    }
+  return [...par.values()].sort((a, b) => a.localeCompare(b, "fr"));
+}
+
 export function couleurAuto(tileId: number): string {
   return hslVersHex((tileId * 137.508) % 360, 0.55, 0.45);
 }
