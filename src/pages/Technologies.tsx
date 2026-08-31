@@ -4,7 +4,14 @@ import { Vignette } from "@/components/Vignette";
 import ChoixTuiles from "@/components/ChoixTuiles";
 import { messageErreur, pb } from "@/lib/pb";
 import { loadRessources, parAlphabet, type Ressource } from "@/lib/ressources";
-import { categoriesDe, formatDuree, loadTuiles, tileIdsDe, type Tuile } from "@/lib/tuiles";
+import {
+  categoriesDe,
+  formatDuree,
+  loadTuiles,
+  tileIdsDe,
+  tuilesParAlphabet,
+  type Tuile,
+} from "@/lib/tuiles";
 // ⚠️ Les ages sont une collection depuis le 2026-08-27 au soir : ils ne sont
 // plus ecrits en dur dans `technologies.ts`. C'est l'onglet Ages qui dit
 // lesquels existent, et dans quel ordre les bandes se suivent.
@@ -523,7 +530,7 @@ function TechnologieDialog({
               onChange={(e) => setBatiment(Number(e.target.value) || 0)}
             >
               <option value={0}>— aucun (brouillon) —</option>
-              {tuiles.map((t) => (
+              {tuilesParAlphabet(tuiles).map((t) => (
                 <option key={t.tileId} value={t.tileId}>
                   {t.nom}
                   {t.age ? ` — age ${t.age}` : ""}
@@ -765,7 +772,7 @@ function TechnologieDialog({
                     onChange={(ev) => maj({ tuile: Number(ev.target.value) || 0 })}
                   >
                     <option value={0}>— quelle tuile ? —</option>
-                    {tuiles.map((t) => (
+                    {tuilesParAlphabet(tuiles).map((t) => (
                       <option key={t.tileId} value={t.tileId}>
                         {t.nom}
                       </option>

@@ -1424,6 +1424,22 @@ export function loadTuiles(): Promise<Tuile[]> {
 }
 
 /**
+ * Les tuiles rangées par NOM, pour les listes déroulantes de saisie.
+ *
+ * ⚠️ À ne pas confondre avec le tri de `loadTuiles()`, qui suit le `tileId` :
+ * celui-là est l'ordre du catalogue, et les écrans qui le montrent (la liste
+ * des tuiles, les cases à cocher de `ChoixTuiles`) doivent le garder tel quel.
+ * Dans un `<select>`, en revanche, on cherche un nom : il faut l'alphabet.
+ *
+ * `localeCompare` en français : les accents ne partent pas en fin de liste.
+ */
+export function tuilesParAlphabet(tuiles: Tuile[]): Tuile[] {
+  return [...tuiles].sort((a, b) =>
+    (a.nom ?? "").localeCompare(b.nom ?? "", "fr", { sensitivity: "base" }),
+  );
+}
+
+/**
  * Prochain id à proposer : **max + 1**, pas le plus petit trou libre.
  * Un `tileId` ne doit jamais être recyclé : une règle de placement qui citait
  * l'ancienne tuile pointerait silencieusement vers la nouvelle.
