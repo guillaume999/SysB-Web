@@ -13,15 +13,20 @@ import {
   CIBLES_APPRO,
   SENS_APPRO,
   TOUTES_RESSOURCES,
-  debitParPeriode,
+  chargeParVolee,
+  cransParTrajet,
   decrireAppro,
+  dureeTrajet,
+  formatDuree,
   estEntrepot,
   lignesNominatives,
   maxToutesRessources,
   regleApproUtile,
   regleApproVide,
+  secondesParCran,
   type CibleAppro,
   type Logistique,
+  type RegleAppro,
   type SensAppro,
   type Tuile,
 } from "@/lib/tuiles";
@@ -44,10 +49,21 @@ import {
  *    et une quantite sur les navettes »* → rayon par regle, et un debit ecrit
  *    en navettes plutot qu'en nombre abstrait.
  *
- * ⚠️ Les navettes restent une ANIMATION : le nombre sert a dessiner le trafic et
- * a donner un reglage qu'on visualise, la comptabilite est une multiplication.
- * Aucun deplacement n'est simule — c'est ce qui garde la progression hors ligne
+ * ⚠️⚠️ **2026-09-06 — LA DISTANCE COMPTE, et cette note dit maintenant le
+ * CONTRAIRE de ce qu'elle disait.** Les navettes n'etaient qu'une ANIMATION :
+ * on multipliait navettes x quantite par periode, sans jamais regarder ou etait
+ * la cible. Le champ `debit.periode_s` a ete RETIRE et remplace par une
+ * `vitesse` en **crans par periode**, ou un cran = une case du plateau. Une
+ * navette fait l'ALLER-RETOUR : une cible a `d` cases coute `2d` crans.
+ *
+ * Ce qui n'a PAS change, et qui est la raison pour laquelle c'etait finalement
+ * portable : rien ne se deplace, il n'y a toujours ni agent ni pathfinding. Le
+ * moteur ne compte pas une duree, il compte des CRANS franchis en temps absolu,
+ * exactement comme il comptait des periodes. La progression hors ligne reste
  * calculable en forme fermee.
+ *
+ * Consequence visible des la premiere partie : tout ce qui etait deja saisi
+ * ACCELERE. Une cible a 1 case passe de 120 s a 40 s par voyage.
  */
 export default function TuileStockage({
   logistique,
@@ -480,12 +496,39 @@ export default function TuileStockage({
             se déduit au lieu de se déclarer, donc il ne peut pas contredire les règles.
           </Terme>
           <Terme nom="navettes">
-            Le débit s'écrit <strong>N navettes × Q par période</strong> plutôt qu'en nombre
-            abstrait : 3 navettes de 20 toutes les 2 minutes, c'est 60 par 2 minutes.
+            La flotte de la règle : <strong>N navettes qui portent chacune Q</strong> par voyage.
+            Une volée complète rapporte donc N × Q. Il n'y a plus de période à saisir ici — la
+            cadence sort du trajet, voir <em>vitesse</em>.
+          </Terme>
+          <Terme nom="vitesse (crans)">
+            <strong>Un cran = une case du plateau.</strong> « 1 cran / 20 s » veut dire qu'une
+            navette met 20 s à franchir une case. Elle fait l'<strong>aller-retour</strong> : une
+            cible à 4 cases coûte 8 crans, soit 160 s de navette. Dès qu'une navette est rentrée,
+            elle repart.
             <br />
-            ⚠️ Les navettes qu'on verra en jeu sont une <strong>animation</strong>, pas une
-            simulation : rien ne se déplace vraiment, la comptabilité est une multiplication. C'est
-            ce qui permet de calculer douze heures d'absence d'un coup au lieu de les rejouer.
+            ⚠️ <strong>La distance coûte, depuis le 06/09.</strong> Les navettes n'étaient
+            qu'une animation : on multipliait N × Q par période sans jamais regarder où était la
+            cible. Maintenant une cible lointaine <strong>mange</strong> les navettes des autres,
+            et c'est pour ça que l'ordre compte (voir <em>qui est servi en premier</em>).
+            <br />
+            ⚠️ <strong>0 cran = navette bloquée</strong>, rien ne circule. C'est aussi vrai de
+            0 navette et de 0 par voyage : dans ce bloc, un zéro veut toujours dire « rien ne
+            passe ». L'ancienne indulgence « débit non renseigné = illimité » a été retirée le
+            même jour, elle aurait donné deux sens opposés à deux zéros voisins.
+            <br />
+            Rien ne se déplace pour autant : il n'y a ni agent ni pathfinding. Le moteur compte
+            des <strong>crans franchis en temps absolu</strong>, comme il comptait des périodes —
+            c'est ce qui permet de calculer douze heures d'absence d'un coup.
+          </Terme>
+          <Terme nom="qui est servi en premier">
+            Une navette qui part loin en prive une autre. À la <strong>récolte</strong>, on va
+            d'abord aux sources les <strong>plus remplies</strong> — pas question de brûler
+            8 crans pour ramener 2 unités pendant qu'un entrepôt plein attend à côté. À la{" "}
+            <strong>livraison</strong>, on sert d'abord les tuiles les <strong>plus en
+            manque</strong>. À égalité, l'ordre des cases, pour que deux parties identiques
+            donnent le même résultat.
+            <br />
+            Rien à régler ici : c'est une règle du jeu, pas un champ.
           </Terme>
           <Terme nom="rayon">
             Distance <strong>hexagonale</strong>. Un rayon <em>r</em> couvre 3r(r+1) cases :
@@ -569,8 +612,8 @@ export default function TuileStockage({
                     </button>
                   </div>
 
-                  {/* Les navettes : N x Q par periode. Pas pour un indicateur :
-                      sa valeur n'est pas un debit, elle se calcule. */}
+                  {/* LA FLOTTE : N navettes x Q par voyage. Plus aucune periode
+                      ici depuis le 06/09 — la cadence sort du trajet. */}
                   <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-slate-500">
                     <input
                       type="number"
@@ -597,23 +640,50 @@ export default function TuileStockage({
                         })
                       }
                     />
-                    toutes les
+                    par voyage — soit{" "}
+                    <span className="tabular-nums text-slate-300">{chargeParVolee(regle)}</span>{" "}
+                    {regle.sens === "entrant" ? "ramassés" : "livrés"} par volée
+                  </div>
+
+                  {/* LA VITESSE : des crans (= des cases) par periode. C'est elle
+                      qui fabrique la cadence, en aller-retour. */}
+                  <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                    vitesse
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      className="input h-9 w-16 py-1"
+                      value={regle.vitesse.crans}
+                      onChange={(e) =>
+                        majAppro(i, {
+                          vitesse: {
+                            ...regle.vitesse,
+                            crans: Math.max(0, Number(e.target.value) || 0),
+                          },
+                        })
+                      }
+                    />
+                    cran(s) toutes les
                     <input
                       type="number"
                       min={1}
                       step={1}
                       className="input h-9 w-20 py-1"
-                      value={regle.debit.periode_s}
+                      value={regle.vitesse.periode_s}
                       onChange={(e) =>
                         majAppro(i, {
-                          debit: { ...regle.debit, periode_s: Math.max(1, Number(e.target.value) || 1) },
+                          vitesse: {
+                            ...regle.vitesse,
+                            periode_s: Math.max(1, Number(e.target.value) || 1),
+                          },
                         })
                       }
                     />
-                    s — soit{" "}
-                    <span className="tabular-nums text-slate-300">{debitParPeriode(regle)}</span>{" "}
-                    {regle.sens === "entrant" ? "ramassés" : "livrés"} par période
+                    s <span className="text-slate-600">— un cran = une case, aller-retour</span>
                   </div>
+
+                  <ApercuTrajets regle={regle} />
 
                   {/* Le garde-fou contre la spirale, reduit a une case a cocher. */}
                   {regle.cible === "tuiles" && (
@@ -659,7 +729,9 @@ export default function TuileStockage({
                     }`}
                   >
                     {inutile
-                      ? "Règle incomplète — aucune tuile cochée, ou aucun débit : elle sera ignorée en jeu."
+                      ? secondesParCran(regle) === null
+                        ? "Navette bloquée — 0 cran par période : rien ne circulera, la règle sera ignorée en jeu."
+                        : "Règle incomplète — aucune tuile cochée, ou aucun débit : elle sera ignorée en jeu."
                       : decrireAppro(regle, nomTuile, nomRessource)}
                   </p>
 
@@ -677,5 +749,38 @@ export default function TuileStockage({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * L'aperçu chiffré sous le débit : ce que la règle rend VRAIMENT, à deux
+ * distances.
+ *
+ * ⚠️ Il est là parce que le formulaire ne sait plus répondre tout seul à
+ * « combien par minute ? ». Avant le 06/09 la réponse était dans le champ ;
+ * maintenant elle dépend de la distance à la cible, que le site ne connaît pas
+ * — le catalogue ne sait rien du plateau. Deux distances suffisent à faire
+ * sentir la pente : la case d'à côté, et le bord du rayon.
+ */
+function ApercuTrajets({ regle }: { regle: RegleAppro }) {
+  if (secondesParCran(regle) === null || chargeParVolee(regle) <= 0) return null;
+  // Sans rayon, la portée est le plateau entier : 5 cases est une distance
+  // parlante pour montrer la pente sans prétendre à un chiffre exact.
+  const loin = regle.rayon === null ? 5 : regle.rayon;
+  const distances = loin > 1 ? [1, loin] : [1];
+  return (
+    <p className="mt-1 text-[11px] leading-tight text-slate-500">
+      {distances.map((d, k) => (
+        <span key={d}>
+          {k > 0 && " · "}
+          <span className="text-slate-400">
+            à {d} case{d > 1 ? "s" : ""}
+          </span>{" "}
+          ({cransParTrajet(d)} crans) :{" "}
+          <span className="tabular-nums text-slate-300">{chargeParVolee(regle)}</span> toutes les{" "}
+          {formatDuree(Math.round(dureeTrajet(regle, d) as number))}
+        </span>
+      ))}
+    </p>
   );
 }

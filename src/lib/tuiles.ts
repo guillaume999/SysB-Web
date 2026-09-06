@@ -817,6 +817,15 @@ export function coutConstruction(p: Palier): LigneCout[] {
 /** Période par défaut d'un flux, en secondes. Voir l'avertissement de `LigneFlux`. */
 export const PERIODE_PAR_DEFAUT = 120;
 
+/**
+ * La vitesse de navette posée par défaut : **1 cran toutes les 20 s**, choisie
+ * par l'utilisateur le 2026-09-06 (*« mettre le champ obligatoirement, et le
+ * mettre à 1 cran / 20 sec de base »*). C'est aussi ce que reçoivent les
+ * règles écrites avant cette date, qui n'ont pas le champ.
+ */
+export const CRANS_PAR_DEFAUT = 1;
+export const PERIODE_VITESSE_PAR_DEFAUT = 20;
+
 export function palierVide(numero: number): Palier {
   return { niveau: numero, duree_construction_s: 0, cout: [], utilisation: [], production: [] };
 }
@@ -1027,6 +1036,28 @@ export const FORMULE_PRODUCTION =
 export const ORDRE_DES_PASSES =
   "consommateurs directs, puis entrepôts, puis livraisons des entrepôts";
 
+/**
+ * ⚠️ **DANS QUEL ORDRE UNE NAVETTE DÉPENSE SES CRANS**, posé par l'utilisateur
+ * le 2026-09-06 : *« les cibles les plus remplies en premier »*.
+ *
+ * Cette règle n'existait pas avant : le budget d'une règle était une quantité
+ * indifférente à la distance, donc l'ordre des cibles ne changeait rien et un
+ * simple tri par (z, x) suffisait à rester déterministe. Depuis que **la
+ * distance coûte des crans**, servir une cible en prive une autre — l'ordre
+ * devient une règle de jeu.
+ *
+ * - **À la récolte** : les sources les plus REMPLIES d'abord. Une navette ne
+ *   brûle pas 8 crans pour ramener 2 unités pendant qu'un entrepôt plein
+ *   attend à côté.
+ * - **À la livraison** : les destinations les plus EN MANQUE d'abord — le
+ *   symétrique, validé le même jour. Servir « les plus remplies » aurait
+ *   nourri ceux qui ont déjà du stock.
+ * - **À égalité**, (z, x), comme partout : deux parties identiques doivent
+ *   donner exactement le même résultat.
+ */
+export const ORDRE_DES_CIBLES =
+  "à la récolte les sources les plus remplies, à la livraison les cibles les plus en manque, puis (z, x)";
+
 /** Qui est en face. `tout` = n'importe quelle tuile à portée qui a / veut la ressource. */
 export type CibleAppro = "tout" | "tuiles";
 
@@ -1063,24 +1094,70 @@ export interface RegleAppro {
    */
   ressources: string[];
   /**
-   * Le débit, écrit en **navettes** : `navettes` trajets par `periode_s`,
-   * chacun portant `quantite`. Le débit réel est donc le produit
-   * `navettes × quantite` par période.
+   * La **flotte** : `navettes` navettes qui portent chacune `quantite` par
+   * voyage. Une volée complète rapporte donc `navettes × quantite`.
    *
-   * ⚠️ **Les navettes restent une ANIMATION, pas une simulation.** On ne
-   * déplace aucun agent et on ne fait aucun pathfinding : la comptabilité est
-   * une multiplication d'entiers, ce qui garde la progression hors ligne
-   * calculable en forme fermée. Le nombre de navettes sert à *dessiner* le
-   * trafic — et à donner à l'utilisateur un réglage qu'il visualise mieux
-   * qu'un débit abstrait. Si la distance doit compter un jour, faire décroître
-   * le débit avec elle ; surtout pas introduire du déplacement réel.
+   * ⚠️ **`periode_s` a été RETIRÉ le 2026-09-06.** La cadence ne se saisit
+   * plus ici : elle se DÉDUIT du trajet, donc de `vitesse` et de la distance
+   * jusqu'à la cible. Décision de l'utilisateur, ses mots : *« enlève les
+   * 120 s, c'est remplacé par 1 cran / 20 s ; quand une navette est dispo dans
+   * le bâtiment elle peut repartir »*. Un débit fixe et une vitesse auraient
+   * été deux cadences concurrentes dans le même bloc, et le joueur n'aurait
+   * jamais su laquelle bride.
    */
-  debit: { navettes: number; quantite: number; periode_s: number };
+  debit: { navettes: number; quantite: number };
+  /**
+   * ⚠️ **LA DISTANCE COMPTE, depuis le 2026-09-06.** `crans` cases franchies
+   * toutes les `periode_s` secondes. Une navette fait l'**aller-retour** :
+   * une cible à `d` cases coûte `2d` crans. À 1 cran / 20 s, une cible à
+   * 4 cases occupe une navette 160 s.
+   *
+   * ⚠️ Ceci **renverse** la note fondatrice « les navettes ne sont qu'une
+   * animation » : elles restent sans pathfinding et sans agent déplacé, mais
+   * elles ne sont plus décoratives — leur vitesse entre dans la comptabilité.
+   * La forme close est préservée parce que le moteur ne compte pas une durée :
+   * il compte des **crans** franchis en temps absolu, exactement comme il
+   * comptait des périodes (`temps.ticks`).
+   *
+   * ⚠️ **`crans: 0` = navette bloquée, rien ne circule.** C'est le seul zéro
+   * indulgent qui a été retiré : l'ancien « débit non renseigné = illimité »
+   * disparaît en même temps, pour qu'un zéro veuille dire la même chose
+   * partout dans ce bloc.
+   */
+  vitesse: { crans: number; periode_s: number };
 }
 
-/** Le débit réel d'une règle : navettes × quantité, par période. */
-export function debitParPeriode(r: RegleAppro): number {
+/** Ce qu'une volée de navettes rapporte en UN voyage : navettes × quantité. */
+export function chargeParVolee(r: RegleAppro): number {
   return Math.max(0, r.debit.navettes) * Math.max(0, r.debit.quantite);
+}
+
+/**
+ * Les secondes qu'il faut pour franchir UN cran. `null` = navette bloquée
+ * (0 cran par période) — le seul cas où une règle ne transporte rien du tout.
+ */
+export function secondesParCran(r: RegleAppro): number | null {
+  const crans = Math.max(0, r.vitesse.crans);
+  if (crans <= 0) return null;
+  return Math.max(1, r.vitesse.periode_s) / crans;
+}
+
+/**
+ * Le coût d'un voyage vers une cible à `distance` cases, en crans.
+ *
+ * ⚠️ **Aller-RETOUR** : `2 × distance`. Une navette doit rentrer au bâtiment
+ * avant de repartir, c'est ce qui fait qu'une cible lointaine mange les
+ * navettes des autres. Une cible sur sa propre case n'existe pas — le
+ * plancher est 1.
+ */
+export function cransParTrajet(distance: number): number {
+  return 2 * Math.max(1, Math.trunc(distance));
+}
+
+/** La durée d'un aller-retour vers une cible à `distance` cases, en secondes. */
+export function dureeTrajet(r: RegleAppro, distance: number): number | null {
+  const parCran = secondesParCran(r);
+  return parCran === null ? null : cransParTrajet(distance) * parCran;
 }
 
 
@@ -1095,7 +1172,8 @@ export function regleApproVide(sens: SensAppro): RegleAppro {
     // pas de rayon du tout — la valeur est la, inutilisee.
     rayon: sens === "entrant" ? 3 : null,
     ressources: [],
-    debit: { navettes: 1, quantite: 10, periode_s: PERIODE_PAR_DEFAUT },
+    debit: { navettes: 1, quantite: 10 },
+    vitesse: { crans: CRANS_PAR_DEFAUT, periode_s: PERIODE_VITESSE_PAR_DEFAUT },
   };
 }
 
@@ -1223,7 +1301,18 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
           debit: {
             navettes: Math.max(0, entier(r?.debit?.navettes) || 1),
             quantite: Math.max(0, entier(r?.debit?.quantite)),
-            periode_s: Math.max(1, entier(r?.debit?.periode_s) || PERIODE_PAR_DEFAUT),
+          },
+          // ⚠️ ABSENT ET ZÉRO NE VEULENT PAS DIRE LA MÊME CHOSE. Les règles
+          // écrites avant le 2026-09-06 n'ont pas de `vitesse` du tout : elles
+          // reçoivent la valeur par défaut et continuent de circuler. Un `0`
+          // SAISI, lui, bloque bien la navette. Un simple `|| DEFAUT` aurait
+          // confondu les deux et rendu le champ impossible à mettre à zéro.
+          vitesse: {
+            crans:
+              r?.vitesse?.crans === undefined || r?.vitesse?.crans === null
+                ? CRANS_PAR_DEFAUT
+                : Math.max(0, entier(r.vitesse.crans)),
+            periode_s: Math.max(1, entier(r?.vitesse?.periode_s) || PERIODE_VITESSE_PAR_DEFAUT),
           },
         }))
           // ⚠️ Les anciennes regles « produit » / « sortant » sont ecartees :
@@ -1251,10 +1340,20 @@ export function logistiquePourEnregistrer(l: Logistique): Logistique {
   };
 }
 
-/** Vrai si la règle ne dit rien d'utile — signalée en orange, ignorée en jeu. */
+/**
+ * Vrai si la règle ne dit rien d'utile — signalée en orange, ignorée en jeu.
+ *
+ * ⚠️ **L'INDULGENCE A ÉTÉ RETIRÉE le 2026-09-06.** Un débit à zéro valait
+ * « illimité » depuis le 26/08 (« une règle saisie trop vite serait sinon
+ * morte en silence »). Impossible à garder à côté de `crans: 0` qui, lui,
+ * BLOQUE : deux zéros voisins dans le même bloc de formulaire auraient eu des
+ * sens opposés. Un zéro veut désormais dire « rien ne circule », partout, et
+ * le témoin orange le dit à l'écran plutôt que de le deviner.
+ */
 export function regleApproUtile(r: RegleAppro): boolean {
   if (r.cible === "tuiles" && r.tileIds.length === 0) return false;
-  return debitParPeriode(r) > 0;
+  if (secondesParCran(r) === null) return false;
+  return chargeParVolee(r) > 0;
 }
 
 /** La règle relue en français, telle qu'elle s'affiche sous chaque bloc. */
@@ -1278,8 +1377,13 @@ export function decrireAppro(
       ? "sur tout le plateau"
       : `à ${r.rayon} case${r.rayon > 1 ? "s" : ""} (${casesCouvertes(r.rayon)} cases)`;
   const combien =
-    `${r.debit.navettes} navette${r.debit.navettes > 1 ? "s" : ""} × ${r.debit.quantite} = ` +
-    `${debitParPeriode(r)} par ${formatDuree(r.debit.periode_s)}`;
+    secondesParCran(r) === null
+      ? "navette bloquée (0 cran par période)"
+      : `${r.debit.navettes} navette${r.debit.navettes > 1 ? "s" : ""} × ${r.debit.quantite} = ` +
+        `${chargeParVolee(r)} par voyage, à ${r.vitesse.crans} cran${
+          r.vitesse.crans > 1 ? "s" : ""
+        } / ${formatDuree(r.vitesse.periode_s)} aller-retour ` +
+        `(${chargeParVolee(r)} toutes les ${formatDuree(dureeTrajet(r, 1) as number)} à 1 case)`;
   return r.sens === "entrant"
     ? `Prend ${quoi} chez ${qui} ${ou} — ${combien}.`
     : `Envoie ${quoi} vers ${qui} ${ou} — ${combien}.`;
