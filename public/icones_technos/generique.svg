@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SysB — vignette GENERIQUE de technologie, en attendant un dessin par techno.
+     Meme grille que les icones de batiment : viewBox 64x64, rendu a 256. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="256" height="256" role="img" aria-label="Technologie"><title>Technologie</title><circle cx="32" cy="32" r="27" fill="#243b34"/><circle cx="32" cy="32" r="27" fill="none" stroke="#4f7d6c" stroke-width="2"/><path d="M32 13 a13 13 0 0 1 8 23 v4 h-16 v-4 a13 13 0 0 1 8 -23 Z" fill="#f0d68a"/><path d="M32 13 a13 13 0 0 0 -8 23 v4 h8 Z" fill="#d8b95e"/><rect x="24" y="42" width="16" height="4" rx="2" fill="#8d8f93"/><rect x="26" y="47" width="12" height="4" rx="2" fill="#6f7175"/><path d="M32 20 v14" stroke="#a8874f" stroke-width="2" stroke-linecap="round"/><path d="M32 26 l-4 -4 M32 30 l4 -4" stroke="#a8874f" stroke-width="2" stroke-linecap="round" fill="none"/></svg>

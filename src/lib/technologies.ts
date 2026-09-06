@@ -27,8 +27,12 @@
  * dès que la ressource rentre. Même logique que la mise en veille d'une tuile.
  * C'est une règle de MOTEUR : rien ici ne l'applique.
  *
- * Pas de `chemin_icone` : il n'y a pas de dossier d'icônes de techno, et un
- * champ qui ne peut afficher aucune image est du champ mort.
+ * ⚠️ **`chemin_icone` EST un champ stocké**, depuis le 2026-09-06. Il valait
+ * jusque-là `Icones_Tuiles/<code>`, déduit — mais les codes de l'arbre sont ceux
+ * des **bâtiments** : une techno écrite à la main (`voute_celeste`) pointait sur
+ * un fichier inexistant et l'écran montrait une image cassée. Les dessins de
+ * techno vivent maintenant dans leur propre dossier, `Icones_Technos/<code>`, et
+ * c'est l'admin qui dit lequel — comme pour les tuiles.
  *
  * ⚠️ Conséquence, dite en toutes lettres dans l'écran : **le jeu ne lit toujours
  * pas cette collection**. Le magasin ne sait pas refuser un bâtiment non
@@ -110,6 +114,17 @@ export type Technologie = {
   code: string;
   nom: string;
   /**
+   * Le chemin de la vignette, dans la convention de `Resources.Load` côté
+   * Unity : **`Icones_Technos/<code>`**, sans extension et sans
+   * `Assets/Resources/`.
+   *
+   * ⚠️ **Stocké, pas déduit** (2026-09-06) : les dessins de techno sont un jeu à
+   * part, et rien ne garantit qu'un code en ait un. Chaîne vide = pas de dessin,
+   * carré pointillé — et c'est un état normal tant que le dossier ne compte
+   * qu'une image générique.
+   */
+  chemin_icone: string;
+  /**
    * tileId du bâtiment **où la techno existe**. `0` = aucun, c'est un brouillon.
    *
    * ⚠️ Décision du 2026-08-27 au soir : c'est lui la source de l'`age` et de la
@@ -182,6 +197,7 @@ export type Technologie = {
 export interface ValeursTechnologie {
   code: string;
   nom: string;
+  chemin_icone: string;
   batiment: number;
   age: number;
   ordre: number;
@@ -233,6 +249,37 @@ export function valeursAvecBatiment(
   batiment: { age?: number } | undefined,
 ): ValeursTechnologie {
   return { ...v, age: ageDeduit(batiment) };
+}
+
+/**
+ * Le dossier des dessins de techno, côté site : `public/icones_technos/`.
+ *
+ * ⚠️ Il n'a **qu'une image générique** pour l'instant (2026-09-06) — décision de
+ * l'utilisateur : poser la convention et le champ d'abord, dessiner ensuite.
+ */
+export const CHEMIN_ICONE_TECHNO_DEFAUT = "Icones_Technos/generique";
+
+/**
+ * Le chemin de la vignette d'une techno. Il se LIT, il ne se déduit pas — voir
+ * le champ. Point unique, pour que le jour où la règle change, un seul endroit
+ * bouge.
+ *
+ * ⚠️ Ne PAS y remettre un repli `Icones_Technos/${code}` : ce serait la double
+ * source qu'on a payée sur les tuiles, et une techno dont la vignette est
+ * volontairement vide en retrouverait une.
+ */
+export function cheminIconeTechno(t: { chemin_icone?: string }): string {
+  return (t.chemin_icone ?? "").trim();
+}
+
+/**
+ * Ce que `chemin_icone` VAUDRAIT pour ce code — la convention, pas la valeur.
+ * Sert uniquement à proposer un raccourci dans le formulaire, le jour où une
+ * techno aura son propre dessin.
+ */
+export function cheminIconeTechnoAttendu(code: string): string {
+  const c = code.trim();
+  return c ? `Icones_Technos/${c}` : "";
 }
 
 /** Une recherche qui ne se cherche qu'une fois — le cas normal. */

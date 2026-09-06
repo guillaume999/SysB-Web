@@ -20,6 +20,9 @@ import {
   ageDeduit,
   batimentDe,
   categorieDe,
+  CHEMIN_ICONE_TECHNO_DEFAUT,
+  cheminIconeTechno,
+  cheminIconeTechnoAttendu,
   COLLECTION_TECHNOLOGIES,
   codesDe,
   codesInterdits,
@@ -350,6 +353,12 @@ function TechnologieDialog({
   const enEdition = technologie !== null;
   const [code, setCode] = useState(technologie?.code ?? "");
   const [nom, setNom] = useState(technologie?.nom ?? "");
+  // Une techno neuve part sur la vignette generique : c'est ce qu'il y a a
+  // montrer aujourd'hui, et un carre vide par defaut ferait croire a un bug.
+  // Une techno deja en base garde ce qu'elle porte, meme rien.
+  const [cheminIcone, setCheminIcone] = useState(
+    technologie ? cheminIconeTechno(technologie) : CHEMIN_ICONE_TECHNO_DEFAUT,
+  );
   /**
    * ⚠️ L'age NE SE SAISIT PLUS : il est lu sur le batiment ou la techno existe
    * (decision du 27/08 au soir). Pas de `setAge` — c'est `setBatiment` qui le
@@ -417,6 +426,9 @@ function TechnologieDialog({
   const codeNet = code.trim().toLowerCase();
   const doublon = technologies.find((t) => t.code === codeNet && t.id !== technologie?.id) ?? null;
   const codeInvalide = codeNet !== "" && !/^[a-z0-9_]+$/.test(codeNet);
+  // La convention, pas la valeur : un raccourci a proposer le jour ou cette
+  // techno aura son propre dessin dans `public/icones_technos/`.
+  const cheminIconeAttendu = cheminIconeTechnoAttendu(codeNet);
   const bloque = saving || codeNet === "" || nom.trim() === "" || doublon !== null || codeInvalide;
 
   return (
@@ -428,6 +440,7 @@ function TechnologieDialog({
           onSubmit(valeursAvecBatiment({
             code: codeNet,
             nom: nom.trim(),
+            chemin_icone: cheminIcone.trim(),
             batiment,
             age,
             ordre: ordreEffectif,
@@ -457,6 +470,12 @@ function TechnologieDialog({
             Il ne se change pas a la legere.
           </Terme>
           <Terme nom="nom">Le libelle montre, ici comme en jeu. Modifiable sans risque.</Terme>
+          <Terme nom="vignette">
+            Le dessin montre dans la liste. Il est SAISI, pas devine : les icones de l'arbre sont
+            celles des batiments, une techno n'en a pas forcement une. Le dossier ne contient pour
+            l'instant qu'une image generique — mets-la, et remplace-la quand la techno aura la
+            sienne.
+          </Terme>
           <Terme nom="batiment ou elle existe">
             Le batiment auquel la techno appartient. C'est LUI qui donne son age et sa categorie —
             ni l'un ni l'autre ne se saisit, pour qu'ils ne puissent pas contredire le catalogue.
@@ -618,6 +637,54 @@ function TechnologieDialog({
             onChange={(e) => setDescription(e.target.value)}
             placeholder="Ce qu'elle apporte, ce qu'elle devrait couter, ce qu'elle devrait ouvrir."
           />
+        </div>
+
+        {/* La vignette EST un champ : ce qui est ecrit ici part en base. */}
+        <div className="mt-4">
+          <label className="label" htmlFor="tech-icone">
+            Vignette
+          </label>
+          <div className="flex items-center gap-3">
+            <Vignette chemin={cheminIcone} alt="" taille={44} />
+            <input
+              id="tech-icone"
+              className="input font-mono text-xs"
+              value={cheminIcone}
+              onChange={(e) => setCheminIcone(e.target.value)}
+              placeholder={CHEMIN_ICONE_TECHNO_DEFAUT}
+            />
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Chemin sous <code>Assets/Resources/</code>, sans extension — ce que lit
+            <code className="mx-1">Resources.Load</code>. Le carre pointille veut dire qu'aucun
+            fichier ne porte ce nom. Il n'y a pour l'instant qu'un dessin,
+            <code className="mx-1">{CHEMIN_ICONE_TECHNO_DEFAUT}</code>: les vignettes propres a
+            chaque techno viendront apres.
+            {cheminIcone.trim() !== CHEMIN_ICONE_TECHNO_DEFAUT && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  className="text-accent hover:underline"
+                  onClick={() => setCheminIcone(CHEMIN_ICONE_TECHNO_DEFAUT)}
+                >
+                  Utiliser la generique
+                </button>
+              </>
+            )}
+            {cheminIconeAttendu && cheminIcone.trim() !== cheminIconeAttendu && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  className="text-accent hover:underline"
+                  onClick={() => setCheminIcone(cheminIconeAttendu)}
+                >
+                  Utiliser {cheminIconeAttendu}
+                </button>
+              </>
+            )}
+          </p>
         </div>
 
         {/* ─── La regle : quatre sections, dans l'ordre ou on y pense ─────────
@@ -1063,14 +1130,14 @@ function LigneTechno({
     <li className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-edge/60 px-4 py-2 last:border-0 hover:bg-ink/40">
       <span className="w-10 shrink-0 text-xs tabular-nums text-slate-600">{techno.ordre || 0}</span>
       {/*
-        La vignette n'est PAS un champ de `technologies` : elle se deduit du
-        `code`, qui est celui de l'arbre — le meme dessin que la tuile porte en
-        jeu (`Icones_Tuiles/<code>`). Un code sans dessin rend un carre vide,
-        jamais une image cassee.
-        ⚠️ A ne pas confondre avec `tuiles.chemin_icone`, qui lui EST stocke
-        depuis le 27/08 au soir : les deux tables ne suivent pas la meme regle.
+        La vignette EST un champ depuis le 2026-09-06, comme sur les tuiles.
+        Elle se DEDUISAIT du `code` (`Icones_Tuiles/<code>`) — mais les codes de
+        l'arbre sont ceux des BATIMENTS : une techno ecrite a la main pointait
+        sur un fichier qui n'existe pas, et le navigateur affichait son icone
+        d'image cassee. Les dessins de techno ont maintenant leur dossier,
+        `public/icones_technos/`.
       */}
-      <Vignette chemin={`Icones_Tuiles/${techno.code}`} alt="" taille={22} />
+      <Vignette chemin={cheminIconeTechno(techno)} alt="" taille={22} />
       <span className="font-mono text-xs text-slate-200">{techno.code}</span>
       <span className="text-sm text-slate-300">{techno.nom}</span>
       {hote && (
