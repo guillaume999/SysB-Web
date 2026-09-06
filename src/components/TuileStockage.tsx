@@ -508,8 +508,12 @@ export default function TuileStockage({
             <br />
             ⚠️ <strong>La distance coûte, depuis le 06/09.</strong> Les navettes n'étaient
             qu'une animation : on multipliait N × Q par période sans jamais regarder où était la
-            cible. Maintenant une cible lointaine <strong>mange</strong> les navettes des autres,
-            et c'est pour ça que l'ordre compte (voir <em>qui est servi en premier</em>).
+            cible. Maintenant une cible deux fois plus loin est servie <strong>deux fois moins
+            souvent</strong>.
+            <br />
+            Chaque cible a ses propres voyages : en ajouter une ne ralentit pas les autres. Une
+            flotte commune, où une cible lointaine aurait mangé les navettes des autres, a été
+            essayée puis retirée le jour même — elle n'était pas invariante aux cadences.
             <br />
             ⚠️ <strong>0 cran = navette bloquée</strong>, rien ne circule. C'est aussi vrai de
             0 navette et de 0 par voyage : dans ce bloc, un zéro veut toujours dire « rien ne

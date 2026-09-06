@@ -1046,9 +1046,15 @@ export const ORDRE_DES_PASSES =
  * distance coûte des crans**, servir une cible en prive une autre — l'ordre
  * devient une règle de jeu.
  *
- * - **À la récolte** : les sources les plus REMPLIES d'abord. Une navette ne
- *   brûle pas 8 crans pour ramener 2 unités pendant qu'un entrepôt plein
- *   attend à côté.
+ * ⚠️ Ce n'est plus la **flotte** qui se partage — les voyages se comptent cible
+ * par cible depuis que la première version, à budget commun, s'est révélée non
+ * invariante. Ce qui se partage, c'est le **coffre du preneur** (il se remplit
+ * une fois pour toutes) et le **stock d'une source** que plusieurs preneurs se
+ * disputent. L'ordre décide donc encore qui est servi.
+ *
+ * - **À la récolte** : les sources les plus REMPLIES d'abord. Un preneur au
+ *   coffre presque plein le remplit de la source la mieux garnie, pas de celle
+ *   qui n'a que deux unités.
  * - **À la livraison** : les destinations les plus EN MANQUE d'abord — le
  *   symétrique, validé le même jour. Servir « les plus remplies » aurait
  *   nourri ceux qui ont déjà du stock.
@@ -1146,9 +1152,16 @@ export function secondesParCran(r: RegleAppro): number | null {
  * Le coût d'un voyage vers une cible à `distance` cases, en crans.
  *
  * ⚠️ **Aller-RETOUR** : `2 × distance`. Une navette doit rentrer au bâtiment
- * avant de repartir, c'est ce qui fait qu'une cible lointaine mange les
- * navettes des autres. Une cible sur sa propre case n'existe pas — le
- * plancher est 1.
+ * avant de repartir — c'est ce qui fait qu'une cible lointaine est servie
+ * moins souvent. Une cible sur sa propre case n'existe pas — le plancher est 1.
+ *
+ * ⚠️ **Elle ne prive personne pour autant.** Les voyages se comptent cible par
+ * cible : `2d × periode_s / crans` secondes par aller-retour, et le moteur
+ * compte les frontières franchies en temps absolu. Une flotte partagée, où une
+ * cible lointaine aurait mangé les navettes des autres, a été écrite le
+ * 2026-09-06 puis **retirée le jour même** : elle n'était pas invariante aux
+ * cadences (les crans non dépensés d'une passe étaient perdus, donc une règle
+ * lente ne transportait rien en jeu ouvert). Ne pas la refaire.
  */
 export function cransParTrajet(distance: number): number {
   return 2 * Math.max(1, Math.trunc(distance));
