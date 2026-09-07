@@ -77,6 +77,45 @@ function resumePalier1(ctx: ContexteColonne) {
   return { cout, conso };
 }
 
+/**
+ * Ce qu'on lit SOUS LE NOM de chaque tuile, sans avoir a choisir une colonne
+ * (demande du 2026-09-07 : *« les ressources produites / recoltees / envoyees
+ * par chaque batiment, leur cout de construction »*). Palier 1, comme les
+ * colonnes « cout nv.1 » et « consommation nv.1 ». Une ligne absente = rien a
+ * dire, on ne montre pas de « — » cinq fois par tuile.
+ */
+function lignesSousLeNom(ctx: ContexteColonne): { cle: string; libelle: string; texte: string }[] {
+  const nom = (code: string) => libelleRessource(ctx.ressources, code);
+  const p = paliersDe(ctx.tuile)[0];
+  const l = logistiqueDe(ctx.tuile);
+  const lignes: { cle: string; libelle: string; texte: string }[] = [];
+
+  const paye = p.cout.filter((c) => c.mode === "paye").map((c) => `${c.quantite} ${nom(c.ressource)}`);
+  const mobilise = p.cout
+    .filter((c) => c.mode === "mobilise")
+    .map((c) => `${c.quantite} ${nom(c.ressource)}`);
+  if (paye.length > 0) lignes.push({ cle: "cout", libelle: "coût", texte: paye.join(", ") });
+  if (mobilise.length > 0)
+    lignes.push({ cle: "mobilise", libelle: "mobilise", texte: mobilise.join(", ") });
+
+  const produit = p.production.map(
+    (x) => `${x.quantite} ${nom(x.ressource)} / ${formatDuree(x.periode_s)}`,
+  );
+  if (produit.length > 0) lignes.push({ cle: "produit", libelle: "produit", texte: produit.join(", ") });
+
+  // Une regle d'appro se resume a ses ressources et sa portee : le detail des
+  // navettes reste dans le formulaire.
+  const appro = (r: (typeof l.appros)[number]) =>
+    (r.ressources.length === 0 ? "toutes les ressources" : r.ressources.map(nom).join(", ")) +
+    (r.rayon === null ? " (tout le plateau)" : ` (rayon ${r.rayon})`);
+  const recolte = l.appros.filter((r) => r.sens === "entrant").map(appro);
+  const envoie = l.appros.filter((r) => r.sens === "envoi").map(appro);
+  if (recolte.length > 0) lignes.push({ cle: "recolte", libelle: "récolte", texte: recolte.join(" · ") });
+  if (envoie.length > 0) lignes.push({ cle: "envoie", libelle: "envoie", texte: envoie.join(" · ") });
+
+  return lignes;
+}
+
 const RIEN = <span className="text-slate-600">—</span>;
 
 const COLONNES: ColonneAuChoix[] = [
@@ -246,10 +285,10 @@ function ecrirePref(cle: string, valeur: string) {
  * colonne au choix** (selecteur en haut). Mieux vaut une colonne qu'on choisit
  * que sept qu'on subit.
  *
- * ⚠️ Depuis la remise a zero du 2026-08-26, une tuile ne porte plus que son
- * identite : les colonnes cout, production, regles de pose, niveaux et role
- * logistique ont ete retirees en meme temps que les ecrans qui les
- * remplissaient.
+ * Depuis le 2026-09-07, l'essentiel de l'economie se lit SOUS LE NOM, sans
+ * choisir de colonne : cout de construction, mobilise, produit, recolte,
+ * envoie (palier 1) — voir `lignesSousLeNom`. C'est le choix de l'utilisateur
+ * face a deux colonnes fixes de plus.
  */
 export default function Tuiles() {
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
@@ -852,6 +891,15 @@ export default function Tuiles() {
                                     {problemeModele}
                                   </p>
                                 )}
+                                {lignesSousLeNom(contexte(tuile)).map((ligne) => (
+                                  <p
+                                    key={ligne.cle}
+                                    className="mt-0.5 text-[11px] leading-tight text-slate-400"
+                                  >
+                                    <span className="text-slate-500">{ligne.libelle} : </span>
+                                    {ligne.texte}
+                                  </p>
+                                ))}
                               </td>
                               <td className="px-3 py-2">
                                 {confirme ? (
