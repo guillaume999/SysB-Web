@@ -1165,20 +1165,34 @@ export function secondesParCran(r: RegleAppro): number | null {
  * avant de repartir — c'est ce qui fait qu'une cible lointaine est servie
  * moins souvent. Une cible sur sa propre case n'existe pas — le plancher est 1.
  *
- * ⚠️ **C'est le coût pour UNE cible qui aurait toute la flotte.** En jeu la
- * flotte se partage entre les N cibles à portée (07/09) : la durée réelle d'un
- * aller-retour vers la cible i est `2 d_i × periode_s × N / (crans × navettes)`.
- * Le site ne connaît pas N (il ne connaît pas le plateau), donc il ne montre
- * que ce repère.
+ * ⚠️ C'est le coût en crans d'UN voyage, indépendant de la flotte. Ce que la
+ * cible reçoit vraiment dépend du partage de la flotte — voir `dureeTrajet`.
  */
 export function cransParTrajet(distance: number): number {
   return 2 * Math.max(1, Math.trunc(distance));
 }
 
-/** La durée d'un aller-retour vers une cible à `distance` cases, en secondes. */
-export function dureeTrajet(r: RegleAppro, distance: number): number | null {
+/**
+ * La durée entre deux aller-retours vers UNE cible à `distance` cases, en
+ * secondes, quand la règle voit `nCibles` cibles à portée.
+ *
+ * ⚠️⚠️ **La flotte se partage à parts égales (07/09)** : `navettes` est un
+ * plafond, chaque cible en reçoit `navettes / nCibles`. La formule du moteur
+ * (`pb_hooks/moteur/acheminement.js`) est
+ * `T = 2 d × periode_s × nCibles / (crans × navettes)` — c'est exactement
+ * celle-ci, et c'est la seule que le site montre : afficher la cadence « pour
+ * une seule cible » laissait croire que chaque ferme avait toute la flotte,
+ * le modèle mort du 06/09.
+ *
+ * Le site ne connaît pas le plateau, donc pas N : il montre plusieurs N à
+ * titre de repère (`ApercuTrajets`). `null` = navette bloquée ou aucune
+ * navette, rien ne circule.
+ */
+export function dureeTrajet(r: RegleAppro, distance: number, nCibles = 1): number | null {
   const parCran = secondesParCran(r);
-  return parCran === null ? null : cransParTrajet(distance) * parCran;
+  const navettes = Math.max(0, r.debit.navettes);
+  if (parCran === null || navettes <= 0) return null;
+  return (cransParTrajet(distance) * parCran * Math.max(1, nCibles)) / navettes;
 }
 
 
@@ -1406,12 +1420,15 @@ export function decrireAppro(
   const combien =
     secondesParCran(r) === null
       ? "navette bloquée (0 cran par période)"
-      : `${r.debit.navettes} navette${r.debit.navettes > 1 ? "s" : ""} × ${r.debit.quantite} = ` +
+      : chargeParVolee(r) <= 0
+        ? "aucune navette, ou rien par voyage : rien ne circule"
+        : `${r.debit.navettes} navette${r.debit.navettes > 1 ? "s" : ""} × ${r.debit.quantite} = ` +
         `${chargeParVolee(r)} par voyage, à ${r.vitesse.crans} cran${
           r.vitesse.crans > 1 ? "s" : ""
         } / ${formatDuree(r.vitesse.periode_s)} aller-retour ` +
-        `(${chargeParVolee(r)} toutes les ${formatDuree(dureeTrajet(r, 1) as number)} à 1 case ` +
-        `pour une seule cible ; la flotte se partage entre ses cibles)`;
+        `(flotte partagée : à 1 case, chaque cible reçoit ${r.debit.quantite} toutes les ` +
+        `${formatDuree(Math.round(dureeTrajet(r, 1, 1) as number))} si elle est seule, ` +
+        `${formatDuree(Math.round(dureeTrajet(r, 1, 5) as number))} à 5 cibles à portée)`;
   return r.sens === "entrant"
     ? `Prend ${quoi} chez ${qui} ${ou} — ${combien}.`
     : `Envoie ${quoi} vers ${qui} ${ou} — ${combien}.`;

@@ -781,16 +781,17 @@ export default function TuileStockage({
 
 /**
  * L'aperçu chiffré sous le débit : ce que la règle rend VRAIMENT, à deux
- * distances.
+ * distances et pour plusieurs nombres de cibles.
  *
  * ⚠️ Il est là parce que le formulaire ne sait plus répondre tout seul à
  * « combien par minute ? ». Avant le 06/09 la réponse était dans le champ ;
- * maintenant elle dépend de la distance à la cible, que le site ne connaît pas
- * — le catalogue ne sait rien du plateau. Deux distances suffisent à faire
- * sentir la pente : la case d'à côté, et le bord du rayon.
- *
- * ⚠️ Chiffres POUR UNE SEULE CIBLE : en jeu la flotte se partage entre les N
- * cibles à portée (07/09), et N n'est connu que du plateau.
+ * maintenant elle dépend de la distance à la cible ET du nombre de cibles à
+ * portée, que le site ne connaît pas — le catalogue ne sait rien du plateau.
+ * Deux distances font sentir la pente (la case d'à côté, le bord du rayon) ;
+ * trois valeurs de N font sentir le partage : `navettes` est un PLAFOND
+ * (07/09), et chaque cible n'en reçoit qu'une part. Un chiffre « pour une
+ * seule cible » seul redonnait à lire le modèle mort du 06/09, où chaque
+ * ferme avait toute la flotte.
  */
 function ApercuTrajets({ regle }: { regle: RegleAppro }) {
   if (secondesParCran(regle) === null || chargeParVolee(regle) <= 0) return null;
@@ -798,20 +799,37 @@ function ApercuTrajets({ regle }: { regle: RegleAppro }) {
   // parlante pour montrer la pente sans prétendre à un chiffre exact.
   const loin = regle.rayon === null ? 5 : regle.rayon;
   const distances = loin > 1 ? [1, loin] : [1];
+  const nombres = [1, 3, 10];
+  const q = Math.max(0, regle.debit.quantite);
   return (
-    <p className="mt-1 text-[11px] leading-tight text-slate-500">
-      {distances.map((d, k) => (
-        <span key={d}>
-          {k > 0 && " · "}
+    <div className="mt-1 text-[11px] leading-tight text-slate-500">
+      <p>
+        Flotte partagée : chaque cible à portée reçoit{" "}
+        <span className="tabular-nums text-slate-300">{q}</span> par voyage, toutes les…
+      </p>
+      {distances.map((d) => (
+        <p key={d}>
           <span className="text-slate-400">
             à {d} case{d > 1 ? "s" : ""}
           </span>{" "}
           ({cransParTrajet(d)} crans) :{" "}
-          <span className="tabular-nums text-slate-300">{chargeParVolee(regle)}</span> toutes les{" "}
-          {formatDuree(Math.round(dureeTrajet(regle, d) as number))}
-        </span>
+          {nombres.map((n, k) => (
+            <span key={n}>
+              {k > 0 && " · "}
+              <span className="tabular-nums text-slate-300">
+                {formatDuree(Math.round(dureeTrajet(regle, d, n) as number))}
+              </span>{" "}
+              <span className="text-slate-500">
+                si {n} cible{n > 1 ? "s" : ""}
+              </span>
+            </span>
+          ))}
+        </p>
       ))}
-      <span className="text-slate-500"> — pour une seule cible ; la flotte se partage entre ses cibles</span>
-    </p>
+      <p className="text-slate-600">
+        Le nombre de cibles est celui du plateau (géométrie et type de tuile, jamais le stock) —
+        ajouter une cible ralentit les autres.
+      </p>
+    </div>
   );
 }
