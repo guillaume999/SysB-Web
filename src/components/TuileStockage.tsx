@@ -122,8 +122,14 @@ export default function TuileStockage({
    * pas une promesse, c'est une impossibilite.
    */
   const transportables = parAlphabet(ressources.filter(estTransportable));
-  /** Le stockage accepte le genre `mobilise` (c'est un logement), jamais un indicateur. */
-  const stockables = parAlphabet(ressources.filter((r) => r.genre !== "indicateur"));
+  /**
+   * Le stockage accepte le genre `mobilise` (c'est un logement), jamais un
+   * indicateur, ni un `FluxStock` : celui-là n'a pas de coffre du tout, il vit
+   * dans la réserve du plateau — un plafond déclaré ici ne serait lu par rien.
+   */
+  const stockables = parAlphabet(
+    ressources.filter((r) => r.genre !== "indicateur" && r.genre !== "FluxStock"),
+  );
   const toutes = maxToutesRessources(logistique);
   const nominatives = lignesNominatives(logistique);
   const aToutes = logistique.stockage.some((x) => x.ressource === TOUTES_RESSOURCES);

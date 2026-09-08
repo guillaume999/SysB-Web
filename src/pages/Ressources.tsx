@@ -386,6 +386,7 @@ const COULEUR_GENRE: Record<string, string> = {
   stock: "bg-emerald-500/70",
   mobilise: "bg-amber-500/70",
   indicateur: "bg-violet-500/70",
+  FluxStock: "bg-sky-500/70",
 };
 
 /**
@@ -655,6 +656,17 @@ function RessourceDialog({
             <br />
             ⚠️ Comme le genre mobilise, il n'est propose ni dans la liste
             « produit » d'un palier, ni dans les regles d'approvisionnement.
+          </Terme>
+          <Terme nom="genre, FluxStock">
+            Une seule reserve pour tout le plateau, sans coffre et sans plafond : la monnaie en
+            est le cas. Ce qu'un batiment en produit y tombe directement, ce qu'un batiment en paie
+            ou en consomme y est preleve, ou qu'il soit sur le plateau — aucune navette, aucun
+            rayon, aucun entrepot a construire pour y avoir acces.
+            <br />
+            ⚠️ Elle se produit, se paie et se consomme comme un stock, mais elle ne se STOCKE pas
+            (pas de ligne dans le tableau de stockage d'une tuile) et ne monte dans aucune navette.
+            Chaque plateau a sa propre reserve : la monnaie de la Terre n'est pas celle de
+            l'Espace.
           </Terme>
           <Terme nom="ordre d'affichage">
             L'ordre des listes, ici et dans les formulaires de tuiles. Laisse des trous (10, 20,

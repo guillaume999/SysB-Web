@@ -50,11 +50,22 @@ export const COLLECTION_RESSOURCES = "ressources";
  * la pose. Le jeu lit ce plafond (`Tresorerie.Places`), il ne remplit aucun
  * coffre.
  *
- * ⚠️ **Deux genres sur trois ne voyagent jamais : `mobilise` et `indicateur`.**
- * Les listes d'approvisionnement les excluent — voir `GENRES_TRANSPORTABLES`.
- * Un habitant ne prend pas la navette, un pourcentage non plus.
+ * ⚠️ **Un quatrième genre, `FluxStock`, depuis le 2026-09-07** — le nom est
+ * celui de l'utilisateur, majuscules comprises. Question de départ : *« est-ce
+ * que la monnaie répond aux règles des navettes ? »* — oui, tant qu'elle était
+ * un `stock` : l'or restait dans le coffre de la mine jusqu'à ce qu'un entrepôt
+ * vienne le chercher. `FluxStock` est **une réserve unique par plateau**, sans
+ * coffre de case et sans plafond : ce qu'un bâtiment en produit y tombe
+ * directement, ce qu'un bâtiment en paie ou en consomme y est prélevé, sans
+ * notion de rayon. Elle ne se stocke pas et ne monte dans aucune navette.
+ * Côté serveur elle vit dans `plateaux.reserve`, pas dans `etats`.
+ *
+ * ⚠️ **Trois genres sur quatre ne voyagent jamais : `mobilise`, `indicateur`
+ * et `FluxStock`.** Les listes d'approvisionnement les excluent — voir
+ * `GENRES_TRANSPORTABLES`. Un habitant ne prend pas la navette, un pourcentage
+ * non plus, et la monnaie est partout à la fois.
  */
-export type GenreRessource = "stock" | "mobilise" | "indicateur";
+export type GenreRessource = "stock" | "mobilise" | "indicateur" | "FluxStock";
 
 export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[] = [
   { valeur: "stock", libelle: "stock", aide: "s'accumule et se dépense" },
@@ -68,6 +79,11 @@ export const GENRES: { valeur: GenreRessource; libelle: string; aide: string }[]
     libelle: "indicateur",
     aide: "calculé, jamais stocké ni transporté (la satisfaction)",
   },
+  {
+    valeur: "FluxStock",
+    libelle: "FluxStock",
+    aide: "une seule réserve pour tout le plateau, sans coffre, sans plafond ni navette (la monnaie)",
+  },
 ];
 
 /** Les genres qu'une navette peut porter. Ni les habitants, ni un pourcentage. */
@@ -80,6 +96,11 @@ export function estTransportable(r: { genre: GenreRessource | "" }): boolean {
 /** True si cette ressource s'occupe et se rend au lieu de se dépenser. */
 export function estMobilise(r: { genre: GenreRessource | "" } | undefined): boolean {
   return r?.genre === "mobilise";
+}
+
+/** True si cette ressource vit dans la réserve du plateau, pas dans un coffre. */
+export function estFluxStock(r: { genre: GenreRessource | "" } | undefined): boolean {
+  return r?.genre === "FluxStock";
 }
 
 export type Ressource = {

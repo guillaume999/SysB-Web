@@ -105,6 +105,10 @@ export default function TuileCouts({
    * ⚠️ Le mode `mobilise`, lui, garde la liste ENTIÈRE : immobiliser du bois
    * tant que le bâtiment tourne est un cas légitime, et c'est là que la
    * population a sa place.
+   *
+   * Un `FluxStock` (la monnaie, 07/09) reste proposé partout ici — produit,
+   * payé, consommé : il a bien une quantité qui s'accumule et se dépense, elle
+   * vit seulement dans la réserve du plateau au lieu d'un coffre.
    */
   const depensables = parAlphabet(
     ressources.filter((r) => r.genre !== "mobilise" && r.genre !== "indicateur"),
