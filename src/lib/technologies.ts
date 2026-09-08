@@ -46,7 +46,7 @@
  */
 
 import { pb } from "@/lib/pb";
-import { PERIODE_PAR_DEFAUT } from "@/lib/tuiles";
+import { nombre } from "@/lib/tuiles";
 
 export const COLLECTION_TECHNOLOGIES = "technologies";
 
@@ -228,8 +228,8 @@ export interface LigneAchat {
  */
 export interface LigneEntretien {
   ressource: string;
-  quantite: number;
-  periode_s: number;
+  /** Le débit d'entretien, PAR MINUTE (2026-09-08). Peut être décimal. */
+  par_minute: number;
 }
 
 export interface CoutTechno {
@@ -303,7 +303,7 @@ export function ligneAchatVide(ressource: string): LigneAchat {
 }
 
 export function ligneEntretienVide(ressource: string): LigneEntretien {
-  return { ressource, quantite: 1, periode_s: PERIODE_PAR_DEFAUT };
+  return { ressource, par_minute: 1 };
 }
 
 /** Vrai si la techno ne coûte rien du tout — l'écran le signale. */
@@ -429,9 +429,7 @@ export function coutDe(t: { cout?: unknown }): CoutTechno {
         const o = l as Partial<LigneEntretien>;
         return {
           ressource: texte(o?.ressource),
-          quantite: Math.max(0, entier(o?.quantite)),
-          // Une période à zéro ferait une division par zéro dans le moteur.
-          periode_s: Math.max(1, entier(o?.periode_s) || PERIODE_PAR_DEFAUT),
+          par_minute: Math.max(0, nombre(o?.par_minute)),
         };
       })
       .filter((l) => l.ressource !== ""),

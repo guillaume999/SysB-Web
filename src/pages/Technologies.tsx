@@ -315,7 +315,7 @@ function resumeTechno(t: Technologie, tuiles: Tuile[], toutes: Technologie[]): s
   if (cout.entretien.length)
     bouts.push(
       "entretien " +
-        cout.entretien.map((l) => `${l.quantite} ${l.ressource}/${formatDuree(l.periode_s)}`).join(", "),
+        cout.entretien.map((l) => `${l.par_minute} ${l.ressource} / min`).join(", "),
     );
   const effets = effetsDe(t).filter(effetUtile);
   if (effets.length)
@@ -748,6 +748,7 @@ function TechnologieDialog({
               onChange={(achat) => setCout({ ...cout, achat })}
               nouvelle={(code) => ligneAchatVide(code)}
               rendreExtra={null}
+              champ="quantite"
             />
             <LignesRessource
               titre="Entretien"
@@ -756,21 +757,10 @@ function TechnologieDialog({
               lignes={cout.entretien}
               onChange={(entretien) => setCout({ ...cout, entretien })}
               nouvelle={(code) => ligneEntretienVide(code)}
-              rendreExtra={(l, maj) => (
-                <label className="flex items-center gap-1 text-[11px] text-slate-500">
-                  / 
-                  <input
-                    type="number"
-                    min={1}
-                    className="input w-20 py-1 text-xs"
-                    value={(l as { periode_s: number }).periode_s}
-                    onChange={(e) =>
-                      maj({ periode_s: Math.max(1, Number(e.target.value) || 1) })
-                    }
-                  />
-                  s
-                </label>
+              rendreExtra={() => (
+                <span className="text-[11px] text-slate-500">/ min</span>
               )}
+              champ="par_minute"
             />
           </div>
           {coutVideEnFait(cout) && (
@@ -1029,7 +1019,7 @@ function ChoixTechnos({
  * Le meme composant sert aux deux moities du cout : elles ne different que par
  * ce supplement, et deux composants presque identiques divergent toujours.
  */
-function LignesRessource<T extends { ressource: string; quantite: number }>({
+function LignesRessource<T extends { ressource: string }>({
   titre,
   aide,
   ressources,
@@ -1037,6 +1027,7 @@ function LignesRessource<T extends { ressource: string; quantite: number }>({
   onChange,
   nouvelle,
   rendreExtra,
+  champ,
 }: {
   titre: string;
   aide: string;
@@ -1045,6 +1036,13 @@ function LignesRessource<T extends { ressource: string; quantite: number }>({
   onChange: (lignes: T[]) => void;
   nouvelle: (code: string) => T;
   rendreExtra: ((l: T, maj: (p: Partial<T>) => void) => React.ReactNode) | null;
+  /**
+   * ⚠️ Le nom du champ NUMERIQUE que cette liste edite. L'achat porte une
+   * `quantite` (prelevee une fois), l'entretien un `par_minute` (un debit) :
+   * depuis le 08/09 ce ne sont plus le meme nombre, et le composant ne le
+   * devine pas — sinon il editerait silencieusement le mauvais.
+   */
+  champ: "quantite" | "par_minute";
 }) {
   const libres = parAlphabet(ressources).filter((r) => !lignes.some((l) => l.ressource === r.code));
 
@@ -1063,10 +1061,12 @@ function LignesRessource<T extends { ressource: string; quantite: number }>({
                 type="number"
                 min={0}
                 className="input w-20 py-1 text-xs"
-                value={l.quantite}
-                onChange={(e) =>
-                  maj({ quantite: Math.max(0, Math.trunc(Number(e.target.value) || 0)) } as Partial<T>)
-                }
+                step={champ === "par_minute" ? "any" : 1}
+                value={(l as Record<string, unknown>)[champ] as number}
+                onChange={(e) => {
+                  const v = Math.max(0, Number(e.target.value) || 0);
+                  maj({ [champ]: champ === "quantite" ? Math.trunc(v) : v } as Partial<T>);
+                }}
               />
               <span className="text-xs text-slate-300">{r?.nom ?? l.ressource}</span>
               {!r && <span className="text-[11px] text-amber-300/80">code inconnu</span>}

@@ -2,7 +2,6 @@ import Aide, { Terme } from "@/components/Aide";
 import ChoixTuiles from "@/components/ChoixTuiles";
 import { codeInconnu, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
-  PERIODE_PAR_DEFAUT,
   TRANCHES_PAR_DEFAUT,
   casesCouvertes,
   fluxVide,
@@ -169,12 +168,12 @@ export default function TuileCouts({
           sont pas <em>dépensés</em> — ils reviennent à la destruction <em>ou en veille</em>.
         </Terme>
         <Terme nom="consomme pendant qu'il tourne">
-          Ce qui part vraiment, en quantité par période. Jamais un taux à virgule : le calcul hors
-          ligne multiplie des entiers, sans dérive d'arrondi sur douze heures.
+          Ce qui part vraiment, <strong>par minute</strong>. Un seul nombre : il n'y a plus de
+          période à choisir, donc plus moyen d'écrire deux fois le même débit de deux façons.
           <br />
-          ⚠️ <strong>Garde la même période partout</strong> ({PERIODE_PAR_DEFAUT} s par défaut) :
-          le ralenti en cas de pénurie est exact à une unité près avec une période commune, à trois
-          ou quatre quand elles sont mélangées.
+          ⚠️ Le débit peut être <strong>décimal</strong> (2,5 / min), mais il doit tomber juste :
+          <strong> par minute × 60 doit être entier</strong>. 2,5 passe, 0,01 non — le serveur
+          refuse de charger une ligne fausse plutôt que de l'arrondir en silence.
         </Terme>
         <Terme nom="d'où ça vient, où ça va">
           Pas ici. Cet onglet dit ce que le bâtiment consomme et ce qu'il fabrique ;{" "}
@@ -653,9 +652,9 @@ function LignesProduction({
                       min={0}
                       step={1}
                       className="input h-9 w-20 py-1"
-                      value={ligne.quantite}
+                      value={ligne.par_minute}
                       onChange={(e) =>
-                        maj(i, { quantite: Math.max(0, Number(e.target.value) || 0) })
+                        maj(i, { par_minute: Math.max(0, Number(e.target.value) || 0) })
                       }
                     />
                   )}
@@ -674,23 +673,7 @@ function LignesProduction({
                   </select>
                   {!estIndicateur && (
                     <>
-                      <label className="flex items-center gap-1 text-xs text-slate-500">
-                        toutes les
-                        <input
-                          type="number"
-                          min={1}
-                          step={1}
-                          className="input h-9 w-24 py-1"
-                          value={ligne.periode_s}
-                          onChange={(e) =>
-                            maj(i, { periode_s: Math.max(1, Number(e.target.value) || 1) })
-                          }
-                        />
-                        s
-                      </label>
-                      <span className="text-[11px] text-slate-500">
-                        soit {ligne.quantite} / {formatDuree(ligne.periode_s)}
-                      </span>
+                      <span className="text-xs text-slate-500">par minute</span>
 
                       {/* ⚠️ Meme geste que le "+ indice" de la consommation :
                           cache par defaut. Mais ici ce n'est PAS un nombre :
@@ -768,7 +751,7 @@ function LignesProduction({
                 {!estIndicateur && ligne.tranches.length > 0 && (
                   <Escalier
                     tranches={ligne.tranches}
-                    quantite={ligne.quantite}
+                    quantite={ligne.par_minute}
                     indicateur={ligne.indicateur}
                     nomRessource={nomRessource}
                     onChange={(tranches) => maj(i, { tranches })}
@@ -781,8 +764,7 @@ function LignesProduction({
                 <BlocsProximite
                   proximites={ligne.proximites}
                   contexte="produit"
-                  quantite={ligne.quantite}
-                  periode_s={ligne.periode_s}
+                  quantite={ligne.par_minute}
                   tuiles={tuiles}
                   nomTuile={nomTuile}
                   onChange={(proximites) => maj(i, { proximites })}
@@ -798,7 +780,7 @@ function LignesProduction({
                     <span className="text-slate-400">
                       (à moitié approvisionné :{" "}
                       <span className="tabular-nums text-slate-300">
-                        {Math.round(ligne.quantite / 2)}
+                        {Math.round(ligne.par_minute / 2)}
                       </span>
                       )
                     </span>
@@ -1003,7 +985,8 @@ function LignesFlux({
   const maj = (i: number, patch: Partial<LigneFlux>) =>
     onChange(lignes.map((l, k) => (k === i ? { ...l, ...patch } : l)));
 
-  const periodes = Array.from(new Set(lignes.map((l) => l.periode_s)));
+  // ⚠️ 08/09 : plus de période à mélanger, un débit s'écrit par minute.
+  const periodes: number[] = [];
 
   return (
     <div>
@@ -1019,8 +1002,8 @@ function LignesFlux({
                   min={1}
                   step={1}
                   className="input h-9 w-20 py-1"
-                  value={ligne.quantite}
-                  onChange={(e) => maj(i, { quantite: Math.max(0, Number(e.target.value) || 0) })}
+                  value={ligne.par_minute}
+                  onChange={(e) => maj(i, { par_minute: Math.max(0, Number(e.target.value) || 0) })}
                 />
                 <ChoixRessource
                   code={ligne.ressource}
@@ -1028,21 +1011,7 @@ function LignesFlux({
                   toutes={toutes}
                   onChange={(ressource) => maj(i, { ressource })}
                 />
-                <label className="flex items-center gap-1 text-xs text-slate-500">
-                  toutes les
-                  <input
-                    type="number"
-                    min={1}
-                    step={1}
-                    className="input h-9 w-24 py-1"
-                    value={ligne.periode_s}
-                    onChange={(e) => maj(i, { periode_s: Math.max(1, Number(e.target.value) || 1) })}
-                  />
-                  s
-                </label>
-                <span className="text-[11px] text-slate-500">
-                  soit {ligne.quantite} / {formatDuree(ligne.periode_s)}
-                </span>
+                <span className="text-xs text-slate-500">par minute</span>
                 {/* ⚠️ L'indice ne s'AJOUTE que si on le demande. La plupart des
                     consommations n'en ont pas : un champ toujours la, a zero sur
                     quatre lignes sur cinq, ferait croire qu'il faut le remplir.
@@ -1110,8 +1079,7 @@ function LignesFlux({
               <BlocsProximite
                 proximites={ligne.proximites}
                 contexte="consomme"
-                quantite={ligne.quantite}
-                periode_s={ligne.periode_s}
+                quantite={ligne.par_minute}
                 tuiles={tuiles}
                 nomTuile={nomTuile}
                 onChange={(proximites) => maj(i, { proximites })}
@@ -1174,7 +1142,6 @@ function BlocsProximite({
   proximites,
   contexte,
   quantite,
-  periode_s,
   tuiles,
   nomTuile,
   onChange,
@@ -1182,7 +1149,6 @@ function BlocsProximite({
   proximites: Proximite[];
   contexte: Contexte;
   quantite: number;
-  periode_s: number;
   tuiles: Tuile[];
   nomTuile: (tileId: number) => string;
   onChange: (proximites: Proximite[]) => void;
@@ -1212,7 +1178,6 @@ function BlocsProximite({
             proximite={p}
             contexte={contexte}
             quantite={quantite}
-            periode_s={periode_s}
             tuiles={tuiles}
             nomTuile={nomTuile}
             onChange={(modifiee) => onChange(proximites.map((x, k) => (k === i ? modifiee : x)))}
@@ -1257,7 +1222,6 @@ function BlocProximite({
   proximite,
   contexte,
   quantite,
-  periode_s,
   tuiles,
   nomTuile,
   onChange,
@@ -1266,7 +1230,6 @@ function BlocProximite({
   proximite: Proximite;
   contexte: Contexte;
   quantite: number;
-  periode_s: number;
   tuiles: Tuile[];
   nomTuile: (tileId: number) => string;
   onChange: (proximite: Proximite) => void;
@@ -1355,8 +1318,8 @@ function BlocProximite({
           Il faut <span className="tabular-nums text-slate-300">{p.nombre}</span> tuiles au total
           parmi <span className="text-slate-300">{liste}</span> dans les{" "}
           <span className="tabular-nums">{casesCouvertes(p.rayon)}</span> cases à {p.rayon} de
-          rayon pour {contexte === "consomme" ? "consommer" : "produire"} les {quantite} par{" "}
-          {formatDuree(periode_s)}. <strong>Au prorata en dessous</strong> : avec{" "}
+          rayon pour {contexte === "consomme" ? "consommer" : "produire"} les {quantite} par
+          minute. <strong>Au prorata en dessous</strong> : avec{" "}
           <span className="tabular-nums text-slate-300">{manquantes}</span> sur {p.nombre},{" "}
           {contexte === "consomme" ? (
             <>

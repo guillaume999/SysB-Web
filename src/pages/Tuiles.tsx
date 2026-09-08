@@ -71,7 +71,7 @@ function resumePalier1(ctx: ContexteColonne) {
   const conso = p.utilisation
     .map(
       (l) =>
-        `${l.quantite} ${libelleRessource(ctx.ressources, l.ressource)}/${formatDuree(l.periode_s)}`,
+        `${l.par_minute} ${libelleRessource(ctx.ressources, l.ressource)} / min`,
     )
     .join(", ");
   return { cout, conso };
@@ -99,7 +99,7 @@ function lignesSousLeNom(ctx: ContexteColonne): { cle: string; libelle: string; 
     lignes.push({ cle: "mobilise", libelle: "mobilise", texte: mobilise.join(", ") });
 
   const produit = p.production.map(
-    (x) => `${x.quantite} ${nom(x.ressource)} / ${formatDuree(x.periode_s)}`,
+    (x) => `${x.par_minute} ${nom(x.ressource)} / min`,
   );
   if (produit.length > 0) lignes.push({ cle: "produit", libelle: "produit", texte: produit.join(", ") });
 

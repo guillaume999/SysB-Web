@@ -388,13 +388,18 @@ export interface LigneCout {
 }
 
 /**
- * Un débit dans le temps. Volontairement `{quantite, periode_s}` et **jamais un
- * taux décimal** : la progression hors ligne se recalcule en multipliant des
- * entiers, sans dérive d'arrondi sur douze heures.
+ * **Un débit s'écrit avec UN SEUL nombre : `par_minute`.** (2026-09-08)
  *
- * ⚠️ **Garder la MÊME `periode_s` partout** (120 s avait été retenu) : le
- * ralenti de satisfaction est exact à 1 unité près avec une période commune, à
- * 3–4 quand elles sont mélangées.
+ * ⚠️ **`quantite` + `periode_s` ont été retirés.** La période était une SECONDE
+ * façon de dire le même débit, et c'est elle qui a permis de saisir « 10
+ * nourriture par SECONDE » sur les Habitations Bois sans que ça se voie : à
+ * l'écran, « 10 » et « 1 » se lisent pareil, seul leur rapport compte. Une
+ * seule unité, plus d'ambiguïté possible — et plus de période commune à tenir.
+ *
+ * ⚠️ **Il peut être décimal** : l'ancien « 5 baies / 120 s » s'écrit `2.5`.
+ * Le moteur compte en 1/3600 d'unité, donc **`par_minute × 60` doit être
+ * entier** : `2.5` passe (150), `0.01` non (0,6). Le serveur REFUSE de charger
+ * une ligne qui ne tombe pas juste, il ne l'arrondit pas en silence.
  */
 /**
  * **La règle de proximité** — posée le 2026-08-28 sur les consommations
@@ -534,8 +539,8 @@ function normaliserProximite(brut: unknown): Proximite {
 
 export interface LigneFlux {
   ressource: string;
-  quantite: number;
-  periode_s: number;
+  /** Le débit, par minute. Peut être décimal — voir le commentaire ci-dessus. */
+  par_minute: number;
   /**
    * **Part de satisfaction couverte par cette consommation**, en pourcentage.
    * `0` = consommation ordinaire, elle ne produit pas de satisfaction.
@@ -566,8 +571,7 @@ export interface LigneFlux {
 export function fluxVide(ressource: string): LigneFlux {
   return {
     ressource,
-    quantite: 1,
-    periode_s: PERIODE_PAR_DEFAUT,
+    par_minute: 1,
     part: 0,
     proximites: [],
   };
@@ -698,8 +702,8 @@ function normaliserTranches(l: unknown): Tranche[] {
  */
 export interface LigneProduction {
   ressource: string;
-  quantite: number;
-  periode_s: number;
+  /** Le débit, par minute. Peut être décimal — voir le commentaire ci-dessus. */
+  par_minute: number;
   /**
    * **L'escalier de rendement** de cette ligne. Liste vide = rien ne freine
    * cette production, elle tourne à plein (dans la limite de ses intrants).
@@ -750,8 +754,7 @@ export interface LigneProduction {
 export function productionVide(ressource: string): LigneProduction {
   return {
     ressource,
-    quantite: 10,
-    periode_s: PERIODE_PAR_DEFAUT,
+    par_minute: 5,
     tranches: [],
     indicateur: "",
     proximites: [],
@@ -815,7 +818,17 @@ export function coutConstruction(p: Palier): LigneCout[] {
 // comptée depuis la frontière, badge CHANTIER).
 
 /** Période par défaut d'un flux, en secondes. Voir l'avertissement de `LigneFlux`. */
-export const PERIODE_PAR_DEFAUT = 120;
+/**
+ * ⚠️ `PERIODE_PAR_DEFAUT` a été SUPPRIMÉ le 2026-09-08 : il n'y a plus de
+ * période à choisir, un débit s'écrit `par_minute`. Ne pas le réintroduire.
+ *
+ * Un nombre éventuellement DÉCIMAL — un débit par minute peut valoir 2,5.
+ * `entier()` le tronquerait à 2, soit 20 % de moins, sans rien dire.
+ */
+export function nombre(v: unknown, defaut = 0): number {
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : defaut;
+}
 
 /**
  * La vitesse de navette qu'une règle NEUVE reçoit dans le formulaire :
@@ -888,8 +901,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
     utilisation: Array.isArray(o.utilisation)
       ? o.utilisation.map((l) => ({
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
-          quantite: Math.max(0, entier(l?.quantite)),
-          periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
+          par_minute: Math.max(0, nombre(l?.par_minute)),
           part: Math.min(100, Math.max(0, entier(l?.part))),
           // Les DEUX formats sont relus : l'objet unique d'avant le 30/08 et
           // la liste d'aujourd'hui. Plus vieux encore : aucune regle, donc [].
@@ -899,8 +911,7 @@ export function normaliserPalier(n: unknown, position: number): Palier {
     production: Array.isArray(o.production)
       ? o.production.map((l) => ({
           ressource: typeof l?.ressource === "string" ? l.ressource : "",
-          quantite: Math.max(0, entier(l?.quantite)),
-          periode_s: Math.max(1, entier(l?.periode_s) || PERIODE_PAR_DEFAUT),
+          par_minute: Math.max(0, nombre(l?.par_minute)),
           tranches: normaliserTranches(l),
           indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
           proximites: normaliserProximites(l),
@@ -920,7 +931,7 @@ export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
     duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
     cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
     utilisation: p.utilisation
-      .filter((l) => l.ressource !== "" && l.quantite > 0)
+      .filter((l) => l.ressource !== "" && l.par_minute > 0)
       // Une proximite ouverte puis abandonnee n'est pas une regle : elle part
       // ici, plutot que d'aller occuper une place en base.
       .map((l) => ({ ...l, proximites: l.proximites.filter(proximitePosee) })),
