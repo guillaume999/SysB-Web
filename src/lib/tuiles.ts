@@ -818,13 +818,16 @@ export function coutConstruction(p: Palier): LigneCout[] {
 export const PERIODE_PAR_DEFAUT = 120;
 
 /**
- * La vitesse de navette posée par défaut : **1 cran toutes les 20 s**, choisie
- * par l'utilisateur le 2026-09-06 (*« mettre le champ obligatoirement, et le
- * mettre à 1 cran / 20 sec de base »*). C'est aussi ce que reçoivent les
- * règles écrites avant cette date, qui n'ont pas le champ.
+ * La vitesse de navette qu'une règle NEUVE reçoit dans le formulaire :
+ * **1 cran toutes les 20 s**, choisie par l'utilisateur le 2026-09-06.
+ *
+ * ⚠️ Ce n'est PLUS un défaut de LECTURE (2026-09-08 : *« règle sans vitesse
+ * est une erreur »*). Une règle en base à qui il manque `vitesse` ou `debit`
+ * est lue avec des zéros ET marquée `erreur` — elle s'affiche en rouge et ne
+ * circule pas, jusqu'à ce qu'on l'enregistre avec des chiffres choisis.
  */
-export const CRANS_PAR_DEFAUT = 1;
-export const PERIODE_VITESSE_PAR_DEFAUT = 20;
+export const CRANS_INITIAL = 1;
+export const PERIODE_VITESSE_INITIALE = 20;
 
 export function palierVide(numero: number): Palier {
   return { niveau: numero, duree_construction_s: 0, cout: [], utilisation: [], production: [] };
@@ -1141,10 +1144,27 @@ export interface RegleAppro {
    * partout dans ce bloc.
    */
   vitesse: { crans: number; periode_s: number };
+  /**
+   * **Sans limite** (2026-09-08, *« oui, le permettre au cas où »*) : ni
+   * flotte ni trajet, tout ce qui est à portée part dans la passe. C'est un
+   * drapeau EXPLICITE — la seule écriture de l'illimité depuis que « débit non
+   * renseigné = illimité » a été supprimé le 06/09. Coché, `debit` et
+   * `vitesse` ne sont pas enregistrés du tout.
+   */
+  illimite: boolean;
+  /**
+   * Posé à la LECTURE seulement, quand la règle en base n'a ni `illimite` ni
+   * `debit` + `vitesse` complets : une erreur de saisie, pas un réglage. Elle
+   * s'affiche en rouge, le moteur la signale dans ses alertes et ne la fait
+   * pas circuler. Enregistrer la règle (avec des chiffres, ou « sans limite »)
+   * la guérit — `logistiquePourEnregistrer` ne recopie jamais ce champ.
+   */
+  erreur?: string;
 }
 
 /** Ce qu'une volée de navettes rapporte en UN voyage : navettes × quantité. */
 export function chargeParVolee(r: RegleAppro): number {
+  if (r.illimite) return Infinity;
   return Math.max(0, r.debit.navettes) * Math.max(0, r.debit.quantite);
 }
 
@@ -1153,6 +1173,7 @@ export function chargeParVolee(r: RegleAppro): number {
  * (0 cran par période) — le seul cas où une règle ne transporte rien du tout.
  */
 export function secondesParCran(r: RegleAppro): number | null {
+  if (r.illimite) return 0;
   const crans = Math.max(0, r.vitesse.crans);
   if (crans <= 0) return null;
   return Math.max(1, r.vitesse.periode_s) / crans;
@@ -1189,6 +1210,7 @@ export function cransParTrajet(distance: number): number {
  * navette, rien ne circule.
  */
 export function dureeTrajet(r: RegleAppro, distance: number, nCibles = 1): number | null {
+  if (r.illimite) return 0;
   const parCran = secondesParCran(r);
   const navettes = Math.max(0, r.debit.navettes);
   if (parCran === null || navettes <= 0) return null;
@@ -1208,7 +1230,8 @@ export function regleApproVide(sens: SensAppro): RegleAppro {
     rayon: sens === "entrant" ? 3 : null,
     ressources: [],
     debit: { navettes: 1, quantite: 10 },
-    vitesse: { crans: CRANS_PAR_DEFAUT, periode_s: PERIODE_VITESSE_PAR_DEFAUT },
+    vitesse: { crans: CRANS_INITIAL, periode_s: PERIODE_VITESSE_INITIALE },
+    illimite: false,
   };
 }
 
@@ -1304,6 +1327,42 @@ export function lignesNominatives(l: Logistique): LigneStockage[] {
   return l.stockage.filter((x) => x.ressource !== TOUTES_RESSOURCES);
 }
 
+/**
+ * `illimite`, `debit`, `vitesse` et `erreur` d'une règle lue en base.
+ *
+ * ⚠️ PLUS AUCUN DÉFAUT (2026-09-08). Le « absent = 1 cran / 20 s » du 06/09
+ * ne servait qu'à rattraper les règles d'avant le champ ; elles portent toutes
+ * une vitesse explicite depuis le patch du 07/09. Un bloc manquant est
+ * maintenant une ERREUR DE SAISIE, lue avec des zéros (rien ne circule) et
+ * dite en rouge — jamais complétée en silence. ZÉRO SAISI reste distinct :
+ * c'est un choix (« navette bloquée »), signalé en orange, pas en rouge.
+ */
+function lireFlotte(
+  r: Partial<RegleAppro> | undefined,
+  entier: (v: unknown) => number,
+): Pick<RegleAppro, "illimite" | "debit" | "vitesse" | "erreur"> {
+  const renseigne = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  if (r?.illimite === true) {
+    return { illimite: true, debit: { navettes: 0, quantite: 0 }, vitesse: { crans: 0, periode_s: 1 } };
+  }
+  const deb = r?.debit;
+  const vit = r?.vitesse;
+  let erreur: string | undefined;
+  if (!deb || !renseigne(deb.navettes) || !renseigne(deb.quantite)) {
+    erreur = "débit non renseigné en base (navettes et quantité par voyage)";
+  } else if (!vit || !renseigne(vit.crans) || !renseigne(vit.periode_s)) {
+    erreur = "vitesse non renseignée en base (crans et période)";
+  }
+  if (erreur) {
+    return { illimite: false, erreur, debit: { navettes: 0, quantite: 0 }, vitesse: { crans: 0, periode_s: 1 } };
+  }
+  return {
+    illimite: false,
+    debit: { navettes: Math.max(0, entier(deb!.navettes)), quantite: Math.max(0, entier(deb!.quantite)) },
+    vitesse: { crans: Math.max(0, entier(vit!.crans)), periode_s: Math.max(1, entier(vit!.periode_s)) },
+  };
+}
+
 export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
   const l = (tuile.logistique ?? {}) as Partial<Logistique>;
   const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
@@ -1333,28 +1392,7 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
             : [],
           rayon: r?.rayon === null || r?.rayon === undefined ? null : Math.max(0, entier(r.rayon)),
           ressources: codes(r?.ressources),
-          // ⚠️ Même règle que pour `crans` : ABSENT = 1 navette (les règles
-          // d'avant le 06/09), ZÉRO SAISI = rien ne circule. Un `|| 1` ici
-          // rendait le zéro impossible à enregistrer (corrigé le 07/09).
-          debit: {
-            navettes:
-              r?.debit?.navettes === undefined || r?.debit?.navettes === null
-                ? 1
-                : Math.max(0, entier(r.debit.navettes)),
-            quantite: Math.max(0, entier(r?.debit?.quantite)),
-          },
-          // ⚠️ ABSENT ET ZÉRO NE VEULENT PAS DIRE LA MÊME CHOSE. Les règles
-          // écrites avant le 2026-09-06 n'ont pas de `vitesse` du tout : elles
-          // reçoivent la valeur par défaut et continuent de circuler. Un `0`
-          // SAISI, lui, bloque bien la navette. Un simple `|| DEFAUT` aurait
-          // confondu les deux et rendu le champ impossible à mettre à zéro.
-          vitesse: {
-            crans:
-              r?.vitesse?.crans === undefined || r?.vitesse?.crans === null
-                ? CRANS_PAR_DEFAUT
-                : Math.max(0, entier(r.vitesse.crans)),
-            periode_s: Math.max(1, entier(r?.vitesse?.periode_s) || PERIODE_VITESSE_PAR_DEFAUT),
-          },
+          ...lireFlotte(r as Partial<RegleAppro>, entier),
         }))
           // ⚠️ Les anciennes regles « produit » / « sortant » sont ecartees :
           // la production a demenage dans l'onglet Cout le 26/08.
@@ -1368,12 +1406,25 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
  * cochée ne dit rien : on la jette plutôt que de laisser croire qu'elle
  * achemine quelque chose.
  */
-export function logistiquePourEnregistrer(l: Logistique): Logistique {
+/** Une règle telle qu'elle part en base : `illimite` seul, OU `debit` + `vitesse`. */
+export type RegleApproEnregistree = Omit<RegleAppro, "debit" | "vitesse" | "illimite" | "erreur"> &
+  ({ illimite: true } | { debit: RegleAppro["debit"]; vitesse: RegleAppro["vitesse"] });
+
+export type LogistiqueEnregistree = Omit<Logistique, "appros"> & { appros: RegleApproEnregistree[] };
+
+export function logistiquePourEnregistrer(l: Logistique): LogistiqueEnregistree {
   return {
     // Un plafond nul ne dit rien : on jette la ligne plutot que de laisser
     // croire que la ressource est stockee.
     stockage: l.stockage.filter((x) => x.ressource !== "" && x.max > 0),
-    appros: l.appros.filter((r) => r.cible === "tout" || r.tileIds.length > 0),
+    appros: l.appros
+      .filter((r) => r.cible === "tout" || r.tileIds.length > 0)
+      // ⚠️ `erreur` ne part JAMAIS en base : enregistrer, c'est guérir. Et une
+      // règle « sans limite » n'emporte ni flotte ni vitesse — c'est le
+      // drapeau seul que le moteur lit.
+      .map(({ debit, vitesse, illimite, erreur: _erreur, ...reste }) =>
+        illimite ? { ...reste, illimite: true as const } : { ...reste, debit, vitesse },
+      ),
     // On garde la case cochée telle quelle : la décocher toute seule parce
     // qu'aucun plafond n'est encore saisi ferait perdre le réglage entre deux
     // enregistrements, sans rien dire.
@@ -1393,6 +1444,8 @@ export function logistiquePourEnregistrer(l: Logistique): Logistique {
  */
 export function regleApproUtile(r: RegleAppro): boolean {
   if (r.cible === "tuiles" && r.tileIds.length === 0) return false;
+  if (r.erreur) return false;
+  if (r.illimite) return true;
   if (secondesParCran(r) === null) return false;
   return chargeParVolee(r) > 0;
 }
@@ -1417,8 +1470,9 @@ export function decrireAppro(
     r.rayon === null
       ? "sur tout le plateau"
       : `à ${r.rayon} case${r.rayon > 1 ? "s" : ""} (${casesCouvertes(r.rayon)} cases)`;
-  const combien =
-    secondesParCran(r) === null
+  const combien = r.illimite
+    ? "sans limite : ni flotte ni trajet, tout ce qui est à portée part dans la passe"
+    : secondesParCran(r) === null
       ? "navette bloquée (0 cran par période)"
       : chargeParVolee(r) <= 0
         ? "aucune navette, ou rien par voyage : rien ne circule"
@@ -1546,7 +1600,8 @@ export interface ValeursTuile {
   non_remplacable: boolean;
   placement: ReglePlacement[];
   niveaux: Palier[];
-  logistique: Logistique;
+  /** Telle qu'elle PART en base : une règle « sans limite » n'emporte ni flotte ni vitesse. */
+  logistique: LogistiqueEnregistree;
 }
 
 // --- Destruction -------------------------------------------------------------

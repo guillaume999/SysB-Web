@@ -572,11 +572,19 @@ export default function TuileStockage({
           <div className="mt-2 space-y-2">
             {appros.map((regle, i) => {
               const inutile = !regleApproUtile(regle);
+              // Rouge = ERREUR DE SAISIE (un bloc manquant en base), orange =
+              // règle muette par CHOIX (un zéro). Les deux ne circulent pas,
+              // mais l'une est un oubli et l'autre un réglage.
+              const enErreur = !!regle.erreur;
               return (
                 <div
                   key={i}
                   className={`rounded border p-2 ${
-                    inutile ? "border-amber-700/70 bg-amber-950/20" : "border-edge bg-ink/40"
+                    enErreur
+                      ? "border-red-700/70 bg-red-950/20"
+                      : inutile
+                        ? "border-amber-700/70 bg-amber-950/20"
+                        : "border-edge bg-ink/40"
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-2">
@@ -639,8 +647,34 @@ export default function TuileStockage({
                     </button>
                   </div>
 
+                  {/* SANS LIMITE (08/09) : le seul illimite qui existe, et il
+                      s'ecrit. Coche, la flotte et la vitesse disparaissent du
+                      formulaire ET de la base. */}
+                  <label className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={regle.illimite}
+                      onChange={(e) =>
+                        majAppro(i, { illimite: e.target.checked, erreur: undefined })
+                      }
+                    />
+                    sans limite
+                    <span className="text-slate-600">
+                      — ni flotte ni trajet : tout ce qui est à portée part dans la passe
+                      (réglage de test ou de tuile « magique », pas un défaut)
+                    </span>
+                  </label>
+
+                  {regle.erreur && (
+                    <p className="mt-1 text-[11px] text-red-400">
+                      Erreur de saisie — {regle.erreur}. Rien ne circule tant que la règle
+                      n&rsquo;est pas réenregistrée avec des chiffres, ou cochée « sans limite ».
+                    </p>
+                  )}
+
                   {/* LA FLOTTE : N navettes x Q par voyage. Plus aucune periode
                       ici depuis le 06/09 — la cadence sort du trajet. */}
+                  {!regle.illimite && (
                   <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-slate-500">
                     <input
                       type="number"
@@ -671,9 +705,11 @@ export default function TuileStockage({
                     <span className="tabular-nums text-slate-300">{chargeParVolee(regle)}</span>{" "}
                     {regle.sens === "entrant" ? "ramassés" : "livrés"} par volée
                   </div>
+                  )}
 
                   {/* LA VITESSE : des crans (= des cases) par periode. C'est elle
                       qui fabrique la cadence, en aller-retour. */}
+                  {!regle.illimite && (
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-slate-500">
                     vitesse
                     <input
@@ -709,6 +745,7 @@ export default function TuileStockage({
                     />
                     s <span className="text-slate-600">— un cran = une case, aller-retour</span>
                   </div>
+                  )}
 
                   <ApercuTrajets regle={regle} />
 
@@ -755,7 +792,9 @@ export default function TuileStockage({
                       inutile ? "text-amber-400" : "text-slate-500"
                     }`}
                   >
-                    {inutile
+                    {enErreur
+                      ? "Règle en erreur — elle sera ignorée en jeu (voir ci-dessus)."
+                      : inutile
                       ? secondesParCran(regle) === null
                         ? "Navette bloquée — 0 cran par période : rien ne circulera, la règle sera ignorée en jeu."
                         : "Règle incomplète — aucune tuile cochée, ou aucun débit : elle sera ignorée en jeu."
@@ -794,6 +833,7 @@ export default function TuileStockage({
  * ferme avait toute la flotte.
  */
 function ApercuTrajets({ regle }: { regle: RegleAppro }) {
+  if (regle.illimite) return null;
   if (secondesParCran(regle) === null || chargeParVolee(regle) <= 0) return null;
   // Sans rayon, la portée est le plateau entier : 5 cases est une distance
   // parlante pour montrer la pente sans prétendre à un chiffre exact.
