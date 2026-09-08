@@ -62,8 +62,14 @@ import {
  * exactement comme il comptait des periodes. La progression hors ligne reste
  * calculable en forme fermee.
  *
- * Consequence visible des la premiere partie : tout ce qui etait deja saisi
- * ACCELERE. Une cible a 1 case passe de 120 s a 40 s par voyage.
+ * ⚠️⚠️ **2026-09-07 — « 2 navettes en tout, flotte PARTAGEE ».** Le modele du
+ * 06/09 comptait les voyages PAR CIBLE : chaque source recevait ses propres
+ * navettes, dix sources valaient dix flottes. Refuse. `navettes` est un
+ * PLAFOND, et la flotte se repartit A PARTS EGALES entre les N cibles a portee
+ * (geometrie seule, jamais le stock — la seule forme invariante aux cadences :
+ * un budget commun « les plus remplies d'abord » a ete mesure a 700 / 480 /
+ * 700 selon la passe). Ajouter une cible RALENTIT les autres ; le rayon et
+ * `cible: tuiles` sont donc de vrais reglages de puissance.
  */
 export default function TuileStockage({
   logistique,
@@ -499,6 +505,12 @@ export default function TuileStockage({
             La flotte de la règle : <strong>N navettes qui portent chacune Q</strong> par voyage.
             Une volée complète rapporte donc N × Q. Il n'y a plus de période à saisir ici — la
             cadence sort du trajet, voir <em>vitesse</em>.
+            <br />
+            ⚠️ <strong>« 2 navettes en tout »</strong> : c'est un plafond. La flotte se{" "}
+            <strong>partage à parts égales entre toutes les cibles à portée</strong> — dix
+            fermes dans le rayon, c'est un dixième de navette pour chacune. Ajouter une cible
+            ralentit les autres ; réduire le rayon ou viser des tuiles précises concentre la
+            flotte.
           </Terme>
           <Terme nom="vitesse (crans)">
             <strong>Un cran = une case du plateau.</strong> « 1 cran / 20 s » veut dire qu'une
@@ -511,9 +523,13 @@ export default function TuileStockage({
             cible. Maintenant une cible deux fois plus loin est servie <strong>deux fois moins
             souvent</strong>.
             <br />
-            Chaque cible a ses propres voyages : en ajouter une ne ralentit pas les autres. Une
-            flotte commune, où une cible lointaine aurait mangé les navettes des autres, a été
-            essayée puis retirée le jour même — elle n'était pas invariante aux cadences.
+            La part de chaque cible est fixée par la <strong>géométrie</strong>, jamais par ce
+            qu'elle contient : avec N cibles à portée, la cible à <em>d</em> cases reçoit un
+            aller-retour toutes les 2 × d × période × N / (crans × navettes) secondes. Une
+            part qui n'a rien à transporter est perdue, comme la production d'une ferme
+            saturée. (Un budget commun que les cibles se disputent a été essayé le 07/09 et
+            mesuré non invariant aux cadences — 700, 480 ou 700 selon la passe — c'est
+            pourquoi la part est fixe.)
             <br />
             ⚠️ <strong>0 cran = navette bloquée</strong>, rien ne circule. C'est aussi vrai de
             0 navette et de 0 par voyage : dans ce bloc, un zéro veut toujours dire « rien ne
@@ -525,12 +541,13 @@ export default function TuileStockage({
             c'est ce qui permet de calculer douze heures d'absence d'un coup.
           </Terme>
           <Terme nom="qui est servi en premier">
-            Une navette qui part loin en prive une autre. À la <strong>récolte</strong>, on va
-            d'abord aux sources les <strong>plus remplies</strong> — pas question de brûler
-            8 crans pour ramener 2 unités pendant qu'un entrepôt plein attend à côté. À la{" "}
-            <strong>livraison</strong>, on sert d'abord les tuiles les <strong>plus en
-            manque</strong>. À égalité, l'ordre des cases, pour que deux parties identiques
-            donnent le même résultat.
+            Chaque cible ayant sa part de flotte, servir l'une ne prive plus l'autre de
+            navettes. L'ordre départage ce qui reste partagé : la <strong>place</strong> chez le
+            preneur et une source convoitée par plusieurs preneurs. À la{" "}
+            <strong>récolte</strong>, les sources les <strong>plus remplies</strong> d'abord ;
+            à la <strong>livraison</strong>, les tuiles les <strong>plus en manque</strong>. À
+            égalité, l'ordre des cases, pour que deux parties identiques donnent le même
+            résultat.
             <br />
             Rien à régler ici : c'est une règle du jeu, pas un champ.
           </Terme>
@@ -765,6 +782,9 @@ export default function TuileStockage({
  * maintenant elle dépend de la distance à la cible, que le site ne connaît pas
  * — le catalogue ne sait rien du plateau. Deux distances suffisent à faire
  * sentir la pente : la case d'à côté, et le bord du rayon.
+ *
+ * ⚠️ Chiffres POUR UNE SEULE CIBLE : en jeu la flotte se partage entre les N
+ * cibles à portée (07/09), et N n'est connu que du plateau.
  */
 function ApercuTrajets({ regle }: { regle: RegleAppro }) {
   if (secondesParCran(regle) === null || chargeParVolee(regle) <= 0) return null;
@@ -785,6 +805,7 @@ function ApercuTrajets({ regle }: { regle: RegleAppro }) {
           {formatDuree(Math.round(dureeTrajet(regle, d) as number))}
         </span>
       ))}
+      <span className="text-slate-500"> — pour une seule cible ; la flotte se partage entre ses cibles</span>
     </p>
   );
 }

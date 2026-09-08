@@ -1046,10 +1046,11 @@ export const ORDRE_DES_PASSES =
  * distance coûte des crans**, servir une cible en prive une autre — l'ordre
  * devient une règle de jeu.
  *
- * ⚠️ Ce n'est plus la **flotte** qui se partage — les voyages se comptent cible
- * par cible depuis que la première version, à budget commun, s'est révélée non
- * invariante. Ce qui se partage, c'est le **coffre du preneur** (il se remplit
- * une fois pour toutes) et le **stock d'une source** que plusieurs preneurs se
+ * ⚠️ La **flotte**, elle, ne se dispute pas : depuis le 07/09 chaque cible à
+ * portée a sa part fixe (`navettes / N`), parce que toute allocation qui lit le
+ * stock pour choisir sa cible s'est révélée non invariante aux cadences. Ce
+ * qui se partage encore, c'est le **coffre du preneur** (il se remplit une
+ * fois pour toutes) et le **stock d'une source** que plusieurs preneurs se
  * disputent. L'ordre décide donc encore qui est servi.
  *
  * - **À la récolte** : les sources les plus REMPLIES d'abord. Un preneur au
@@ -1114,9 +1115,18 @@ export interface RegleAppro {
   debit: { navettes: number; quantite: number };
   /**
    * ⚠️ **LA DISTANCE COMPTE, depuis le 2026-09-06.** `crans` cases franchies
-   * toutes les `periode_s` secondes. Une navette fait l'**aller-retour** :
-   * une cible à `d` cases coûte `2d` crans. À 1 cran / 20 s, une cible à
-   * 4 cases occupe une navette 160 s.
+   * toutes les `periode_s` secondes. **Un cran = une case.** Une navette fait
+   * l'**aller-retour** : une cible à `d` cases coûte `2d` crans. À 1 cran /
+   * 20 s, une cible à 4 cases occupe une navette 160 s.
+   *
+   * ⚠️⚠️ **« 2 navettes en tout, flotte PARTAGÉE » (2026-09-07).** `navettes`
+   * est un PLAFOND : la flotte se répartit **à parts égales entre les N cibles
+   * à portée** de la règle — géométrie seule, jamais le stock. La cible i
+   * reçoit un aller-retour toutes les `2 d_i × periode_s × N / (crans ×
+   * navettes)` secondes. Le modèle du 06/09, où chaque cible avait sa propre
+   * flotte (10 sources = 10 flottes), est REFUSÉ ; un budget commun que les
+   * cibles se disputent a été mesuré non invariant aux cadences (700 / 480 /
+   * 700). Le moteur qui fait foi : `pb_hooks/moteur/acheminement.js`.
    *
    * ⚠️ Ceci **renverse** la note fondatrice « les navettes ne sont qu'une
    * animation » : elles restent sans pathfinding et sans agent déplacé, mais
@@ -1155,13 +1165,11 @@ export function secondesParCran(r: RegleAppro): number | null {
  * avant de repartir — c'est ce qui fait qu'une cible lointaine est servie
  * moins souvent. Une cible sur sa propre case n'existe pas — le plancher est 1.
  *
- * ⚠️ **Elle ne prive personne pour autant.** Les voyages se comptent cible par
- * cible : `2d × periode_s / crans` secondes par aller-retour, et le moteur
- * compte les frontières franchies en temps absolu. Une flotte partagée, où une
- * cible lointaine aurait mangé les navettes des autres, a été écrite le
- * 2026-09-06 puis **retirée le jour même** : elle n'était pas invariante aux
- * cadences (les crans non dépensés d'une passe étaient perdus, donc une règle
- * lente ne transportait rien en jeu ouvert). Ne pas la refaire.
+ * ⚠️ **C'est le coût pour UNE cible qui aurait toute la flotte.** En jeu la
+ * flotte se partage entre les N cibles à portée (07/09) : la durée réelle d'un
+ * aller-retour vers la cible i est `2 d_i × periode_s × N / (crans × navettes)`.
+ * Le site ne connaît pas N (il ne connaît pas le plateau), donc il ne montre
+ * que ce repère.
  */
 export function cransParTrajet(distance: number): number {
   return 2 * Math.max(1, Math.trunc(distance));
@@ -1311,8 +1319,14 @@ export function logistiqueDe(tuile: { logistique?: unknown }): Logistique {
             : [],
           rayon: r?.rayon === null || r?.rayon === undefined ? null : Math.max(0, entier(r.rayon)),
           ressources: codes(r?.ressources),
+          // ⚠️ Même règle que pour `crans` : ABSENT = 1 navette (les règles
+          // d'avant le 06/09), ZÉRO SAISI = rien ne circule. Un `|| 1` ici
+          // rendait le zéro impossible à enregistrer (corrigé le 07/09).
           debit: {
-            navettes: Math.max(0, entier(r?.debit?.navettes) || 1),
+            navettes:
+              r?.debit?.navettes === undefined || r?.debit?.navettes === null
+                ? 1
+                : Math.max(0, entier(r.debit.navettes)),
             quantite: Math.max(0, entier(r?.debit?.quantite)),
           },
           // ⚠️ ABSENT ET ZÉRO NE VEULENT PAS DIRE LA MÊME CHOSE. Les règles
@@ -1396,7 +1410,8 @@ export function decrireAppro(
         `${chargeParVolee(r)} par voyage, à ${r.vitesse.crans} cran${
           r.vitesse.crans > 1 ? "s" : ""
         } / ${formatDuree(r.vitesse.periode_s)} aller-retour ` +
-        `(${chargeParVolee(r)} toutes les ${formatDuree(dureeTrajet(r, 1) as number)} à 1 case)`;
+        `(${chargeParVolee(r)} toutes les ${formatDuree(dureeTrajet(r, 1) as number)} à 1 case ` +
+        `pour une seule cible ; la flotte se partage entre ses cibles)`;
   return r.sens === "entrant"
     ? `Prend ${quoi} chez ${qui} ${ou} — ${combien}.`
     : `Envoie ${quoi} vers ${qui} ${ou} — ${combien}.`;
