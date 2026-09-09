@@ -6,7 +6,6 @@ import { messageErreur, pb } from "@/lib/pb";
 import { loadRessources, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
   categoriesDe,
-  formatDuree,
   loadTuiles,
   tileIdsDe,
   tuilesParAlphabet,

@@ -24,7 +24,6 @@ import {
   couleurDe,
   estCommun,
   estEntrepot,
-  formatDuree,
   loadTuiles,
   logistiqueDe,
   paliersDe,

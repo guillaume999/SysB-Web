@@ -152,16 +152,19 @@ export interface ReglePlacement {
    * Sur quoi porte le maximum.
    *
    * - `plateau` : sur le plateau courant. La colonie et la station comptent
-   *   séparément, comme tout le reste du modèle. **C'est le seul cas qu'Unity
-   *   sait appliquer aujourd'hui.**
+   *   séparément, comme tout le reste du modèle.
    * - `empire` : tous plateaux confondus.
    *
-   * ⚠️ **`empire` n'est PAS encore appliqué en jeu** — `PlacementValidator`
-   * compte le seul plateau courant. Le champ est saisi et enregistré, mais
-   * l'écran le dit en orange sous la règle : c'est la différence entre un champ
-   * qui ment et un champ pas encore branché. **Retirer cet avertissement en
-   * même temps que le rattrapage Unity, pas avant** — voir
-   * [[feedback-filtre-nest-pas-regle]].
+   * ⚠️ **Les deux sont appliqués depuis le 28/08**, et des deux côtés :
+   * `PlacementValidator` avec la liste des plateaux que lui passe
+   * `PlateauGenerator.PlateauxVus()`, et `compterEmpire`
+   * (`pb_hooks/moteur/placement.js`) côté serveur. L'avertissement orange qui
+   * vivait sous la règle est parti le même jour, AVEC le mécanisme.
+   *
+   * ⚠️ Un seul repli subsiste : **sans la liste des autres plateaux**, la
+   * limite se compte sur le seul plateau courant, et les deux moteurs le
+   * disent en avertissement plutôt que de l'appliquer en silence — une limite
+   * trop stricte se voit, une limite muette ne se voit jamais.
    */
   portee: PorteeLimite;
   // --- gratuite ---
@@ -438,12 +441,13 @@ export interface LigneCout {
  *   ses lignes, productions comme consommations. Ce n'est donc pas vraiment
  *   une règle « de ligne » : la ligne n'est que l'endroit où on l'écrit.
  *
- * ⚠️ **Le format a changé le 30/08, et Unity lit encore l'ancien**
- * (`ResolutionHorsLigne.FacteurProximite`) : `tileId` (un seul) est devenu
- * `tileIds` (une liste), et le champ d'une ligne est passé de `proximite` (un
- * objet) à `proximites` (une liste). `normaliserProximites` relit l'ancien
- * format, mais plus rien ne l'écrit — **le jeu doit être rattrapé**, sinon les
- * proximités déjà saisies cessent d'agir.
+ * ⚠️ **Le format a changé le 30/08, et les deux bouts ont suivi** : `tileId`
+ * (un seul) est devenu `tileIds` (une liste), et le champ d'une ligne est passé
+ * de `proximite` (un objet) à `proximites` (une liste). Les TROIS lecteurs
+ * relisent l'ancien format en plus du nouveau — ici `normaliserProximites`,
+ * côté moteur `proximitesDe` (`pb_hooks/moteur/catalogue.js`), côté jeu
+ * `Proximite.Reunir` (`TuileModele.cs`) — donc une proximité saisie avant le
+ * 30/08 agit toujours. Seul le nouveau format s'écrit.
  */
 export interface Proximite {
   /**
@@ -766,13 +770,16 @@ export interface Palier {
   /**
    * Durée du chantier, en secondes. `0` = instantané.
    *
-   * ⚠️ **Pas encore appliqué en jeu** : tout se construit instantanément, et
-   * `EtatCase` n'a aucun champ de fin de chantier — il n'a que `niveau`,
-   * `actif`, `stock` et `t`. Le champ est saisi et enregistré, mais l'écran le
-   * dit en orange dès qu'on met autre chose que zéro. Même traitement que
-   * `portee: "empire"` : un champ **pas encore branché** l'annonce, un champ
-   * **qui ment** ne dit rien. **Retirer l'avertissement avec le mécanisme, pas
-   * avant.**
+   * ⚠️ **Appliqué depuis le 28/08.** La pose écrit la fin du chantier dans
+   * l'état de la case (`EtatCase.chantier`, en heure serveur), et la case reste
+   * INERTE jusque-là : elle ne produit pas, ne consomme pas, et ses navettes
+   * ne partent pas. Les deux moteurs le font — `Construction.Poser` côté jeu,
+   * `geste.js` côté serveur — et la résolution compte la production depuis
+   * cette frontière, en temps absolu, donc invariante aux cadences.
+   *
+   * ⚠️ **Le prix est payé à la pose, pas à la livraison** : démolir en plein
+   * chantier ne rembourse rien, même sanction qu'un bâtiment fini. L'avertissement
+   * orange de l'écran est parti le 28/08, avec l'arrivée du mécanisme.
    */
   duree_construction_s: number;
   /**

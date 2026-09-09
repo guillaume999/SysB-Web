@@ -21,10 +21,16 @@
  * (eau, forêt, volcan) et les tuiles pas encore classées. Aucun record ne peut
  * porter le numéro 0 — voir `NUMERO_MIN`.
  *
- * ⚠️ **Le jeu ne lit pas encore cette table**, pas plus que `technologies` :
- * rien ne verrouille un âge tant que ses bâtiments ne sont pas debout, et rien
- * ne refuse de construire hors de son âge. L'écran le dit en orange. Retirer
- * l'avertissement AVEC le mécanisme, pas avant.
+ * ⚠️ **Le classement sert déjà ; le verrou, non.** Le jeu lit bien cette table
+ * (`AgeCatalogService` la charge, `AgeCatalogue` la garde) : c'est d'elle que
+ * viennent les bandes du magasin et de l'écran des technos. Ce qui n'est lu par
+ * personne, ce sont les **bâtiments qui ouvrent un âge** — rien ne verrouille un
+ * âge tant qu'ils ne sont pas debout, et rien ne refuse de construire hors de
+ * son âge. L'écran le dit en orange. Retirer l'avertissement AVEC le mécanisme,
+ * pas avant.
+ *
+ * ⚠️ Ne PAS étendre cet avertissement aux technologies : elles, le jeu les
+ * applique depuis le rattrapage du 28/08 — voir `technologies.ts`.
  *
  * Déclaré en `type` et non en `interface`, comme `Ressource` : le SDK
  * PocketBase attend un `RecordModel` indexable, auquel une interface n'est pas

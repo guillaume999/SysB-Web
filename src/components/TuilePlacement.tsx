@@ -135,11 +135,12 @@ export default function TuilePlacement({
           Le nombre maximum d'exemplaires que le joueur peut avoir.
           <br />
           <strong>Sur ce plateau</strong> : la colonie et la station comptent separement, comme
-          tout le reste du modele. C'est le seul cas que le jeu applique aujourd'hui.
+          tout le reste du modele.
           <br />
-          <strong>Dans tout l'empire</strong> : tous plateaux confondus. Le choix est enregistre,
-          mais <strong>pas encore applique en jeu</strong> — un avertissement orange le rappelle
-          sous la regle des que tu le choisis. Il disparaitra quand le jeu saura compter partout.
+          <strong>Dans tout l'empire</strong> : tous plateaux confondus. Applique depuis le 28/08,
+          des deux cotes. Seul repli : si le jeu n'a pas encore recu les autres plateaux, il
+          compte le plateau courant et le dit — une limite trop stricte se voit, une limite
+          muette ne se voit jamais.
         </Terme>
         <Terme nom="batiments requis">
           Ce qu'il faut <strong>deja avoir construit</strong> sur ce plateau pour avoir le droit
@@ -150,8 +151,8 @@ export default function TuilePlacement({
           Le compte est celui du <strong>moment</strong>, sur le plateau ou tu poses : demolir une
           ferme peut rendre la tuile a nouveau impossible.
           <br />
-          ⚠️ <strong>Pas encore appliquee en jeu</strong> : le validateur ne connait que le support
-          et la limite. Un avertissement orange le rappelle sous la regle.
+          Elle ne regarde pas la case : le <strong>magasin</strong> grise donc la carte avant meme
+          qu'une case soit visee, avec la meme phrase de refus qu'a la pose.
         </Terme>
         <Terme nom="technologie requise">
           La recherche qu'il faut avoir faite, et <strong>jusqu'a quel niveau</strong>. Une techno
@@ -160,8 +161,8 @@ export default function TuilePlacement({
           <br />
           Niveau 1 = il suffit de l'avoir cherchee.
           <br />
-          ⚠️ <strong>Pas encore appliquee en jeu</strong> : le jeu ne lit pas encore la collection
-          des technologies — rien ne sait si une recherche est acquise.
+          Le niveau acquis est lu dans <code>users.technos</code> ; comme les batiments requis,
+          elle ne regarde pas la case, donc le magasin la verifie aussi avant la pose.
         </Terme>
         <Terme nom="cette tuile">
           Une tuile peut se citer elle-meme : le catalogue n'est plus ampute de la tuile en cours

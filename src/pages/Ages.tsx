@@ -153,8 +153,9 @@ export default function Ages() {
         <span className="font-medium">Le classement sert deja</span> : les bandes de l'ecran Tuiles
         et celles de l'ecran Technologie viennent d'ici. En revanche{" "}
         <span className="font-medium">les batiments qui ouvrent un age ne sont lus par personne</span>{" "}
-        : le jeu ne verrouille rien, et ne refuse pas de construire hors de son age. C'est le meme
-        chantier de moteur que les technologies.
+        : le jeu ne verrouille rien, et ne refuse pas de construire hors de son age. C'est le
+        dernier vocabulaire pose d'avance — les technologies, elles, sont appliquees depuis le
+        28/08.
       </p>
 
       {erreur && (
@@ -382,7 +383,7 @@ function AgeDialog({
             conditions — il les faut TOUS.
             <br />
             ⚠️ Rien ne les applique aujourd'hui : le jeu ne verrouille aucun age. C'est du
-            vocabulaire pose d'avance, comme la regle des technos.
+            vocabulaire pose d'avance — le seul qui reste.
           </Terme>
         </Aide>
 

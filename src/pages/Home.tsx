@@ -52,7 +52,7 @@ export default function Home() {
         to: "/technologies",
         collection: "technologies",
         label: "Technologie",
-        hint: "L'arbre : ce qu'une techno coûte, exige et débloque. Le jeu ne la lit pas encore.",
+        hint: "L'arbre : ce qu'une techno coûte, exige et débloque — verrous, entretien et effets compris.",
       },
       {
         cle: "templates",

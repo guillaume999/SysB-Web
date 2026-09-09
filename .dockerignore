@@ -1,3 +1,7 @@
 node_modules
 dist
 .git
+# Sorti du contexte de build : le lint l'ignore déjà, et il part bientôt.
+_a_supprimer
+.cache_bust_5
+tsconfig.tsbuildinfo

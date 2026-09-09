@@ -6,7 +6,6 @@ import GrillePlateau, { couleurTuile } from "@/components/GrillePlateau";
 import { messageErreur, pb } from "@/lib/pb";
 import { TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
 import {
-  COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
   TILE_VIDE,
   amorcageDe,
