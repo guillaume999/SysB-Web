@@ -43,6 +43,7 @@ import {
   type TypePlateau,
   type ValeursTuile,
 } from "@/lib/tuiles";
+import { type2Connus, type Plateau } from "@/lib/plateaux";
 
 /**
  * Creation / modification d'une tuile du catalogue.
@@ -66,6 +67,7 @@ const ONGLETS: { cle: Onglet; libelle: string }[] = [
 export default function TuileDialog({
   tuile,
   tuiles,
+  templates,
   modeles,
   ressources,
   ages,
@@ -79,6 +81,12 @@ export default function TuileDialog({
 }: {
   tuile: Tuile | null;
   tuiles: Tuile[];
+  /**
+   * Les modeles de plateau — **lus pour la seule saisie du type 2** : une
+   * etiquette tapee sur un modele doit se proposer ici, sinon le champ libre
+   * refabrique les jumelles qu'il est cense eviter.
+   */
+  templates: Plateau[];
   modeles: Modele3D[];
   ressources: Ressource[];
   /** Les ages declares — onglet Ages. C'est eux que propose la liste, jamais un nombre libre. */
@@ -107,6 +115,9 @@ export default function TuileDialog({
   const [nom, setNom] = useState(tuile?.nom ?? "");
   const [modele, setModele] = useState(tuile?.modele ?? "");
   const [type, setType] = useState<TypePlateau>(tuile?.typeOfPlateau ?? "ground");
+  // ⚠️ La seconde etiquette, libre et STRICTE : vide, la tuile ne se peint que
+  //    sur les plateaux sans etiquette. Voir `lib/plateaux.ts`.
+  const [type2, setType2] = useState(tuile?.typeOfPlateau2 ?? "");
   // ⚠️ PLUSIEURS CATEGORIES DEPUIS LE 2026-08-30, toutes egales : l'etat est une
   //    LISTE, le champ en base reste UNE ligne separee par des virgules.
   const [categories, setCategories] = useState<string[]>(() => categoriesDe(tuile));
@@ -164,6 +175,13 @@ export default function TuileDialog({
    * batiments identiques a l'ecran se distinguent alors mal en jeu.
    */
   const usages = useMemo(() => tuilesParModele(tuiles), [tuiles]);
+
+  /**
+   * Les etiquettes de type 2 deja ecrites, tuiles ET modeles confondus : le
+   * champ est libre, la liste est la pour qu'on reprenne la sienne au lieu d'en
+   * retaper une variante.
+   */
+  const type2Proposes = useMemo(() => type2Connus(tuiles, templates), [tuiles, templates]);
 
   /** Les AUTRES tuiles qui visent le modele choisi — la tuile en cours exclue. */
   const autresTuilesDuModele = useMemo(
@@ -305,6 +323,7 @@ export default function TuileDialog({
       chemin_icone: cheminIcone.trim(),
       modele,
       typeOfPlateau: type,
+      typeOfPlateau2: type2.trim(),
       categorie: categoriesVersTexte(categories),
       description: description.trim(),
       couleur: couleur.trim(),
@@ -608,6 +627,39 @@ export default function TuileDialog({
                   <p className="mt-1 text-xs text-slate-500">Deduit du dossier du modele.</p>
                 </div>
 
+                {/*
+                  ⚠️ TYPE DE PLATEAU 2 (13/09) — la seconde etiquette, LIBRE.
+                  Elle ne dit pas sur quel decor la tuile se joue, elle dit a
+                  quels plateaux elle est RESERVEE : le pinceau de l'editeur ne
+                  propose que les tuiles dont les DEUX types collent au plateau.
+
+                  ⚠️⚠️ **Vide compte comme une valeur** : laisse vide, la tuile
+                  ne se peint que sur les modeles sans etiquette — c'est-a-dire
+                  partout ou l'on peignait avant. Remplie, elle disparait de tous
+                  les autres plateaux. C'est voulu.
+                */}
+                <div>
+                  <label className="label" htmlFor="tuile-type2">
+                    Type de plateau 2
+                  </label>
+                  <input
+                    id="tuile-type2"
+                    className="input"
+                    list="tuile-type2-connus"
+                    placeholder="aucun — peignable sur les plateaux sans etiquette"
+                    value={type2}
+                    onChange={(e) => setType2(e.target.value)}
+                  />
+                  <datalist id="tuile-type2-connus">
+                    {type2Proposes.map((t) => (
+                      <option key={t} value={t} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Reserve la tuile aux plateaux portant la meme etiquette. Vide = les plateaux
+                    sans etiquette.
+                  </p>
+                </div>
               </div>
 
               {/*

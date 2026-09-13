@@ -22,7 +22,9 @@ import {
   libelleProprietaire,
   loadPlateau,
   nettoyerEtats,
+  palettePourPlateau,
   redimensionner,
+  type2Connus,
   type Amorcage,
   type EtatCase,
   type Plateau,
@@ -67,6 +69,9 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   // Le cadre
   const [nom, setNom] = useState("");
   const [type, setType] = useState<TypePlateau>("ground");
+  // ⚠️ La seconde etiquette (13/09) : elle RESERVE ce plateau aux tuiles qui
+  //    portent la meme. Vide = les tuiles sans etiquette, l'etat d'avant.
+  const [type2, setType2] = useState("");
   const [largeur, setLargeur] = useState(0);
   const [hauteur, setHauteur] = useState(0);
   const [actif, setActif] = useState(false);
@@ -104,6 +109,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
       setRessources(r);
       setNom(p.nom ?? "");
       setType(p.typeOfPlateau);
+      setType2(p.typeOfPlateau2 ?? "");
       setLargeur(p.largeur);
       setHauteur(p.hauteur);
       setActif(Boolean(p.actif));
@@ -125,8 +131,26 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
 
   // Les tuiles proposées suivent le type du plateau : peindre une tuile `space`
   // sur un plateau `ground` donnerait un prefab qui n'a rien à faire là.
+  //
+  // ⚠️ **Et le type 2 depuis le 13/09**, strictement, vide compris : donner une
+  // étiquette à ce plateau vide sa palette tant qu'aucune tuile ne porte la
+  // même. La règle vit dans `palettePourPlateau()` — elle y est testée.
   const palette = useMemo(
-    () => tuiles.filter((t) => t.typeOfPlateau === type).sort((a, b) => a.tileId - b.tileId),
+    () => palettePourPlateau(tuiles, type, type2),
+    [tuiles, type, type2],
+  );
+
+  /** Les étiquettes déjà écrites sur une tuile, pour ne pas en retaper une variante. */
+  const type2Proposes = useMemo(() => type2Connus(tuiles), [tuiles]);
+
+  /**
+   * Combien de tuiles ce plateau aurait SANS le type 2. Sert au seul message de
+   * palette vide, mais il compte : « aucune tuile ground » et « aucune tuile
+   * ground étiquetée Jupiter » ne se réparent pas au même endroit, et sans ce
+   * compte le second se lit comme le premier.
+   */
+  const duType1 = useMemo(
+    () => tuiles.filter((t) => t.typeOfPlateau === type).length,
     [tuiles, type],
   );
 
@@ -238,6 +262,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
       const corps: Record<string, unknown> = {
         nom: nom.trim(),
         typeOfPlateau: type,
+        typeOfPlateau2: type2.trim(),
         largeur,
         hauteur,
         tilesBase64: encoderTiles(octets),
@@ -317,7 +342,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
 
       {/* ── Le cadre ──────────────────────────────────────────────────────── */}
       <div className="card mb-4 p-3">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="lg:col-span-2">
             <label className="label" htmlFor="ed-nom">
               Nom
@@ -351,6 +376,33 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                 </option>
               ))}
             </select>
+          </div>
+          {/*
+            ⚠️ TYPE 2 (13/09) : l'étiquette qui RÉSERVE ce plateau. Le pinceau ne
+            propose plus que les tuiles portant exactement la même — vide
+            compris, donc un plateau sans étiquette ne voit que les tuiles sans
+            étiquette. C'est la demande, et c'est ce qui rend la réserve étanche.
+          */}
+          <div>
+            <label className="label" htmlFor="ed-type2">
+              Type de plateau 2
+            </label>
+            <input
+              id="ed-type2"
+              className="input"
+              list="ed-type2-connus"
+              placeholder="aucun"
+              value={type2}
+              onChange={(e) => {
+                setType2(e.target.value);
+                setModifie(true);
+              }}
+            />
+            <datalist id="ed-type2-connus">
+              {type2Proposes.map((t) => (
+                <option key={t} value={t} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label className="label" htmlFor="ed-l">
@@ -503,8 +555,31 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
           )}
           {palette.length === 0 && (
             <p className="mb-2 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
-              Aucune tuile <code>{type}</code> au catalogue : il n'y a rien à peindre. Crée d'abord
-              des <Link to="/tuiles" className="underline">tuiles</Link> de ce type.
+              {duType1 === 0 ? (
+                <>
+                  Aucune tuile <code>{type}</code> au catalogue : il n'y a rien à peindre. Crée
+                  d'abord des{" "}
+                  <Link to="/tuiles" className="underline">
+                    tuiles
+                  </Link>{" "}
+                  de ce type.
+                </>
+              ) : type2.trim() !== "" ? (
+                <>
+                  Aucune des {duType1} tuiles <code>{type}</code> ne porte le type 2{" "}
+                  <code>{type2.trim()}</code> : la palette est vide. Donne cette étiquette aux{" "}
+                  <Link to="/tuiles" className="underline">
+                    tuiles
+                  </Link>{" "}
+                  que tu veux réserver à ce plateau, ou efface-la ci-dessus.
+                </>
+              ) : (
+                <>
+                  Les {duType1} tuiles <code>{type}</code> du catalogue portent toutes un type 2, et
+                  ce plateau n'en a pas : la palette est vide. Donne-lui l'étiquette voulue
+                  ci-dessus.
+                </>
+              )}
             </p>
           )}
           <GrillePlateau

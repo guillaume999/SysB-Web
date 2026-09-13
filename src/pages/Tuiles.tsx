@@ -970,6 +970,7 @@ export default function Tuiles() {
         <TuileDialog
           tuile={dialog.tuile}
           tuiles={tuiles}
+          templates={templates}
           modeles={modeles}
           ressources={ressources}
           ages={ages}

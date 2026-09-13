@@ -148,6 +148,14 @@ export type Plateau = {
   collectionName: string;
   nom: string;
   typeOfPlateau: TypePlateau;
+  /**
+   * La seconde etiquette, libre — voir « Type de plateau 2 » plus bas.
+   *
+   * ⚠️ **Optionnel, et ca compte** : aucun record d'avant le 13/09 ne le porte.
+   * Absent = pas d'etiquette, donc le plateau ne peint que les tuiles qui n'en
+   * ont pas non plus. Lire par `type2Normalise()`, jamais a cru.
+   */
+  typeOfPlateau2?: string;
   largeur: number;
   hauteur: number;
   tilesBase64: string;
@@ -175,6 +183,7 @@ export type Plateau = {
 export interface ValeursPlateau {
   nom: string;
   typeOfPlateau: TypePlateau;
+  typeOfPlateau2: string;
   largeur: number;
   hauteur: number;
   tilesBase64: string;
@@ -182,6 +191,78 @@ export interface ValeursPlateau {
   actif?: boolean;
   amorcage?: Amorcage;
   ownerId?: string;
+}
+
+// --- Type de plateau 2 : reserver un catalogue a un modele -------------------
+//
+// Pose le 2026-09-13. `typeOfPlateau` (ground / space / TPTplateau) dit sur quel
+// DECOR une tuile se joue : trois valeurs en dur, deduites du dossier du prefab.
+// Il ne sait pas separer deux plateaux du MEME decor — deux modeles `ground`
+// partagent forcement toutes les tuiles `ground`.
+//
+// `typeOfPlateau2` est la seconde etiquette qui les separe. Elle est **libre** :
+// on la tape sur la tuile, et le modele de plateau reprend celle qu'il veut. Le
+// pinceau de l'editeur ne propose alors que les tuiles qui portent la meme.
+//
+// ⚠️⚠️ **LA COMPARAISON EST STRICTE, LE VIDE COMPRIS** — demande de
+// l'utilisateur le 13/09, en connaissance de ce qu'elle coute : donner un type 2
+// a un modele VIDE SA PALETTE tant qu'aucune tuile ne porte la meme etiquette,
+// et une tuile etiquetee disparait de tous les autres plateaux. C'est ce qui
+// fait du type 2 une reserve et non une decoration.
+//
+// ⚠️ Les espaces et la casse ne comptent pas : « Jupiter », « jupiter » et
+// « Jupiter  » sont la meme etiquette. Sans ca, un champ libre fabrique des
+// jumelles qui ne se voient qu'en peignant — c'est exactement ce qui est arrive
+// aux categories de tuiles avant les cases a cocher du 30/08.
+//
+// ⚠️ **Rien de tout ceci ne part au jeu** : le moteur ne lit pas ce champ, il
+// n'y a que l'editeur du site qui filtre. Une tuile posee avant l'etiquetage
+// reste en place et continue de tourner.
+
+/** Une etiquette telle qu'on la compare : sans les espaces des deux bouts. */
+export function type2Normalise(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/** Deux etiquettes sont-elles la meme ? Vide compris — voir le bloc ci-dessus. */
+export function memeType2(a: unknown, b: unknown): boolean {
+  return (
+    type2Normalise(a).toLocaleLowerCase("fr") === type2Normalise(b).toLocaleLowerCase("fr")
+  );
+}
+
+/**
+ * Les etiquettes deja ecrites quelque part, pour la saisie assistee.
+ *
+ * Prend plusieurs sources (les tuiles, les modeles) parce qu'un type 2 nait
+ * indifferemment de l'un ou de l'autre : celui qu'on vient de taper sur un
+ * modele doit se proposer sur la tuile, et l'inverse. Les jumelles de casse sont
+ * fondues, la premiere orthographe vue l'emporte.
+ */
+export function type2Connus(...sources: { typeOfPlateau2?: string }[][]): string[] {
+  const vues = new Map<string, string>();
+  for (const source of sources) {
+    for (const o of source ?? []) {
+      const v = type2Normalise(o?.typeOfPlateau2);
+      const cle = v.toLocaleLowerCase("fr");
+      if (v !== "" && !vues.has(cle)) vues.set(cle, v);
+    }
+  }
+  return [...vues.values()].sort((a, b) => a.localeCompare(b, "fr"));
+}
+
+/**
+ * La palette du pinceau : les tuiles qu'on a le droit de peindre sur ce plateau.
+ *
+ * Les DEUX types doivent coller. Le tri par `tileId` est celui du catalogue, le
+ * meme que partout ailleurs dans le site.
+ */
+export function palettePourPlateau<
+  T extends { tileId: number; typeOfPlateau: TypePlateau; typeOfPlateau2?: string },
+>(tuiles: T[], type: TypePlateau, type2: unknown): T[] {
+  return tuiles
+    .filter((t) => t.typeOfPlateau === type && memeType2(t.typeOfPlateau2, type2))
+    .sort((a, b) => a.tileId - b.tileId);
 }
 
 // --- Encodage ---------------------------------------------------------------

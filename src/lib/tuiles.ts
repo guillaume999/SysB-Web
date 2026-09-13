@@ -1754,6 +1754,19 @@ export type Tuile = {
    */
   rattachement?: string;
   typeOfPlateau: TypePlateau;
+  /**
+   * **La seconde etiquette de plateau** (13/09) — libre, tapee ici, reprise par
+   * les modeles de plateau. Elle ne dit pas sur quel decor la tuile se joue
+   * (c'est `typeOfPlateau`) : elle dit **A QUELS PLATEAUX elle est reservee**.
+   *
+   * ⚠️ Affaire d'EDITEUR seulement : le moteur ne la lit pas. Elle decide de ce
+   * que le pinceau propose — voir `palettePourPlateau()` dans `lib/plateaux.ts`,
+   * ou la comparaison stricte (vide compris) est expliquee.
+   *
+   * ⚠️ **Optionnel** : aucune tuile d'avant le 13/09 ne le porte. Absent = pas
+   * d'etiquette, donc peignable sur les seuls plateaux qui n'en ont pas.
+   */
+  typeOfPlateau2?: string;
   categorie: string;
   description: string;
   /**
@@ -1808,6 +1821,7 @@ export interface ValeursTuile {
   chemin_icone: string;
   modele: string;
   typeOfPlateau: TypePlateau;
+  typeOfPlateau2: string;
   categorie: string;
   description: string;
   couleur: string;
