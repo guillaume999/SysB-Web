@@ -17,6 +17,7 @@ import {
   proximiteUtile,
   rendEnVeille,
   rendementPourIndicateur,
+  satisfactionMax as satisfactionMaxDuPalier,
   seuilsEnDouble,
   tranchesCouvrentZero,
   tranchesTriees,
@@ -238,6 +239,22 @@ export default function TuileCouts({
           satisfaction. C'est ce qui lisse les indices — la famine reste visible <em>entre</em>{" "}
           types, plus à l'intérieur d'un type.
         </Terme>
+        <Terme nom="bonus">
+          Sur une ligne de consommation, un <strong>bonus</strong> fait monter la satisfaction{" "}
+          <strong>au-dessus de 100 %</strong> : 10 nourriture (ligne ordinaire) + 5 gibier
+          (bonus 20 %) donnent 120 % quand les deux sont servis, 108 % si le gibier n&apos;arrive
+          qu&apos;aux deux cinquièmes, 100 % sans gibier du tout.
+          <br />
+          ⚠️ Une ligne bonus <strong>n&apos;entre pas dans la demande de base</strong> — c&apos;est
+          ce qui permet de dépasser 100 — et elle <strong>ne bloque jamais un cycle</strong> : le
+          « en plus » ne doit pas devenir un « obligatoire ». Elle se consomme quand même, elle
+          coûte vraiment.
+          <br />
+          ⚠️ Le surplus ne paie <strong>que par l&apos;escalier</strong> d&apos;une production, avec
+          une tranche écrite au-dessus de 100 (« de 120 → 130 % »). Une production ordinaire, elle,
+          reste plafonnée à sa quantité déclarée. Aucun plafond n&apos;est imposé : c&apos;est le
+          catalogue qui borne, en n&apos;écrivant pas de tranche plus haut.
+        </Terme>
         <Terme nom="satisfaction">
           <strong>Elle ne se déclare pas, elle se constate.</strong> Tout bâtiment qui consomme
           publie la sienne : ce qu'il a reçu sur ce qu'il demandait. 15 blé servis sur 20
@@ -428,6 +445,7 @@ export default function TuileCouts({
                   toutes={ressources}
                   indicateurs={indicateurs}
                   consomme={palier.utilisation.some((l) => l.ressource !== "" && l.quantite > 0)}
+                  satisfactionMax={satisfactionMaxDuPalier(palier.utilisation)}
                   nomRessource={nomRessource}
                   tuiles={tuiles}
                   nomTuile={nomTuile}
@@ -714,6 +732,31 @@ function LigneAZero({ ligne }: { ligne: { ressource: string; quantite: number } 
 }
 
 /**
+ * **Ce qu'une ligne BONUS fait vraiment** (§5.5, 13/09) — la relecture avec ses
+ * VRAIS chiffres, parce qu'un pourcentage de satisfaction se verifie d'un coup
+ * d'oeil et une regle ne se verifie pas.
+ *
+ * ⚠️ Les deux phrases comptent autant l'une que l'autre : « n'entre pas dans
+ * la demande de base » est ce qui permet de depasser 100, « ne bloque jamais »
+ * est ce qui empeche le bonus de devenir obligatoire.
+ */
+function RelectureBonus({ ligne }: { ligne: LigneFlux }) {
+  if (ligne.bonus <= 0) return null;
+  return (
+    <p className="mt-1 text-[11px] leading-tight text-slate-500">
+      <strong>+{ligne.bonus} %</strong> de satisfaction quand la ligne est servie entierement,{" "}
+      <span className="tabular-nums text-slate-400">
+        +{Math.floor(ligne.bonus / 2)} %
+      </span>{" "}
+      a moitie servie, <span className="text-slate-400">+0 %</span> sans rien — elle ne retire{" "}
+      <em>jamais</em>. Elle <strong>n&apos;entre pas dans la demande de base</strong> : c&apos;est
+      ce qui fait monter au-dessus de 100 %. Et elle{" "}
+      <strong>ne bloque jamais le cycle</strong> — sans elle, le batiment tourne quand meme.
+    </p>
+  );
+}
+
+/**
  * Ce que la tuile fabrique a chaque cycle.
  *
  * ⚠️ Deplacee ici depuis Stock & appro le 26/08 : c'est ce que le batiment
@@ -731,6 +774,7 @@ function LignesProduction({
   toutes,
   indicateurs,
   consomme,
+  satisfactionMax,
   nomRessource,
   tuiles,
   nomTuile,
@@ -743,6 +787,8 @@ function LignesProduction({
   indicateurs: Ressource[];
   /** Le palier consomme-t-il quelque chose ? Sinon sa satisfaction vaut 100 %. */
   consomme: boolean;
+  /** 100, plus les bonus des lignes de consommation (§5.5) — le plafond de ce palier. */
+  satisfactionMax: number;
   nomRessource: (code: string) => string;
   /** Le catalogue, pour les tuiles que la proximite demande autour (30/08). */
   tuiles: Tuile[];
@@ -857,6 +903,7 @@ function LignesProduction({
 
                 {avecIndice && (
                   <Escalier
+                    satisfactionMax={satisfactionMax}
                     tranches={ligne.tranches}
                     quantite={ligne.quantite}
                     indicateur={ligne.indicateur}
@@ -970,12 +1017,18 @@ function AvertissementProduction({
  * ⚠️ Des pour CENT, partout : seuils, rendements, indicateur (§3).
  */
 function Escalier({
+  satisfactionMax,
   tranches,
   quantite,
   indicateur,
   nomRessource,
   onChange,
 }: {
+  /**
+   * La satisfaction la plus haute que ce palier puisse atteindre : 100, plus
+   * ses lignes bonus (§5.5). Une tranche au-dessus ne s'ouvrirait jamais.
+   */
+  satisfactionMax: number;
   tranches: Tranche[];
   quantite: number;
   indicateur: string;
@@ -1001,28 +1054,36 @@ function Escalier({
         {triees.map((t, i) => {
           // Le haut de la tranche est celui du dessus : on le LIT, on ne le
           // saisit pas. 100 pour la premiere.
-          const haut = i === 0 ? 100 : triees[i - 1].seuil;
+          // ⚠️ LA TRANCHE DU HAUT N'A PLUS DE PLAFOND (13/09) : une
+          // satisfaction peut depasser 100, donc « de 80 a 100 % » serait
+          // faux — c'est « de 80 % et au-dessus ».
+          const haut = i === 0 ? null : triees[i - 1].seuil;
           return (
             <div key={i} className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
               de
               <input
                 type="number"
                 min={0}
-                max={100}
                 step={1}
                 className="input h-8 w-16 py-0"
                 value={t.seuil}
-                onChange={(e) => maj(i, { seuil: Math.min(100, entierSaisi(e.target.value)) })}
+                onChange={(e) => maj(i, { seuil: entierSaisi(e.target.value) })}
               />
-              à <span className="tabular-nums text-slate-400">{haut}</span> % →
+              {haut === null ? (
+                <span className="text-slate-400">% et au-dessus</span>
+              ) : (
+                <>
+                  à <span className="tabular-nums text-slate-400">{haut}</span> %
+                </>
+              )}
+              →
               <input
                 type="number"
                 min={0}
-                max={100}
                 step={1}
                 className="input h-8 w-16 py-0"
                 value={t.rendement}
-                onChange={(e) => maj(i, { rendement: Math.min(100, entierSaisi(e.target.value)) })}
+                onChange={(e) => maj(i, { rendement: entierSaisi(e.target.value) })}
               />
               % de rendement
               <span className="tabular-nums text-slate-400">
@@ -1065,6 +1126,18 @@ function Escalier({
           sinon un {nom} catastrophique donnerait la production maximale.
         </p>
       )}
+      {/* ⚠️⚠️ LA FAUTE QUI SE DECOUVRIRAIT EN JEU, TROIS SEMAINES PLUS TARD :
+          une tranche au-dessus de ce que le palier peut atteindre ne s'ouvre
+          JAMAIS, et rien ne le dirait. */}
+      {triees.length > 0 && triees[0].seuil > satisfactionMax && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-300">
+          La tranche du haut part de {triees[0].seuil} %, mais ce palier plafonne à{" "}
+          {satisfactionMax} % : elle ne s&apos;ouvrira <strong>jamais</strong>. Pour dépasser 100,
+          il faut une ligne de consommation portant un <strong>bonus</strong> (bouton
+          «&nbsp;+&nbsp;bonus&nbsp;» sur la ligne, plus haut) — le bonus se déclare sur ce que le
+          bâtiment MANGE, pas ici.
+        </p>
+      )}
       {seuilsEnDouble(triees) && (
         <p className="mt-1 text-[11px] leading-tight text-amber-300">
           Deux tranches partent du même seuil : le rendement dépendrait de l'ordre de lecture.
@@ -1075,7 +1148,15 @@ function Escalier({
           La valeur est relue {INDICE_LU}. Chaque bâtiment qui consomme prend{" "}
           <strong>sa</strong> tranche, et le rendement est leur moyenne{" "}
           <strong>pondérée par la population</strong>. Tous à 100 % :{" "}
-          <span className="tabular-nums text-slate-300">{livre(100)}</span> · tous à 60 % :{" "}
+          <span className="tabular-nums text-slate-300">{livre(100)}</span>
+          {satisfactionMax > 100 && (
+            <>
+              {" "}
+              · tous à {satisfactionMax} % :{" "}
+              <span className="tabular-nums text-slate-300">{livre(satisfactionMax)}</span>
+            </>
+          )}{" "}
+          · tous à 60 % :{" "}
           <span className="tabular-nums text-slate-300">{livre(60)}</span> · tous à 0 % :{" "}
           <span className="tabular-nums text-slate-300">{livre(0)}</span>.
         </p>
@@ -1143,6 +1224,35 @@ function LignesFlux({
                   en direct
                 </label>
 
+                {/* ⚠️ §5.5 — LE BONUS, cache tant qu'on ne l'a pas demande,
+                    exactement comme « + indice » cote production : la quasi
+                    totalite des consommations n'en portent pas. Un `×` le
+                    retire, et la ligne redevient ordinaire. */}
+                {ligne.bonus > 0 ? (
+                  <span className="flex items-center gap-1 text-xs text-slate-400">
+                    bonus
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      className="input h-9 w-16 py-1"
+                      value={ligne.bonus}
+                      onChange={(e) => maj(i, { bonus: entierSaisi(e.target.value) })}
+                    />
+                    % de satisfaction
+                    <button
+                      type="button"
+                      className="text-slate-500 hover:text-red-400"
+                      title="retirer le bonus — la ligne redevient ordinaire"
+                      onClick={() => maj(i, { bonus: 0 })}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ) : (
+                  <BoutonLigne libelle="+ bonus" onClick={() => maj(i, { bonus: 20 })} />
+                )}
+
                 {/* ⚠️ Cache tant qu'on ne l'a pas demande : la plupart des
                     consommations n'ont aucune regle de voisinage. Depuis le
                     30/08 le bouton RESTE : un deuxieme clic empile une seconde
@@ -1164,6 +1274,7 @@ function LignesFlux({
               </div>
 
               <LigneAZero ligne={ligne} />
+              <RelectureBonus ligne={ligne} />
 
               <BlocsProximite
                 proximites={ligne.proximites}

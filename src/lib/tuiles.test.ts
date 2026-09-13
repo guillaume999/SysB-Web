@@ -27,6 +27,7 @@ import {
   dureeTrajet,
   erreursPalier,
   erreursPaliers,
+  fluxVide,
   formatDuree,
   libelleCycle,
   normaliserPalier,
@@ -41,9 +42,11 @@ import {
   regleUtile,
   regleVide,
   rendementPourIndicateur,
+  satisfactionMax,
   seuilsEnDouble,
   tileIdsDe,
   tranchesCouvrentZero,
+  tranchesTriees,
   type Palier,
   type Proximite,
 } from "@/lib/tuiles";
@@ -195,7 +198,7 @@ function four(patch: Partial<Palier> = {}): Palier {
   return {
     ...palierVide(1),
     cycle_minutes: 2,
-    utilisation: [{ ressource: "ble", quantite: 20, direct: false, proximites: [] }],
+    utilisation: [{ ressource: "ble", quantite: 20, direct: false, bonus: 0, proximites: [] }],
     production: [{ ressource: "pain", quantite: 5, indicateur: "", tranches: [], proximites: [] }],
     ...patch,
   };
@@ -273,7 +276,7 @@ describe("erreursPalier — ce que le serveur refuserait", () => {
   it("une ligne à 0 par cycle ne réclame pas de cycle : elle ne partira pas en base", () => {
     const p = four({
       cycle_minutes: 0,
-      utilisation: [{ ressource: "ble", quantite: 0, direct: false, proximites: [] }],
+      utilisation: [{ ressource: "ble", quantite: 0, direct: false, bonus: 0, proximites: [] }],
       production: [],
     });
     expect(palierTourne(p)).toBe(false);
@@ -316,7 +319,7 @@ describe("paliersPourEnregistrer — ce qui part en base", () => {
   it("n'écrit plus ni `par_minute` ni `part`, et `direct` sur une consommation seulement", () => {
     const [p] = paliersPourEnregistrer([four({ demarre_partiel: true })]);
     expect(p.demarre_partiel).toBe(true);
-    expect(p.utilisation[0]).toEqual({ ressource: "ble", quantite: 20, direct: false, proximites: [] });
+    expect(p.utilisation[0]).toEqual({ ressource: "ble", quantite: 20, direct: false, bonus: 0, proximites: [] });
     expect(p.production[0]).toEqual({
       ressource: "pain",
       quantite: 5,
@@ -328,7 +331,7 @@ describe("paliersPourEnregistrer — ce qui part en base", () => {
 
   it("retire les lignes à 0 par cycle — l'écran l'a dit avant", () => {
     const p = four();
-    p.utilisation.push({ ressource: "bois", quantite: 0, direct: false, proximites: [] });
+    p.utilisation.push({ ressource: "bois", quantite: 0, direct: false, bonus: 0, proximites: [] });
     p.production.push({ ressource: "brique", quantite: 0, indicateur: "", tranches: [], proximites: [] });
     const [sortie] = paliersPourEnregistrer([p]);
     expect(sortie.utilisation.map((l) => l.ressource)).toEqual(["ble"]);
@@ -418,5 +421,90 @@ describe("categoriesDe", () => {
 
   it("remet la liste en une ligne, nettoyée au passage", () => {
     expect(categoriesVersTexte(["Habitat", " habitat ", "Eau"])).toBe("Habitat, Eau");
+  });
+});
+
+// ============================================================
+//  §5.5 — LA LIGNE BONUS : dépasser 100 % (13/09)
+//
+//  ⚠️ Ce qui se perd en silence ici : un `Math.min(100, …)` remis dans
+//  `tranchesTriees` rendrait le bonus inutilisable SANS un mot à la saisie —
+//  l'escalier se saisirait normalement et ne s'ouvrirait jamais en jeu.
+// ============================================================
+
+describe("le bonus de satisfaction (§5.5)", () => {
+  it("une ligne neuve est ORDINAIRE : bonus 0, c'est le cas de la quasi-totalité", () => {
+    expect(fluxVide("ble").bonus).toBe(0);
+  });
+
+  it("un catalogue d'avant le 13/09 se relit en lignes ordinaires — rien à migrer", () => {
+    const p = normaliserPalier({
+      niveau: 1,
+      cycle_minutes: 1,
+      utilisation: [{ ressource: "ble", quantite: 20, direct: false }],
+    }, 1);
+    expect(p.utilisation[0].bonus).toBe(0);
+    expect(satisfactionMax(p.utilisation)).toBe(100);
+  });
+
+  it("relit le bonus, et le renvoie en base tel quel", () => {
+    const p = normaliserPalier({
+      niveau: 1,
+      cycle_minutes: 1,
+      utilisation: [
+        { ressource: "nourriture", quantite: 10, direct: false },
+        { ressource: "gibier", quantite: 5, direct: false, bonus: 20 },
+      ],
+    }, 1);
+    expect(p.utilisation.map((l) => l.bonus)).toEqual([0, 20]);
+    const [sortie] = paliersPourEnregistrer([p]);
+    expect(sortie.utilisation.map((l) => l.bonus)).toEqual([0, 20]);
+  });
+
+  it("le plafond du palier est 100 + les bonus — c'est lui qui dit si une tranche s'ouvrira", () => {
+    const sans = [{ ...fluxVide("ble"), quantite: 10 }];
+    expect(satisfactionMax(sans)).toBe(100);
+
+    const avec = [
+      { ...fluxVide("nourriture"), quantite: 10 },
+      { ...fluxVide("gibier"), quantite: 5, bonus: 20 },
+      { ...fluxVide("parure"), quantite: 1, bonus: 15 },
+    ];
+    expect(satisfactionMax(avec)).toBe(135);
+  });
+
+  it("une ligne à 0 par cycle ne compte pas : elle ne partira pas en base", () => {
+    const morte = [{ ...fluxVide("gibier"), quantite: 0, bonus: 20 }];
+    expect(satisfactionMax(morte)).toBe(100);
+  });
+
+  // ⚠️⚠️ LE TEST QUI PROTÈGE TOUT LE RESTE. Avant le 13/09, `tranchesTriees`
+  // ramenait seuil ET rendement à 100 : une tranche « de 120 → 130 % » se
+  // saisissait, se relisait « de 100 → 100 % », et le bonus ne payait jamais.
+  it("l'escalier n'est PLUS plafonné à 100 : c'est ce qui fait payer le bonus", () => {
+    const escalier = [
+      { seuil: 120, rendement: 130 },
+      { seuil: 80, rendement: 100 },
+      { seuil: 0, rendement: 60 },
+    ];
+    expect(tranchesCouvrentZero(escalier)).toBe(true);
+    expect(seuilsEnDouble(escalier)).toBe(false);
+    expect(rendementPourIndicateur(escalier, 120)).toBe(130);
+    expect(rendementPourIndicateur(escalier, 135)).toBe(130);
+    expect(rendementPourIndicateur(escalier, 100)).toBe(100);
+    expect(rendementPourIndicateur(escalier, 79)).toBe(60);
+  });
+
+  it("le tri et les bornes du bas tiennent toujours : entiers, jamais négatifs", () => {
+    const triees = tranchesTriees([
+      { seuil: 0, rendement: 60.9 },
+      { seuil: 120.4, rendement: 130 },
+      { seuil: -5, rendement: -10 },
+    ]);
+    expect(triees).toEqual([
+      { seuil: 120, rendement: 130 },
+      { seuil: 0, rendement: 60 },
+      { seuil: 0, rendement: 0 },
+    ]);
   });
 });

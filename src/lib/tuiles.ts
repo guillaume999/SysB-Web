@@ -585,6 +585,30 @@ export interface LigneFlux {
    */
   direct: boolean;
   /**
+   * **Le BONUS de satisfaction de cette ligne**, en pour cent (§5.5, 13/09).
+   * `0` = ligne ordinaire, et rien ne change pour elle.
+   *
+   * Une ligne bonus **n'entre pas dans la demande de base** : elle AJOUTE son
+   * pourcentage au prorata de ce qu'elle reçoit. 10 nourriture (ordinaire) +
+   * 5 gibier (bonus 20) donnent **120 %** quand les deux sont servis, 108 %
+   * si le gibier n'arrive qu'aux deux cinquièmes, et 100 % sans gibier du
+   * tout.
+   *
+   * ⚠️ **Ce n'est PAS le retour de `part`.** `part` déclarait le poids de
+   * CHAQUE ligne, et des maisons parfaitement nourries plafonnaient pour
+   * toujours à la somme de leurs parts. Un bonus ne se déclare que sur les
+   * lignes en plus : il ne peut que monter.
+   *
+   * ⚠️ Une ligne bonus **ne bloque jamais un cycle** — sans quoi le « en
+   * plus » deviendrait un « obligatoire ». Elle se consomme quand même : elle
+   * coûte vraiment son gibier.
+   *
+   * ⚠️ Le surplus ne paie **que par l'escalier** d'une production, avec une
+   * tranche écrite au-dessus de 100 (« de 120 → 130 % »). Une ligne
+   * ordinaire, elle, reste plafonnée à sa quantité déclarée.
+   */
+  bonus: number;
+  /**
    * **Les règles de proximité** de cette consommation — voir `Proximite`, et
    * son avertissement : HORS MOTEUR depuis le 11/09.
    */
@@ -596,8 +620,24 @@ export function fluxVide(ressource: string): LigneFlux {
     ressource,
     quantite: 1,
     direct: false,
+    bonus: 0,
     proximites: [],
   };
+}
+
+/**
+ * **La satisfaction MAXIMALE qu'un palier peut atteindre**, en pour cent :
+ * 100 pour ses lignes ordinaires, plus les bonus de ses lignes bonus (§5.5).
+ *
+ * ⚠️ C'est ce que l'escalier d'une production doit savoir : une tranche dont
+ * le seuil dépasse ce nombre ne se déclenchera JAMAIS, et l'écran doit le dire
+ * — un escalier muet qui ne s'ouvre pas est le genre de faute qui se découvre
+ * trois semaines plus tard, en jeu.
+ */
+export function satisfactionMax(utilisation: LigneFlux[]): number {
+  return utilisation
+    .filter(ligneQuiAgit)
+    .reduce((somme, l) => somme + Math.max(0, Math.trunc(l.bonus || 0)), 100);
 }
 
 /**
@@ -655,12 +695,22 @@ export const INDICE_LU =
  */
 export const INDICE_AU_DEMARRAGE = 100;
 
-/** Tranches du haut vers le bas, seuils bornés et entiers. Ordre de lecture unique. */
+/**
+ * Tranches du haut vers le bas, seuils entiers et positifs. Ordre de lecture
+ * unique.
+ *
+ * ⚠️⚠️ **PLUS DE PLAFOND À 100 depuis le 13/09** (§5.5). Une satisfaction peut
+ * dépasser 100 grâce aux lignes bonus, et c'est une tranche au-dessus de 100
+ * — « de 120 → 130 % » — qui la fait payer. Le rendement non plus n'est pas
+ * borné : c'est ce qui permet à un bâtiment comblé de produire plus que sa
+ * quantité déclarée. Remettre un `Math.min(100, …)` ici rendrait le bonus
+ * inutilisable, en silence et sans un mot à la saisie.
+ */
 export function tranchesTriees(tranches: Tranche[]): Tranche[] {
   return [...tranches]
     .map((t) => ({
-      seuil: Math.min(100, Math.max(0, Math.trunc(t?.seuil || 0))),
-      rendement: Math.min(100, Math.max(0, Math.trunc(t?.rendement || 0))),
+      seuil: Math.max(0, Math.trunc(t?.seuil || 0)),
+      rendement: Math.max(0, Math.trunc(t?.rendement || 0)),
     }))
     .sort((a, b) => b.seuil - a.seuil);
 }
@@ -959,6 +1009,9 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           ressource: texte(l?.ressource),
           quantite: Math.max(0, entier(l?.quantite)),
           direct: l?.direct === true,
+          // §5.5 — absent (tout le catalogue d'avant le 13/09) = 0, c'est-a-dire
+          // une ligne ordinaire. Rien a migrer.
+          bonus: Math.max(0, entier(l?.bonus)),
           // Les DEUX formats de proximité sont relus : l'objet unique d'avant
           // le 30/08 et la liste d'aujourd'hui.
           proximites: normaliserProximites(l),
@@ -1056,6 +1109,7 @@ export function paliersPourEnregistrer(paliers: Palier[]): PalierEnregistre[] {
         ressource: l.ressource,
         quantite: l.quantite,
         direct: l.direct === true,
+        bonus: Math.max(0, Math.trunc(l.bonus || 0)),
         // Une proximite ouverte puis abandonnee n'est pas une regle : elle part
         // ici, plutot que d'aller occuper une place en base.
         proximites: l.proximites.filter(proximitePosee),
