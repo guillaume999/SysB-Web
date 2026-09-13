@@ -38,6 +38,7 @@ import {
   prerequisDeclaresAilleurs,
   prerequisEffectifs,
   SANS_CATEGORIE,
+  TECHNOS_HORS_MOTEUR,
   valeursAvecBatiment,
   type CoutTechno,
   type EffetTechno,
@@ -208,11 +209,16 @@ export default function Technologies() {
       </header>
 
       {/*
-        Le bandeau « le jeu n'en applique aucune » a vecu du 27/08 au 28/08 :
-        il est parti AVEC l'arrivee du mecanisme (regle de la maison), quand le
-        moteur Unity s'est mis a tout appliquer — verrou, entretien, veille,
-        effets, recherche.
+        Le bandeau « le jeu n'en applique aucune » a vecu du 27/08 au 28/08,
+        parti AVEC l'arrivee du mecanisme (regle de la maison). ⚠️ Il revient
+        le 11/09, restreint a ce qui manque VRAIMENT : le moteur a cycles
+        n'applique ni l'entretien ni les effets (decision de Guillaume). Le
+        verrou `debloque` et les prerequis ne sont pas concernes. A retirer
+        AVEC le mecanisme, pas avant.
       */}
+      <p className="mb-4 rounded border border-amber-900/60 bg-amber-950/30 p-2 text-sm text-amber-200/90">
+        ⚠️ {TECHNOS_HORS_MOTEUR}
+      </p>
 
       {erreur && (
         <p className="mb-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
@@ -762,6 +768,11 @@ function TechnologieDialog({
               champ="par_minute"
             />
           </div>
+          {cout.entretien.length > 0 && (
+            <p className="mt-2 text-[11px] leading-tight text-amber-400">
+              ⚠️ {TECHNOS_HORS_MOTEUR}
+            </p>
+          )}
           {coutVideEnFait(cout) && (
             <p className="mt-2 rounded border border-amber-900/60 bg-amber-950/30 p-2 text-[11px] text-amber-200/80">
               Cette techno est gratuite : rien a payer, rien a entretenir.
@@ -815,6 +826,11 @@ function TechnologieDialog({
         >
           {effets.length === 0 && (
             <p className="text-[11px] text-slate-600">Aucun effet. Elle ne fait que debloquer.</p>
+          )}
+          {effets.length > 0 && (
+            <p className="mb-2 text-[11px] leading-tight text-amber-400">
+              ⚠️ {TECHNOS_HORS_MOTEUR}
+            </p>
           )}
           <div className="space-y-2">
             {effets.map((e, i) => {

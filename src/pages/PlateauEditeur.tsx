@@ -197,6 +197,9 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
    *
    * `quantite <= 0` retire la ligne : un zero qui traine dans le json ne veut
    * rien dire et ferait croire a une ressource geree.
+   *
+   * ⚠️ En **unites reelles entieres** : le 1/3600 a disparu avec le moteur a
+   * cycles (spec §3). Ce qui est tape ici est exactement ce que le jeu lira.
    */
   const majStock = (code: string, quantite: number) => {
     if (!selection || !code) return;
@@ -630,6 +633,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                           <input
                             type="number"
                             min={0}
+                            step={1}
                             className="input h-8 w-20 py-0"
                             value={q}
                             onChange={(e) => majStock(code, Number(e.target.value))}

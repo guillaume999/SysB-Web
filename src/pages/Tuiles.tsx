@@ -24,6 +24,7 @@ import {
   couleurDe,
   estCommun,
   estEntrepot,
+  libelleCycle,
   loadTuiles,
   logistiqueDe,
   paliersDe,
@@ -67,13 +68,12 @@ function resumePalier1(ctx: ContexteColonne) {
         (l.mode === "mobilise" ? " (mobilisé)" : ""),
     )
     .join(", ");
+  // ⚠️ Plus de « / min » depuis le 11/09 : une quantite n'a de sens qu'avec
+  // la duree du cycle qui la livre — « 20 Ble par cycle de 2 min ».
   const conso = p.utilisation
-    .map(
-      (l) =>
-        `${l.par_minute} ${libelleRessource(ctx.ressources, l.ressource)} / min`,
-    )
+    .map((l) => `${l.quantite} ${libelleRessource(ctx.ressources, l.ressource)}`)
     .join(", ");
-  return { cout, conso };
+  return { cout, conso: conso && `${conso} ${libelleCycle(p)}` };
 }
 
 /**
@@ -97,10 +97,9 @@ function lignesSousLeNom(ctx: ContexteColonne): { cle: string; libelle: string; 
   if (mobilise.length > 0)
     lignes.push({ cle: "mobilise", libelle: "mobilise", texte: mobilise.join(", ") });
 
-  const produit = p.production.map(
-    (x) => `${x.par_minute} ${nom(x.ressource)} / min`,
-  );
-  if (produit.length > 0) lignes.push({ cle: "produit", libelle: "produit", texte: produit.join(", ") });
+  const produit = p.production.map((x) => `${x.quantite} ${nom(x.ressource)}`);
+  if (produit.length > 0)
+    lignes.push({ cle: "produit", libelle: "produit", texte: `${produit.join(", ")} ${libelleCycle(p)}` });
 
   // Une regle d'appro se resume a ses ressources et sa portee : le detail des
   // navettes reste dans le formulaire.

@@ -30,14 +30,54 @@ export type SourcePlateau = "templates" | "plateaux";
 /** Réservé à la case vide côté `PlateauGenerator`. */
 export const TILE_VIDE = 0;
 
+/**
+ * L'état d'une case — **format du moteur à cycles** (2026-09-11,
+ * `SysB/SPEC_MOTEUR_CYCLES.md` §2bis et §10).
+ *
+ * ⚠️ **Plus de `t` par case** : c'est le PLATEAU qui porte `t`, l'instant
+ * jusqu'où il est à jour. Une case porte l'état de SON cycle — `t_cycle`, la
+ * dernière frontière, et `en_marche`. Ni `satisfaction` (un rapport recalculé
+ * à chaque cycle) ni `position` de navette (calculée depuis ses horodatages) :
+ * les ranger, ce serait écrire deux fois la même vérité.
+ *
+ * ⚠️ Aucune entrée d'avant le 11/09 n'est convertie : on repart de zéro
+ * (§10). `etatsDe` ne garde que les champs de ce format, un vieux `t` part au
+ * premier enregistrement.
+ */
 export interface EtatCase {
   x: number;
   z: number;
   niveau: number;
   actif: boolean;
+  /** Le coffre de la case, en **unités réelles entières** — le 1/3600 a disparu (§3). */
   stock: Record<string, number>;
-  /** Horodatage unix (secondes), en heure serveur. */
-  t: number;
+  /** La dernière frontière de cycle, en secondes d'horloge SERVEUR. `0` = jamais tourné. */
+  t_cycle: number;
+  /** `false` = à l'arrêt DEPUIS `t_cycle`. La fin du cycle en cours vaut `t_cycle + durée`. */
+  en_marche: boolean;
+  /**
+   * Les navettes de cette case, en vol — imbriquées dans leur propriétaire pour
+   * que détruire le bâtiment les emporte (§10). Le site ne les édite pas : il
+   * les **recopie telles quelles**, un plateau de joueur rouvert ici ne doit pas
+   * perdre ses voyages en cours.
+   */
+  navettes: Navette[];
+  /** Fin du chantier, heure serveur. Absent = pas de chantier en cours. */
+  chantier_fin?: number;
+}
+
+/**
+ * Une navette telle que le moteur l'écrit. **Opaque pour le site** : seul le
+ * moteur la crée et la fait avancer, d'où l'index ouvert — un champ qu'il
+ * ajoute demain doit survivre à un enregistrement fait ici.
+ */
+export interface Navette {
+  origine: [number, number];
+  destination: [number, number];
+  parti_a: number;
+  arrive_a: number;
+  charge: Record<string, number>;
+  [autre: string]: unknown;
 }
 
 // --- Amorcage : comment une partie demarre ----------------------------------
@@ -200,9 +240,41 @@ export function redimensionner(
 
 // --- États ------------------------------------------------------------------
 
-/** Un champ json jamais renseigné revient `null` de PocketBase. */
+/**
+ * Les états d'un plateau, **ramenés au format du moteur à cycles**. Un champ
+ * json jamais renseigné revient `null` de PocketBase.
+ *
+ * ⚠️ Ce n'est pas une lecture de l'ancien format : c'est ce qui l'EMPÊCHE de
+ * repartir en base. Un `t` ou un `satisfactionPourMille` d'avant le 11/09 est
+ * écarté ici, et disparaît au premier enregistrement au lieu d'être recopié
+ * pour toujours.
+ */
 export function etatsDe(plateau: Plateau): EtatCase[] {
-  return Array.isArray(plateau.etats) ? plateau.etats : [];
+  return Array.isArray(plateau.etats) ? plateau.etats.map(normaliserEtat) : [];
+}
+
+function normaliserEtat(brut: unknown): EtatCase {
+  const o = (brut ?? {}) as Partial<EtatCase>;
+  const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
+  const stock: Record<string, number> = {};
+  if (o.stock && typeof o.stock === "object") {
+    for (const [code, q] of Object.entries(o.stock)) {
+      const n = entier(q);
+      if (n > 0) stock[code] = n;
+    }
+  }
+  const etat: EtatCase = {
+    x: entier(o.x),
+    z: entier(o.z),
+    niveau: Math.max(1, entier(o.niveau)),
+    actif: o.actif !== false,
+    stock,
+    t_cycle: Math.max(0, entier(o.t_cycle)),
+    en_marche: o.en_marche === true,
+    navettes: Array.isArray(o.navettes) ? o.navettes : [],
+  };
+  if (entier(o.chantier_fin) > 0) etat.chantier_fin = entier(o.chantier_fin);
+  return etat;
 }
 
 export function cleCase(x: number, z: number): string {
@@ -213,8 +285,13 @@ export function indexerEtats(etats: EtatCase[]): Map<string, EtatCase> {
   return new Map(etats.map((e) => [cleCase(e.x, e.z), e]));
 }
 
+/**
+ * L'état d'une case qu'on vient de toucher dans l'éditeur : à l'arrêt, sans
+ * cycle encore joué (`t_cycle: 0`), sans navette. Le moteur le démarrera au
+ * premier cycle dont il a les ressources.
+ */
 export function etatVide(x: number, z: number): EtatCase {
-  return { x, z, niveau: 1, actif: true, stock: {}, t: 0 };
+  return { x, z, niveau: 1, actif: true, stock: {}, t_cycle: 0, en_marche: false, navettes: [] };
 }
 
 /**

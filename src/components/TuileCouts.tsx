@@ -2,10 +2,13 @@ import Aide, { Terme } from "@/components/Aide";
 import ChoixTuiles from "@/components/ChoixTuiles";
 import { codeInconnu, libelleRessource, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
+  INDICE_LU,
   TRANCHES_PAR_DEFAUT,
   casesCouvertes,
+  erreursPalier,
   fluxVide,
   formatDuree,
+  palierTourne,
   palierVide,
   pourcentageProximite,
   pourcentageProximites,
@@ -15,7 +18,6 @@ import {
   rendEnVeille,
   rendementPourIndicateur,
   seuilsEnDouble,
-  totalParts,
   tranchesCouvrentZero,
   tranchesTriees,
   type LigneCout,
@@ -44,9 +46,23 @@ import {
  * occupe tant que ca tourne. L'ecran le dit au lieu de le faire deduire :
  *
  *   A LA CONSTRUCTION      -> les lignes `paye`
- *   PENDANT QU'IL TOURNE   -> les lignes `mobilise`, puis les consommations
+ *   PENDANT QU'IL TOURNE   -> les lignes `mobilise`
+ *   A CHAQUE CYCLE         -> la duree du cycle, puis ce qu'il consomme et produit
  *
- * En base, une seule liste `cout` porte les deux, distinguees par leur `mode`.
+ * En base, une seule liste `cout` porte les deux premieres, distinguees par
+ * leur `mode`.
+ *
+ * ⚠️⚠️ **LE MODELE A CYCLES (2026-09-11, spec §2ter).** Le formulaire est
+ * celui de la spec, mot pour mot :
+ *
+ *   Cycle : [ 2 ] minute(s)
+ *     ☐ demarre avec ce qu'il y a
+ *     consomme   20  BLE   ☐ en direct
+ *     produit     5  BOIS
+ *
+ * La periode est sur le PALIER, jamais sur la ligne ; une ligne porte une
+ * quantite ENTIERE par cycle. `par_minute` et les `part` de satisfaction ont
+ * disparu — voir `lib/tuiles.ts`.
  */
 export default function TuileCouts({
   paliers,
@@ -74,15 +90,23 @@ export default function TuileCouts({
   const nomTuile = (tileId: number) =>
     tuiles.find((t) => t.tileId === tileId)?.nom ?? `tuile ${tileId}`;
   /**
-   * Ce qu'une tuile peut fabriquer : tout sauf le genre `mobilise`, indicateurs
-   * compris.
+   * Ce qu'une tuile peut fabriquer : tout sauf les genres `mobilise` et
+   * `indicateur`.
    *
    * ⚠️ Une ressource `mobilise` (la population) ne se PRODUIT pas : elle se
    * déclare en places dans l'onglet *Stock & appro*, et le jeu lit ce plafond.
    * L'offrir ici donnerait une ligne qui remplit un coffre que personne ne lit —
    * les habitants disparaîtraient sans un mot.
+   *
+   * ⚠️ Un `indicateur` ne se produit plus non plus, depuis le 11/09 (§5.4) : la
+   * satisfaction se CONSTATE sur tout bâtiment qui consomme. Une ligne
+   * « produit 1 satisfaction » était le reliquat du modèle où l'indicateur
+   * était une ressource ; une production peut le SUIVRE (« + indice »), jamais
+   * le fabriquer. Une ligne déjà en base est dite en orange, pas effacée.
    */
-  const productibles = parAlphabet(ressources.filter((r) => r.genre !== "mobilise"));
+  const productibles = parAlphabet(
+    ressources.filter((r) => r.genre !== "mobilise" && r.genre !== "indicateur"),
+  );
   const indicateurs = parAlphabet(ressources.filter((r) => r.genre === "indicateur"));
 
   /**
@@ -157,7 +181,7 @@ export default function TuileCouts({
         Le palier 1 est la construction ; les suivants sont les améliorations.
       </p>
 
-      <Aide titre="Payé, occupé, consommé, produit">
+      <Aide titre="Payé, occupé, le cycle, consommé, produit">
         <Terme nom="à la construction">
           Prélevé du stock et <strong>perdu</strong>. 50 bois payés ne reviennent jamais — ni à la
           destruction, ni en veille.
@@ -167,115 +191,123 @@ export default function TuileCouts({
           population : 6 habitants travaillent ici et ne travaillent nulle part ailleurs. Ils ne
           sont pas <em>dépensés</em> — ils reviennent à la destruction <em>ou en veille</em>.
         </Terme>
-        <Terme nom="consomme pendant qu'il tourne">
-          Ce qui part vraiment, <strong>par minute</strong>. Un seul nombre : il n'y a plus de
-          période à choisir, donc plus moyen d'écrire deux fois le même débit de deux façons.
+        <Terme nom="cycle">
+          Le bâtiment a <strong>un rythme, et un seul</strong> : il démarre un cycle quand ses
+          ressources sont là, le cycle dure <strong>X minutes</strong>, puis il consomme et livre{" "}
+          <strong>d'un coup</strong>. X est un <strong>entier de minutes</strong> — le cycle le plus
+          court est une minute.
           <br />
-          ⚠️ Le débit peut être <strong>décimal</strong> (2,5 / min), mais il doit tomber juste :
-          <strong> par minute × 60 doit être entier</strong>. 2,5 passe, 0,01 non — le serveur
-          refuse de charger une ligne fausse plutôt que de l'arrondir en silence.
+          ⚠️ <strong>Obligatoire dès que le palier consomme ou produit</strong> : sans lui, le
+          serveur refuse la tuile, et l'enregistrement est bloqué. Un palier qui ne fait rien n'a
+          pas de cycle à déclarer.
+          <br />
+          10 par cycle de 1 min ne se comporte pas comme 20 par cycle de 2 min : le second attend
+          deux fois plus longtemps sa cargaison, et livre deux fois plus d'un coup.
+        </Terme>
+        <Terme nom="démarre avec ce qu'il y a">
+          <strong>Décoché (le défaut) : tout ou rien.</strong> Un four qui demande 20 blé et n'en
+          a que 12 <strong>ne démarre pas</strong> — il n'en mange aucun, il attend sa cargaison
+          complète, et il reste à l'arrêt tant qu'elle n'est pas là.
+          <br />
+          <strong>Coché</strong> : un cycle part dès qu'il y a <em>quelque chose</em>. Le bâtiment
+          mange ce qu'il trouve et livre à proportion ; une ressource totalement absente bloque
+          toujours.
+          <br />
+          ⚠️ Le prix du mode coché : avec 1 blé sur 100, il consomme ce blé à chaque cycle et ne
+          produit rien (arrondi vers le bas). C'est pour ça que ce n'est pas le défaut.
+          <br />
+          ⚠️ Quand ça débloque, <strong>on ne rattrape pas</strong> : un bâtiment arrêté une heure
+          repart pour <em>un</em> cycle, pas soixante. Le temps d'arrêt est perdu.
+        </Terme>
+        <Terme nom="consomme">
+          Ce qui part vraiment, <strong>à chaque cycle</strong> : un nombre entier d'unités, et la
+          ressource. Plus de débit « par minute » — c'est la durée du cycle qui porte le rythme.
+        </Terme>
+        <Terme nom="en direct">
+          Une case à cocher sur une ligne <strong>consommée</strong> : la ressource est prise{" "}
+          <strong>sans navette, sur tout le plateau</strong> — sauf chez un bâtiment qui la
+          consomme lui aussi.
+          <br />
+          ⚠️ Une ressource consommée en direct <strong>n'est jamais allée chercher par une
+          navette</strong> : c'est tout l'intérêt, elle arrive sans transport, donc sans aléa. Une
+          règle d'appro de ce bâtiment (onglet <em>Stock &amp; appro</em>) qui la cite n'envoie
+          rien pour elle.
+          <br />
+          Tous les bâtiments d'un même type qui la prennent en direct <strong>ne font
+          qu'un</strong> : ils consomment et produisent comme un seul, avec une seule
+          satisfaction. C'est ce qui lisse les indices — la famine reste visible <em>entre</em>{" "}
+          types, plus à l'intérieur d'un type.
+        </Terme>
+        <Terme nom="satisfaction">
+          <strong>Elle ne se déclare pas, elle se constate.</strong> Tout bâtiment qui consomme
+          publie la sienne : ce qu'il a reçu sur ce qu'il demandait. 15 blé servis sur 20
+          demandés, c'est <strong>75 %</strong> — il n'y a rien à saisir, et aucune ligne ne
+          « produit » de satisfaction.
         </Terme>
         <Terme nom="d'où ça vient, où ça va">
           Pas ici. Cet onglet dit ce que le bâtiment consomme et ce qu'il fabrique ;{" "}
           <strong>par où ça arrive et par où ça repart</strong> se règle dans l'onglet{" "}
           <em>Stock &amp; appro</em>, qui porte le stockage, les rayons et les navettes.
         </Terme>
-        <Terme nom="+ indice">
-          En bout de ligne, un lien <strong>+ indice</strong> ajoute une part de satisfaction à
-          cette consommation. La plupart des consommations n'en ont pas — un champ toujours là,
-          à zéro sur quatre lignes sur cinq, ferait croire qu'il faut le remplir.
-          <br />
-          C'est réservé aux habitations : sans indice, c'est une consommation ordinaire. La
-          première ligne se pose à 100 %, les suivantes à 10 %.
-          <br />
-          Chaque ligne compte <strong>au prorata de ce qui est réellement servi</strong> :
-          20 nourriture demandées pour 100 % de satisfaction, mais seulement 15 reçues faute de
-          stock, donnent <strong>75 %</strong>. Ajoute 10 pierre à 10 %, servies à plein, et on
-          monte à <strong>85 %</strong>.
-          <br />
-          Le total des parts devrait faire 100 : en dessous, l'habitation ne pourra jamais être
-          pleinement satisfaite. Un avertissement te le dit sous les lignes.
-          <br />
-          ⚠️ La tuile déclare qu'elle <em>produit</em> la satisfaction dans l'onglet{" "}
-          <strong>Stock &amp; appro</strong> ; ici on dit seulement <em>d'où elle vient</em>.
-        </Terme>
         <Terme nom="+ proximité">
-          Même geste que <strong>+ indice</strong>, en bout d'une ligne — consommation{" "}
-          <em>ou</em> production : elle reste cachée tant qu'on ne la demande pas. Elle dit
-          combien de bâtiments il faut <strong>autour de la tuile</strong> pour qu'on tourne à
-          plein — c'est ce qui attache un abattoir à ses pâturages.
+          En bout d'une ligne — consommation <em>ou</em> production : elle reste cachée tant qu'on
+          ne la demande pas. Elle dit combien de bâtiments il faut <strong>autour de la
+          tuile</strong> pour qu'on tourne à plein — c'est ce qui attache un abattoir à ses
+          pâturages.
           <br />
-          <em>10 bovins toutes les 120 s, besoin de 5 « Pâturage » à 2 de rayon = 100 %.</em>
+          ⚠️ <strong>Pas encore appliquée par le moteur à cycles</strong> (décision du 11/09) : tu
+          peux la saisir, elle est enregistrée, mais elle ne freine rien en jeu pour l'instant.
           <br />
           <strong>Plusieurs tuiles cochées = un OU, et elles s'additionnent.</strong> « 5 au total
           parmi Pâturage ou Bergerie » est rempli par 3 pâturages + 2 bergeries. Pour un{" "}
           <strong>ET</strong> — 5 pâturages <em>et</em> 3 bergeries — clique une deuxième fois sur{" "}
           <strong>+ proximité</strong> : les règles s'empilent sur la ligne et doivent toutes être
-          remplies.
-          <br />
-          <strong>Au prorata</strong>, jamais tout ou rien : 3 pâturages sur 5 valent 60 %. Et
-          quand il y a plusieurs règles, <strong>c'est la plus contraignante qui commande</strong>{" "}
-          — 80 % d'un côté, 50 % de l'autre, la ligne vaut 50 %.
-          <br />
-          ⚠️ <strong>Sa portée n'est pas la même des deux côtés.</strong> Sur une{" "}
-          <em>consommation</em>, elle ne freine que sa ligne : celle-ci ne demande plus que 6
-          bovins, et la tuile plafonne à 60 % faute d'être servie. Sur une <em>production</em>,
-          elle plafonne <strong>tout le palier</strong> — ses productions comme ses consommations.
+          remplies. <strong>Au prorata</strong>, et c'est la plus contraignante qui commande.
           <br />
           Le rayon se compte sur la grille <strong>hexagonale</strong> : 6 cases à 1, 18 à 2, 36 à
           3. La phrase sous la règle te donne le compte exact.
         </Terme>
         <Terme nom="produit">
-          Ce que la tuile <strong>fabrique</strong> pendant qu'elle tourne, <strong>au
-          maximum</strong>. Une ligne par ressource — n'importe laquelle, indicateurs compris.
+          Ce que la tuile <strong>livre à chaque cycle</strong>, <strong>au maximum</strong>. Une
+          ligne par ressource.
           <br />
-          La production suit <strong>au prorata</strong> ce que la tuile a réellement reçu :
-          50 bovins demandés pour 100 nourriture, mais seulement 25 reçus, donnent{" "}
-          <strong>50 nourriture</strong>. Puis l'indice de rendement, s'il y en a un, s'applique
-          par-dessus.
-          <br />
-          La couverture se calcule <strong>tuile par tuile, sur ses propres lignes de
-          consommation</strong> — et sur elles seules. Une ressource que ce bâtiment ne demande
-          pas n'a aucune influence sur lui.
-          <br />
-          ⚠️ Seule nuance, et elle est étroite : consommations et productions sont deux listes
-          séparées, donc <strong>à l'intérieur d'une même tuile</strong>, une entrée manquante
-          ralentit toutes ses sorties. Une tuile qui demande bovins <em>et</em> bois, et qui manque
-          de bois, ralentit aussi la production qui ne tenait qu'aux bovins. Le jour où ça gêne, il
-          faudra des recettes liées — une ligne portant ses propres entrées et sorties.
+          Une ligne ordinaire suit <strong>la satisfaction du bâtiment</strong> : il a reçu 80 % de
+          ce qu'il attendait, il livre 80 %, <strong>arrondi vers le bas</strong>. Un bâtiment qui
+          ne consomme rien livre toujours tout.
           <br />
           ⚠️ <strong>Ni cible ni rayon</strong> : un producteur ne livre pas. Il fabrique dans son
           coffre, et c'est le preneur qui vient, avec <em>son</em> rayon de récolte. Seul un
           entrepôt envoie vraiment, et ça se règle dans l'onglet Stock &amp; appro.
+          <br />
+          ⚠️ Un <strong>indicateur</strong> (la satisfaction) ne se produit pas : il n'est pas
+          proposé ici. Une production peut le <em>suivre</em>, voir <strong>+ indice</strong>.
         </Terme>
-        <Terme nom="+ indice (production)">
-          Même geste que sur une consommation : la plupart des lignes de production n'en ont pas,
-          donc le champ reste caché jusqu'à ce qu'on clique <strong>+ indice</strong>.
+        <Terme nom="+ indice">
+          En bout d'une ligne de production : elle <strong>suit un indicateur</strong> au lieu de
+          la satisfaction du bâtiment. Tu choisis l'indicateur et un <strong>escalier</strong> —
+          « à partir de 80 %, rendement 100 % ; en dessous, 60 % ».
           <br />
-Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de rendement
-          selon la Satisfaction, c'est 60 % du débit quand la satisfaction est au maximum, et{" "}
-          <strong>au prorata</strong> en dessous : à 60 % de satisfaction, il reste 36 % du débit.
+          ⚠️ <strong>Une ligne a un cadenceur, et un seul</strong> : avec un indice, c'est
+          l'escalier qui décide, et lui seul. La remultiplier par la satisfaction propre du
+          bâtiment compterait la pénurie deux fois.
           <br />
-          Choisis <em>« rien (plafond fixe) »</em> comme indice si tu veux juste brider la ligne à
-          un pourcentage qui ne bouge pas.
+          Chaque bâtiment qui consomme prend <strong>sa</strong> tranche, et le rendement est leur
+          moyenne <strong>pondérée par la population</strong> — pas la tranche de la moyenne : une
+          famine locale tire le rendement vers le bas sur sa part de population, elle ne se dilue
+          pas dans un chiffre confortable.
           <br />
-          ⚠️ <strong>Laisse-le vide sur les fermes.</strong> C'est le garde-fou contre la spirale :
-          sans au moins une production non plafonnée quelque part, moins de vivres → moins de
-          satisfaction → les fermes produisent moins → encore moins de vivres, et le joueur
-          découvre l'effondrement en revenant.
-        </Terme>
-        <Terme nom="produire un indicateur">
-          Choisis la satisfaction comme ressource produite et il n'y a{" "}
-          <strong>rien d'autre à saisir</strong> : sa valeur se calcule à partir des indices posés
-          sur les consommations juste au-dessus.
+          ⚠️ <strong>Laisse-le vide sur les fermes.</strong> Sans au moins une production qui ne
+          suit pas l'indice quelque part, moins de vivres → moins de satisfaction → les fermes
+          produisent moins → encore moins de vivres, et le joueur découvre l'effondrement en
+          revenant.
         </Terme>
         <Terme nom="chantier">
           Le temps qu'il faut avant que le bâtiment serve. <code>0</code> = instantané.
           <br />
-          Appliqué en jeu depuis le 28/08 : pendant le chantier la case est <strong>inerte</strong>
-          (elle ne produit pas, ne consomme pas, ne loge et ne mobilise personne), un badge
-          CHANTIER la signale, et la production démarre à la fin des travaux — à l'heure serveur.
-          Détruire en plein chantier ne rembourse rien, et améliorer ouvre un chantier.
+          Pendant le chantier la case est <strong>inerte</strong> (elle ne produit pas, ne
+          consomme pas, ne loge et ne mobilise personne), un badge CHANTIER la signale, et le
+          premier cycle ne peut partir qu'à la fin des travaux — à l'heure serveur. Détruire en
+          plein chantier ne rembourse rien, et améliorer ouvre un chantier.
         </Terme>
         <Terme nom="mise en veille">
           Le joueur éteint un bâtiment : il <strong>rend tout ce qu'il occupe</strong> — la
@@ -290,8 +322,9 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
           palier te dit ce que ça donnera.
         </Terme>
         <Terme nom="pénurie">
-          Elle n'éteint <strong>rien</strong>. Quand une ressource manque, tout ralentit au
-          prorata. La veille est une décision du joueur, pas une punition automatique.
+          Elle n'éteint <strong>rien</strong>. Quand une ressource manque, le cycle{" "}
+          <strong>attend</strong> sa cargaison — ou part avec ce qu'il y a, si la case est cochée.
+          La veille est une décision du joueur, pas une punition automatique.
         </Terme>
       </Aide>
 
@@ -340,9 +373,7 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                       className="input h-9 w-24 py-1"
                       value={palier.duree_construction_s}
                       onChange={(e) =>
-                        majPalier(index, {
-                          duree_construction_s: Math.max(0, Number(e.target.value) || 0),
-                        })
+                        majPalier(index, { duree_construction_s: entierSaisi(e.target.value) })
                       }
                     />
                     s
@@ -370,6 +401,11 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                   videTexte="n'occupe rien"
                   onChange={(l) => majCout(index, "mobilise", l)}
                 />
+              </Section>
+
+              {/* ── À chaque cycle (spec §2ter) ───────────────────────── */}
+              <Section titre="À chaque cycle">
+                <ChoixCycle palier={palier} onChange={(patch) => majPalier(index, patch)} />
 
                 <p className="mb-1 mt-3 text-[11px] text-slate-500">Consomme :</p>
                 <LignesFlux
@@ -389,34 +425,19 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                 <LignesProduction
                   lignes={palier.production}
                   productibles={productibles}
+                  toutes={ressources}
                   indicateurs={indicateurs}
+                  consomme={palier.utilisation.some((l) => l.ressource !== "" && l.quantite > 0)}
                   nomRessource={nomRessource}
                   tuiles={tuiles}
                   nomTuile={nomTuile}
                   onChange={(production) => majPalier(index, { production })}
                 />
-
-                {totalParts(palier) > 0 && (
-                  <p
-                    className={`mt-1 text-[11px] leading-tight ${
-                      totalParts(palier) === 100 ? "text-slate-500" : "text-amber-400"
-                    }`}
-                  >
-                    Cette tuile produit de la satisfaction. Total des parts :{" "}
-                    <span className="tabular-nums">{totalParts(palier)} %</span>
-                    {totalParts(palier) === 100
-                      ? " — entièrement servie, elle atteint 100 %."
-                      : totalParts(palier) < 100
-                        ? ` — même entièrement servie, elle plafonnera à ${totalParts(palier)} %.`
-                        : " — au-delà de 100 %, le surplus est perdu. Rééquilibre les parts."}
-                    {" "}
-                    <span className="text-slate-500">
-                      Chaque ligne compte au prorata : 15 servies sur 20 demandées avec une part de
-                      100 % donnent 75 %.
-                    </span>
-                  </p>
-                )}
-
+                <AvertissementProduction
+                  lignes={palier.production}
+                  ressources={ressources}
+                  nomRessource={nomRessource}
+                />
               </Section>
 
               {/* La relecture : le seul endroit ou la regle de veille se voit,
@@ -442,6 +463,14 @@ Tu poses un pourcentage <strong>et l'indice dont il dépend</strong>. 60 % de re
                   </>
                 )}
               </p>
+
+              {/* Ce que le serveur refuserait : en rouge ICI, sous le palier en
+                  faute, et repete au pied de la fenetre qui bloque l'envoi. */}
+              {erreursPalier(palier).map((e) => (
+                <p key={e} className="mt-1 text-[11px] leading-tight text-red-400">
+                  ⚠️ {e}
+                </p>
+              ))}
             </div>
           );
         })}
@@ -567,7 +596,7 @@ function LignesCout({
                 step={1}
                 className="input h-9 w-20 py-1"
                 value={ligne.quantite}
-                onChange={(e) => maj(i, { quantite: Math.max(0, Number(e.target.value) || 0) })}
+                onChange={(e) => maj(i, { quantite: entierSaisi(e.target.value) })}
               />
               <ChoixRessource
                 code={ligne.ressource}
@@ -599,23 +628,109 @@ function LignesCout({
 }
 
 /**
- * Ce que la tuile fabrique pendant qu'elle tourne.
+ * **La duree du cycle, et le mode de demarrage** — le haut du formulaire de
+ * la spec §2ter :
+ *
+ *   Cycle : [ X ] minute(s)
+ *     ☐ demarre avec ce qu'il y a
+ *
+ * ⚠️ Aucun defaut : un palier neuf arrive a `0` (« pas encore declare »), et
+ * le champ passe au rouge des qu'une ligne consomme ou produit. Un rythme
+ * choisi a la place de l'admin ne se decouvrirait qu'en jeu.
+ */
+function ChoixCycle({
+  palier,
+  onChange,
+}: {
+  palier: Palier;
+  onChange: (patch: Partial<Palier>) => void;
+}) {
+  const tourne = palierTourne(palier);
+  const manque = tourne && palier.cycle_minutes < 1;
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        Cycle :
+        <input
+          type="number"
+          min={1}
+          step={1}
+          placeholder="—"
+          className={`input h-9 w-20 py-1 ${manque ? "border-red-700" : ""}`}
+          // 0 = pas encore declare : un champ VIDE le dit mieux qu'un zero, qui
+          // se lirait comme une valeur choisie.
+          value={palier.cycle_minutes === 0 ? "" : palier.cycle_minutes}
+          onChange={(e) => onChange({ cycle_minutes: entierSaisi(e.target.value) })}
+        />
+        minute{palier.cycle_minutes > 1 ? "s" : ""}
+        {palier.cycle_minutes >= 1 && (
+          <span className="text-[11px] text-slate-500">
+            — il consomme et livre d'un coup au bout de {formatDuree(palier.cycle_minutes * 60)}
+          </span>
+        )}
+        {!tourne && (
+          <span className="text-[11px] text-slate-600">
+            — ne consomme ni ne produit : pas de cycle à déclarer
+          </span>
+        )}
+      </div>
+      <label className="mt-1 flex flex-wrap items-center gap-2 pl-4 text-xs text-slate-400">
+        <input
+          type="checkbox"
+          checked={palier.demarre_partiel}
+          onChange={(e) => onChange({ demarre_partiel: e.target.checked })}
+        />
+        démarre avec ce qu'il y a
+        <span className="text-[11px] text-slate-500">
+          {palier.demarre_partiel
+            ? "— un cycle part dès qu'il y a quelque chose, et livre à proportion"
+            : "— tout ou rien : il attend sa cargaison complète"}
+        </span>
+      </label>
+    </div>
+  );
+}
+
+/**
+ * Une quantite saisie : un ENTIER positif ou nul, jamais une decimale (§3).
+ * Le champ `step={1}` n'empeche pas de taper « 2,5 » — la troncature, si.
+ */
+function entierSaisi(valeur: string): number {
+  return Math.max(0, Math.trunc(Number(valeur) || 0));
+}
+
+/**
+ * Une ligne a 0 par cycle ne fait rien : elle est retiree a l'enregistrement,
+ * et ca se DIT avant. C'est aussi ce qu'on voit sur une ligne d'avant le 11/09,
+ * dont le `par_minute` n'est pas relu.
+ */
+function LigneAZero({ ligne }: { ligne: { ressource: string; quantite: number } }) {
+  if (ligne.ressource === "" || ligne.quantite > 0) return null;
+  return (
+    <p className="mt-1 text-[11px] leading-tight text-amber-400">
+      0 par cycle : cette ligne ne fait rien, elle sera retirée à l&apos;enregistrement.
+    </p>
+  );
+}
+
+/**
+ * Ce que la tuile fabrique a chaque cycle.
  *
  * ⚠️ Deplacee ici depuis Stock & appro le 26/08 : c'est ce que le batiment
  * FAIT, pas ce qui bouge. Une ligne n'a **ni cible ni rayon** — un producteur
  * ne livre pas, c'est le preneur qui vient avec SON rayon.
  *
- * ⚠️ Le rendement se pose desormais avec le **meme geste que la satisfaction
- * d'une consommation** — un `+ indice` en bout de ligne, cache tant qu'on ne
- * l'a pas demande. Retire le meme jour le systeme "rendement selon [indicateur]
- * + tranches" : demande explicite de l'utilisateur, en voyant a quel point la
- * consommation etait plus simple a lire. C'est un plafond FIXE, pas une valeur
- * qui suit un indicateur en direct.
+ * ⚠️ **Une ligne a UN cadenceur** (spec §4, 11/09) : sans indice, la
+ * satisfaction du batiment ; avec, l'escalier de l'indicateur — jamais les
+ * deux. Le « plafond fixe » (un escalier sans indicateur) est donc mort : le
+ * menu ne propose plus « rien », et un escalier orphelin est dit en orange.
  */
 function LignesProduction({
   lignes,
   productibles,
+  toutes,
   indicateurs,
+  consomme,
   nomRessource,
   tuiles,
   nomTuile,
@@ -623,7 +738,11 @@ function LignesProduction({
 }: {
   lignes: LigneProduction[];
   productibles: Ressource[];
+  /** Le catalogue entier, pour nommer une ligne déjà saisie qui n'a plus sa place. */
+  toutes: Ressource[];
   indicateurs: Ressource[];
+  /** Le palier consomme-t-il quelque chose ? Sinon sa satisfaction vaut 100 %. */
+  consomme: boolean;
   nomRessource: (code: string) => string;
   /** Le catalogue, pour les tuiles que la proximite demande autour (30/08). */
   tuiles: Tuile[];
@@ -640,97 +759,91 @@ function LignesProduction({
       ) : (
         <div className="space-y-2">
           {lignes.map((ligne, i) => {
-            const estIndicateur = indicateurs.some((r) => r.code === ligne.ressource);
-            const avecProximite = ligne.proximites.some(proximiteUtile);
+            const avecIndice = ligne.indicateur !== "" || ligne.tranches.length > 0;
             return (
               <div key={i} className="rounded border border-edge/60 bg-ink/40 p-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  {/* Un indicateur n'a pas de quantite : sa valeur se calcule. */}
-                  {!estIndicateur && (
-                    <input
-                      type="number"
-                      min={0}
-                      step={1}
-                      className="input h-9 w-20 py-1"
-                      value={ligne.par_minute}
-                      onChange={(e) =>
-                        maj(i, { par_minute: Math.max(0, Number(e.target.value) || 0) })
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    className="input h-9 w-20 py-1"
+                    value={ligne.quantite}
+                    onChange={(e) => maj(i, { quantite: entierSaisi(e.target.value) })}
+                  />
+                  <ChoixRessource
+                    code={ligne.ressource}
+                    ressources={productibles}
+                    toutes={toutes}
+                    onChange={(ressource) => maj(i, { ressource })}
+                  />
+                  <span className="text-xs text-slate-500">par cycle</span>
+
+                  {/* ⚠️ Cache par defaut : la plupart des productions ne suivent
+                      aucun indice. Ce n'est pas un nombre mais un ESCALIER
+                      (choix du 26/08 apres-midi), et un indicateur NOMME — il
+                      n'y a plus d'option « rien » depuis le 11/09. */}
+                  {avecIndice ? (
+                    <span className="flex items-center gap-1 text-xs text-slate-500">
+                      suit
+                      <select
+                        className={`input h-9 w-36 py-1 ${
+                          ligne.indicateur === "" ? "border-amber-700 text-amber-300" : ""
+                        }`}
+                        value={ligne.indicateur}
+                        onChange={(e) => maj(i, { indicateur: e.target.value })}
+                      >
+                        <option value="">choisir un indicateur</option>
+                        {ligne.indicateur !== "" &&
+                          !indicateurs.some((r) => r.code === ligne.indicateur) && (
+                            <option value={ligne.indicateur}>{ligne.indicateur} — inconnu</option>
+                          )}
+                        {indicateurs.map((r) => (
+                          <option key={r.id} value={r.code}>
+                            {r.nom}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        className="text-slate-500 hover:text-red-400"
+                        title="retirer l'indice"
+                        onClick={() => maj(i, { tranches: [], indicateur: "" })}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs text-accent hover:underline disabled:text-slate-600 disabled:no-underline"
+                      disabled={indicateurs.length === 0}
+                      title={
+                        indicateurs.length === 0
+                          ? "aucune ressource de genre « indicateur » au catalogue"
+                          : "cette ligne suivra un indicateur, par un escalier de tranches"
                       }
-                    />
+                      onClick={() =>
+                        maj(i, {
+                          tranches: TRANCHES_PAR_DEFAUT,
+                          indicateur: indicateurs[0]?.code ?? "",
+                        })
+                      }
+                    >
+                      + indice
+                    </button>
                   )}
-                  <select
-                    className="input h-9 w-44 py-1"
-                    value={ligne.ressource}
-                    onChange={(e) => maj(i, { ressource: e.target.value })}
-                  >
-                    <option value="">choisir une ressource</option>
-                    {productibles.map((r) => (
-                      <option key={r.id} value={r.code}>
-                        {r.nom}
-                        {r.genre === "indicateur" ? " (indicateur)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                  {!estIndicateur && (
-                    <>
-                      <span className="text-xs text-slate-500">par minute</span>
 
-                      {/* ⚠️ Meme geste que le "+ indice" de la consommation :
-                          cache par defaut. Mais ici ce n'est PAS un nombre :
-                          c'est un ESCALIER (choix du 26/08 apres-midi). */}
-                      {ligne.tranches.length > 0 ? (
-                        <span className="flex items-center gap-1 text-xs text-slate-500">
-                          selon
-                          <select
-                            className="input h-9 w-36 py-1"
-                            value={ligne.indicateur}
-                            onChange={(e) => maj(i, { indicateur: e.target.value })}
-                          >
-                            <option value="">rien (plafond fixe)</option>
-                            {indicateurs.map((r) => (
-                              <option key={r.id} value={r.code}>
-                                {r.nom}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="text-slate-500 hover:text-red-400"
-                            title="retirer l'indice"
-                            onClick={() => maj(i, { tranches: [], indicateur: "" })}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="text-xs text-accent hover:underline"
-                          onClick={() =>
-                            maj(i, {
-                              tranches: TRANCHES_PAR_DEFAUT,
-                              indicateur: indicateurs[0]?.code ?? "",
-                            })
-                          }
-                        >
-                          + indice
-                        </button>
-                      )}
-
-                      {/* ⚠️ La proximite d'une PRODUCTION ne freine pas que sa
-                          ligne : elle plafonne tout le palier. Elle s'ecrit
-                          quand meme ici — c'est la demande telle qu'elle est
-                          venue le 30/08, « dans ce que produit un batiment ».
-                          Un indicateur n'en recoit pas : il n'a aucun debit a
-                          plafonner, sa valeur se calcule. */}
-                      <BoutonProximite
-                        deja={ligne.proximites.length}
-                        onClick={() =>
-                          maj(i, { proximites: [...ligne.proximites, proximiteParDefaut()] })
-                        }
-                      />
-                    </>
-                  )}
+                  {/* ⚠️ La proximite d'une PRODUCTION ne freine pas que sa
+                      ligne : elle plafonne tout le palier. Elle s'ecrit
+                      quand meme ici — c'est la demande telle qu'elle est
+                      venue le 30/08, « dans ce que produit un batiment ». */}
+                  <BoutonProximite
+                    deja={ligne.proximites.length}
+                    onClick={() =>
+                      maj(i, { proximites: [...ligne.proximites, proximiteParDefaut()] })
+                    }
+                  />
                   <button
                     type="button"
                     className="ml-auto text-xs text-slate-500 hover:text-red-400"
@@ -740,93 +853,56 @@ function LignesProduction({
                   </button>
                 </div>
 
-                {estIndicateur && (
-                  <p className="mt-1 text-[11px] leading-tight text-accent">
-                    Rien à saisir : la valeur de cet indicateur <strong>se calcule</strong> à
-                    partir des indices posés sur les consommations ci-dessus. Entièrement servie,
-                    la tuile le produit à 100 % ; à moitié, à 50 %.
-                  </p>
-                )}
+                <LigneAZero ligne={ligne} />
 
-                {!estIndicateur && ligne.tranches.length > 0 && (
+                {avecIndice && (
                   <Escalier
                     tranches={ligne.tranches}
-                    quantite={ligne.par_minute}
+                    quantite={ligne.quantite}
                     indicateur={ligne.indicateur}
                     nomRessource={nomRessource}
                     onChange={(tranches) => maj(i, { tranches })}
                   />
                 )}
 
-                {/* Rendu meme sur un indicateur : une regle deja en base ne
-                    doit jamais devenir invisible, on ne saurait plus qu'elle
-                    agit. */}
                 <BlocsProximite
                   proximites={ligne.proximites}
                   contexte="produit"
-                  quantite={ligne.par_minute}
+                  quantite={ligne.quantite}
                   tuiles={tuiles}
                   nomTuile={nomTuile}
                   onChange={(proximites) => maj(i, { proximites })}
                 />
 
-                {!estIndicateur && (
-                  <p className="mt-1 text-[11px] leading-tight text-slate-500">
-                    C'est un <strong>maximum</strong> : la production réelle vaut ce débit ×{" "}
-                    <span className="text-slate-300">la couverture de ses intrants</span>{" "}
-                    {/* L'exemple a moitie : c'est le cas que l'utilisateur cite
-                        lui-meme (« si il n'y a que 25 bovins sur 50 »), et un
-                        chiffre se verifie d'un coup d'oeil, pas une formule. */}
-                    <span className="text-slate-400">
-                      (à moitié approvisionné :{" "}
-                      <span className="tabular-nums text-slate-300">
-                        {Math.round(ligne.par_minute / 2)}
-                      </span>
-                      )
-                    </span>
-                    {avecProximite && (
-                      <>
-                        , puis ×{" "}
-                        <span className="text-slate-300">le facteur de proximité</span>{" "}
-                        <span className="text-slate-400">
-                          (il plafonne <strong>tout le palier</strong>, pas cette seule ligne)
+                <p className="mt-1 text-[11px] leading-tight text-slate-500">
+                  C'est un <strong>maximum</strong>.{" "}
+                  {ligne.indicateur !== "" ? (
+                    <>
+                      Cadencée par <span className="text-slate-300">l'escalier</span> de{" "}
+                      {nomRessource(ligne.indicateur)}, et par lui seul — pas par la satisfaction
+                      du bâtiment en plus, qui compterait la pénurie deux fois.
+                    </>
+                  ) : consomme ? (
+                    <>
+                      Elle suit <span className="text-slate-300">la satisfaction du bâtiment</span>{" "}
+                      — ce qu'il a reçu sur ce qu'il demandait —, arrondi vers le bas{" "}
+                      <span className="text-slate-400">
+                        (à moitié servi :{" "}
+                        <span className="tabular-nums text-slate-300">
+                          {Math.floor(ligne.quantite / 2)}
                         </span>
-                      </>
-                    )}
-                    {ligne.tranches.length > 0 ? (
-                      ligne.indicateur !== "" ? (
-                        <>
-                          , puis × <span className="text-slate-300">le rendement de la tranche</span>{" "}
-                          de {nomRessource(ligne.indicateur)}{" "}
-                          <span className="text-slate-400">
-                            — la valeur lue est celle de{" "}
-                            <span className="text-slate-300">la période précédente</span>.
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          , puis ×{" "}
-                          <span className="text-slate-300">
-                            {rendementPourIndicateur(ligne.tranches, 100)} % de rendement
-                          </span>{" "}
-                          — aucun indice choisi, c'est un plafond fixe.
-                        </>
-                      )
-                    ) : avecProximite ? (
-                      <>
-                        , et <span className="text-accent">aucun indice</span> ne la freine en
-                        plus.
-                      </>
-                    ) : (
-                      <>
-                        {" "}
-                        — <span className="text-accent">rien ne la plafonne</span>.
-                      </>
-                    )}
-{" "}
-                    Et sans sa main-d'œuvre, elle est nulle.
-                  </p>
-                )}
+                        )
+                      </span>
+                      .
+                    </>
+                  ) : (
+                    <>
+                      Ce palier ne consomme rien : <span className="text-accent">il livre tout</span>{" "}
+                      à chaque cycle.
+                    </>
+                  )}{" "}
+                  Et sans sa main-d'œuvre, elle est nulle.
+                </p>
               </div>
             );
           })}
@@ -843,12 +919,55 @@ function LignesProduction({
 }
 
 /**
+ * Une production deja en base qui cite ce qui ne se PRODUIT pas — dite en
+ * orange, jamais effacee (meme regle que `Avertissement`).
+ *
+ * - un `indicateur` : la satisfaction se CONSTATE depuis le 11/09 (§5.4), elle
+ *   ne se fabrique plus ;
+ * - un `mobilise` : il se declare en PLACES, dans l'onglet Stock & appro.
+ */
+function AvertissementProduction({
+  lignes,
+  ressources,
+  nomRessource,
+}: {
+  lignes: LigneProduction[];
+  ressources: Ressource[];
+  nomRessource: (code: string) => string;
+}) {
+  const genreDe = (code: string) => ressources.find((r) => r.code === code)?.genre;
+  const indicateurs = lignes.filter((l) => genreDe(l.ressource) === "indicateur");
+  const mobilises = lignes.filter((l) => genreDe(l.ressource) === "mobilise");
+  const noms = (ls: LigneProduction[]) => ls.map((l) => `« ${nomRessource(l.ressource)} »`).join(", ");
+  return (
+    <>
+      {indicateurs.length > 0 && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-400">
+          ⚠️ {noms(indicateurs)} ne se produit pas : un indicateur <strong>se constate</strong>{" "}
+          — tout bâtiment qui consomme publie sa satisfaction, ce qu&apos;il a reçu sur ce qu&apos;il
+          demandait. Retire la ligne ; une production peut le <em>suivre</em> avec{" "}
+          <strong>+ indice</strong>.
+        </p>
+      )}
+      {mobilises.length > 0 && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-400">
+          ⚠️ {noms(mobilises)} ne se produit pas : il se déclare en <strong>places</strong>, dans
+          le tableau de stockage de l&apos;onglet <em>Stock &amp; appro</em>. Retire la ligne.
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
  * L'**escalier de rendement** d'une ligne de production.
  *
  * ⚠️ Une tranche ne porte que son **seuil bas** — le haut est celui de la
  * tranche du dessus. C'est ce qui interdit structurellement le trou et le
  * recouvrement, les deux fautes qui feraient dependre le resultat de l'ordre de
  * lecture. L'ecran affiche donc « de X a Y % », mais ne laisse saisir que X.
+ *
+ * ⚠️ Des pour CENT, partout : seuils, rendements, indicateur (§3).
  */
 function Escalier({
   tranches,
@@ -865,6 +984,10 @@ function Escalier({
 }) {
   const triees = tranchesTriees(tranches);
   const nom = indicateur === "" ? "l'indice" : nomRessource(indicateur);
+  // ⚠️ ARRONDI VERS LE BAS, comme le moteur (`Math.floor` dans `consoProd`) :
+  // un `Math.round` afficherait une unite de plus que ce que le jeu livrera.
+  const livre = (valeur: number) =>
+    Math.floor((quantite * rendementPourIndicateur(triees, valeur)) / 100);
 
   const maj = (i: number, patch: Partial<Tranche>) =>
     onChange(triees.map((t, k) => (k === i ? { ...t, ...patch } : t)));
@@ -889,9 +1012,7 @@ function Escalier({
                 step={1}
                 className="input h-8 w-16 py-0"
                 value={t.seuil}
-                onChange={(e) =>
-                  maj(i, { seuil: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
-                }
+                onChange={(e) => maj(i, { seuil: Math.min(100, entierSaisi(e.target.value)) })}
               />
               à <span className="tabular-nums text-slate-400">{haut}</span> % →
               <input
@@ -901,13 +1022,11 @@ function Escalier({
                 step={1}
                 className="input h-8 w-16 py-0"
                 value={t.rendement}
-                onChange={(e) =>
-                  maj(i, { rendement: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
-                }
+                onChange={(e) => maj(i, { rendement: Math.min(100, entierSaisi(e.target.value)) })}
               />
               % de rendement
               <span className="tabular-nums text-slate-400">
-                — soit {Math.round((quantite * t.rendement) / 100)} par période
+                — soit {Math.floor((quantite * t.rendement) / 100)} par cycle
               </span>
               <button
                 type="button"
@@ -929,10 +1048,17 @@ function Escalier({
         />
       </div>
 
+      {indicateur === "" && triees.length > 0 && (
+        <p className="mt-1 text-[11px] leading-tight text-amber-300">
+          Aucun indicateur choisi : sans lui, l&apos;escalier ne cadence rien — le moteur
+          l&apos;ignore, et il sera retiré à l&apos;enregistrement. La ligne suivrait alors la
+          satisfaction du bâtiment.
+        </p>
+      )}
       {/* ⚠️ Un escalier qui ne descend pas jusqu'a 0 n'est pas une erreur
           bloquante : la tranche la plus basse s'applique quand meme en dessous
           de son seuil. Mais l'ecran doit le DIRE, sinon il ment. */}
-      {!tranchesCouvrentZero(triees) && (
+      {triees.length > 0 && !tranchesCouvrentZero(triees) && (
         <p className="mt-1 text-[11px] leading-tight text-amber-300">
           La tranche la plus basse part de {triees[triees.length - 1].seuil} % : en dessous, c'est
           elle qui s'applique quand même ({triees[triees.length - 1].rendement} %). Jamais 100 % —
@@ -944,22 +1070,16 @@ function Escalier({
           Deux tranches partent du même seuil : le rendement dépendrait de l'ordre de lecture.
         </p>
       )}
-      <p className="mt-1 text-[11px] leading-tight text-slate-500">
-        La valeur lue est celle de <strong>la période précédente</strong> — l'habitation produit son{" "}
-        {nom} à la fin du tick, la production le lit au tick suivant. À 100 % :{" "}
-        <span className="tabular-nums text-slate-300">
-          {Math.round((quantite * rendementPourIndicateur(triees, 100)) / 100)}
-        </span>{" "}
-        · à 60 % :{" "}
-        <span className="tabular-nums text-slate-300">
-          {Math.round((quantite * rendementPourIndicateur(triees, 60)) / 100)}
-        </span>{" "}
-        · à 0 % :{" "}
-        <span className="tabular-nums text-slate-300">
-          {Math.round((quantite * rendementPourIndicateur(triees, 0)) / 100)}
-        </span>
-        .
-      </p>
+      {triees.length > 0 && (
+        <p className="mt-1 text-[11px] leading-tight text-slate-500">
+          La valeur est relue {INDICE_LU}. Chaque bâtiment qui consomme prend{" "}
+          <strong>sa</strong> tranche, et le rendement est leur moyenne{" "}
+          <strong>pondérée par la population</strong>. Tous à 100 % :{" "}
+          <span className="tabular-nums text-slate-300">{livre(100)}</span> · tous à 60 % :{" "}
+          <span className="tabular-nums text-slate-300">{livre(60)}</span> · tous à 0 % :{" "}
+          <span className="tabular-nums text-slate-300">{livre(0)}</span>.
+        </p>
+      )}
     </div>
   );
 }
@@ -985,9 +1105,6 @@ function LignesFlux({
   const maj = (i: number, patch: Partial<LigneFlux>) =>
     onChange(lignes.map((l, k) => (k === i ? { ...l, ...patch } : l)));
 
-  // ⚠️ 08/09 : plus de période à mélanger, un débit s'écrit par minute.
-  const periodes: number[] = [];
-
   return (
     <div>
       {lignes.length === 0 ? (
@@ -999,11 +1116,11 @@ function LignesFlux({
               <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="number"
-                  min={1}
+                  min={0}
                   step={1}
                   className="input h-9 w-20 py-1"
-                  value={ligne.par_minute}
-                  onChange={(e) => maj(i, { par_minute: Math.max(0, Number(e.target.value) || 0) })}
+                  value={ligne.quantite}
+                  onChange={(e) => maj(i, { quantite: entierSaisi(e.target.value) })}
                 />
                 <ChoixRessource
                   code={ligne.ressource}
@@ -1011,55 +1128,25 @@ function LignesFlux({
                   toutes={toutes}
                   onChange={(ressource) => maj(i, { ressource })}
                 />
-                <span className="text-xs text-slate-500">par minute</span>
-                {/* ⚠️ L'indice ne s'AJOUTE que si on le demande. La plupart des
-                    consommations n'en ont pas : un champ toujours la, a zero sur
-                    quatre lignes sur cinq, ferait croire qu'il faut le remplir.
-                    Demande explicite de l'utilisateur. */}
-                {ligne.part > 0 ? (
-                  <span className="flex items-center gap-1 text-xs text-slate-500">
-                    =
-                    <input
-                      type="number"
-                      min={1}
-                      max={100}
-                      step={1}
-                      className="input h-9 w-16 py-1"
-                      value={ligne.part}
-                      onChange={(e) =>
-                        maj(i, { part: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })
-                      }
-                    />
-                    % de satisfaction
-                    <button
-                      type="button"
-                      className="text-slate-500 hover:text-red-400"
-                      title="retirer l'indice"
-                      onClick={() => maj(i, { part: 0 })}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="text-xs text-accent hover:underline"
-                    // La premiere ligne porte 100 %, les suivantes 10 % : c'est
-                    // l'exemple de l'utilisateur, et ca evite un total absurde
-                    // des la deuxieme ligne.
-                    onClick={() =>
-                      maj(i, { part: lignes.some((l, k) => k !== i && l.part > 0) ? 10 : 100 })
-                    }
-                  >
-                    + indice
-                  </button>
-                )}
+                <span className="text-xs text-slate-500">par cycle</span>
+                {/* ⚠️ Spec §4 : pris sans navette, sur tout le plateau — et
+                    jamais alle chercher par une navette de ce batiment. */}
+                <label
+                  className="flex items-center gap-1 text-xs text-slate-400"
+                  title="pris sans navette, sur tout le plateau — sauf chez un bâtiment qui le consomme lui aussi"
+                >
+                  <input
+                    type="checkbox"
+                    checked={ligne.direct}
+                    onChange={(e) => maj(i, { direct: e.target.checked })}
+                  />
+                  en direct
+                </label>
 
-                {/* ⚠️ Meme geste que le « + indice » : cache tant qu'on ne l'a
-                    pas demande. La plupart des consommations n'ont aucune
-                    regle de voisinage. Depuis le 30/08 le bouton RESTE : un
-                    deuxieme clic empile une seconde regle, et c'est comme ca
-                    qu'on ecrit un ET. */}
+                {/* ⚠️ Cache tant qu'on ne l'a pas demande : la plupart des
+                    consommations n'ont aucune regle de voisinage. Depuis le
+                    30/08 le bouton RESTE : un deuxieme clic empile une seconde
+                    regle, et c'est comme ca qu'on ecrit un ET. */}
                 <BoutonProximite
                   deja={ligne.proximites.length}
                   onClick={() =>
@@ -1076,22 +1163,18 @@ function LignesFlux({
                 </button>
               </div>
 
+              <LigneAZero ligne={ligne} />
+
               <BlocsProximite
                 proximites={ligne.proximites}
                 contexte="consomme"
-                quantite={ligne.par_minute}
+                quantite={ligne.quantite}
                 tuiles={tuiles}
                 nomTuile={nomTuile}
                 onChange={(proximites) => maj(i, { proximites })}
               />
             </div>
           ))}
-          {periodes.length > 1 && (
-            <p className="text-[11px] text-amber-400">
-              Ce palier mélange {periodes.length} périodes différentes. Le ralenti en cas de
-              pénurie sera moins précis — garde la même période partout si tu peux.
-            </p>
-          )}
         </div>
       )}
       <div className="mt-1">
@@ -1194,6 +1277,9 @@ function BlocsProximite({
           <span className="tabular-nums text-slate-300">{total} %</span>.
         </p>
       )}
+
+      {/* ⚠️ HORS MOTEUR depuis le 11/09 (decision de Guillaume) : dit UNE fois
+          sous la section, pas sous chaque regle. A retirer AVEC le mecanisme. */}
     </div>
   );
 }
@@ -1205,7 +1291,8 @@ type Contexte = "consomme" | "produit";
  * **Une regle de proximite** — 2026-08-28, elargie le 2026-08-30.
  *
  * Mot de l'utilisateur au depart : *« 10 bovin × 120 s × (besoin de 5 tile
- * bovin a 2 rayon = 100 %) »*. Elle attache un batiment a son voisinage : un
+ * bovin a 2 rayon = 100 %) »*. ⚠️ HORS MOTEUR depuis le 11/09 — voir
+ * Elle attache un batiment a son voisinage : un
  * abattoir sans paturages autour n'a rien a abattre.
  *
  * Le 30/08 : **plusieurs tuiles au choix, dont le total fait N** — un OU, leurs
@@ -1319,7 +1406,7 @@ function BlocProximite({
           parmi <span className="text-slate-300">{liste}</span> dans les{" "}
           <span className="tabular-nums">{casesCouvertes(p.rayon)}</span> cases à {p.rayon} de
           rayon pour {contexte === "consomme" ? "consommer" : "produire"} les {quantite} par
-          minute. <strong>Au prorata en dessous</strong> : avec{" "}
+          cycle. <strong>Au prorata en dessous</strong> : avec{" "}
           <span className="tabular-nums text-slate-300">{manquantes}</span> sur {p.nombre},{" "}
           {contexte === "consomme" ? (
             <>

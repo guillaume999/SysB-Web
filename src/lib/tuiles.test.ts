@@ -25,8 +25,15 @@ import {
   categoriesVersTexte,
   cransParTrajet,
   dureeTrajet,
+  erreursPalier,
+  erreursPaliers,
   formatDuree,
+  libelleCycle,
+  normaliserPalier,
   normaliserProximites,
+  palierTourne,
+  palierVide,
+  paliersPourEnregistrer,
   normaliserRegle,
   pourcentageProximite,
   pourcentageProximites,
@@ -37,6 +44,7 @@ import {
   seuilsEnDouble,
   tileIdsDe,
   tranchesCouvrentZero,
+  type Palier,
   type Proximite,
 } from "@/lib/tuiles";
 
@@ -172,6 +180,183 @@ describe("rendementPourIndicateur", () => {
     expect(tranchesCouvrentZero([...escalier, { seuil: 0, rendement: 0 }])).toBe(true);
     expect(seuilsEnDouble(escalier)).toBe(false);
     expect(seuilsEnDouble([...escalier, { seuil: 50, rendement: 10 }])).toBe(true);
+  });
+});
+
+// ─── Le palier du modèle à cycles (2026-09-11, spec §2ter) ─────────────────
+//
+//  ⚠️ Le contrat est celui que le serveur ACCEPTE
+//  (`pb_hooks/moteur/cycles/tuiles.js`, `chargerTuile` / `chargerLigne`) : ce
+//  que le site laisse partir doit se charger, et ce qu'il bloque doit être
+//  exactement ce que le serveur refuserait.
+
+/** Un four : 20 blé → 5 pain, cycle de 2 min. */
+function four(patch: Partial<Palier> = {}): Palier {
+  return {
+    ...palierVide(1),
+    cycle_minutes: 2,
+    utilisation: [{ ressource: "ble", quantite: 20, direct: false, proximites: [] }],
+    production: [{ ressource: "pain", quantite: 5, indicateur: "", tranches: [], proximites: [] }],
+    ...patch,
+  };
+}
+
+describe("normaliserPalier — le format à cycles, et lui seul", () => {
+  it("lit la quantité par cycle, « en direct », le cycle et « démarre avec ce qu'il y a »", () => {
+    const p = normaliserPalier(
+      {
+        niveau: 1,
+        cycle_minutes: 2,
+        demarre_partiel: true,
+        utilisation: [{ ressource: "ble", quantite: 20, direct: true }],
+        production: [{ ressource: "pain", quantite: 5 }],
+      },
+      1,
+    );
+    expect(p.cycle_minutes).toBe(2);
+    expect(p.demarre_partiel).toBe(true);
+    expect(p.utilisation[0]).toMatchObject({ ressource: "ble", quantite: 20, direct: true });
+    expect(p.production[0]).toMatchObject({ ressource: "pain", quantite: 5, indicateur: "" });
+  });
+
+  it("« démarre avec ce qu'il y a » et « en direct » sont DÉCOCHÉS par défaut", () => {
+    // ⚠️ Le défaut est le tout-ou-rien (§2) : un palier qui ne dit rien ne
+    // doit pas se mettre à manger ce qu'il trouve.
+    const p = normaliserPalier({ utilisation: [{ ressource: "ble", quantite: 1 }] }, 1);
+    expect(p.demarre_partiel).toBe(false);
+    expect(p.utilisation[0].direct).toBe(false);
+    expect(p.cycle_minutes).toBe(0);
+  });
+
+  it("NE relit PAS `par_minute` ni `part` — on repart de zéro, la ligne revient à 0", () => {
+    const p = normaliserPalier(
+      {
+        utilisation: [{ ressource: "ble", par_minute: 2.5, part: 100 }],
+        production: [{ ressource: "pain", par_minute: 5 }],
+      },
+      1,
+    );
+    expect(p.utilisation[0].quantite).toBe(0);
+    expect(p.production[0].quantite).toBe(0);
+    expect(p.utilisation[0]).not.toHaveProperty("par_minute");
+    expect(p.utilisation[0]).not.toHaveProperty("part");
+  });
+
+  it("n'accepte que des entiers : une quantité décimale est tronquée", () => {
+    const p = normaliserPalier({ cycle_minutes: 2.7, utilisation: [{ ressource: "ble", quantite: 3.9 }] }, 1);
+    expect(p.cycle_minutes).toBe(2);
+    expect(p.utilisation[0].quantite).toBe(3);
+  });
+
+  it("ne relit plus l'ancien `rendement` seul : le « plafond fixe » est mort le 11/09", () => {
+    const p = normaliserPalier({ production: [{ ressource: "pain", quantite: 5, rendement: 60 }] }, 1);
+    expect(p.production[0].tranches).toEqual([]);
+  });
+});
+
+describe("erreursPalier — ce que le serveur refuserait", () => {
+  it("un four bien déclaré passe", () => {
+    expect(erreursPalier(four())).toEqual([]);
+  });
+
+  it("exige un cycle dès que le palier consomme OU produit", () => {
+    expect(erreursPalier(four({ cycle_minutes: 0 }))).toHaveLength(1);
+    expect(erreursPalier(four({ cycle_minutes: 0, utilisation: [] }))).toHaveLength(1);
+    expect(erreursPalier(four({ cycle_minutes: 0, production: [] }))).toHaveLength(1);
+  });
+
+  it("n'exige RIEN d'un palier qui ne fait rien — une tuile décorative n'a pas de rythme", () => {
+    expect(erreursPalier(palierVide(1))).toEqual([]);
+    expect(palierTourne(palierVide(1))).toBe(false);
+  });
+
+  it("une ligne à 0 par cycle ne réclame pas de cycle : elle ne partira pas en base", () => {
+    const p = four({
+      cycle_minutes: 0,
+      utilisation: [{ ressource: "ble", quantite: 0, direct: false, proximites: [] }],
+      production: [],
+    });
+    expect(palierTourne(p)).toBe(false);
+    expect(erreursPalier(p)).toEqual([]);
+  });
+
+  it("refuse un cycle qui n'est pas un entier ≥ 1 — le plus court est UNE minute", () => {
+    expect(erreursPalier(four({ cycle_minutes: 1.5 }))).toHaveLength(1);
+    expect(erreursPalier(four({ cycle_minutes: 1 }))).toEqual([]);
+  });
+
+  it("refuse une quantité qui n'est pas un entier ≥ 0 (§3 : le 1/3600 a disparu)", () => {
+    const p = four();
+    p.production[0].quantite = 2.5;
+    expect(erreursPalier(p)).toHaveLength(1);
+  });
+
+  it("refuse une production qui SUIT un indicateur sans aucune tranche (§5.4)", () => {
+    const p = four();
+    p.production[0].indicateur = "satisfaction";
+    expect(erreursPalier(p)).toHaveLength(1);
+    p.production[0].tranches = [{ seuil: 0, rendement: 100 }];
+    expect(erreursPalier(p)).toEqual([]);
+  });
+
+  it("préfixe chaque erreur de son palier, pour le pied de la fenêtre", () => {
+    expect(erreursPaliers([four(), four({ cycle_minutes: 0 })])[0]).toMatch(/^Palier 2 : /);
+  });
+});
+
+describe("paliersPourEnregistrer — ce qui part en base", () => {
+  it("écrit le cycle sur un palier qui tourne, et JAMAIS `0` sur un palier qui ne fait rien", () => {
+    // ⚠️ Le serveur refuse `cycle_minutes: 0` : absent est la seule façon de
+    // dire « pas de cycle ».
+    const [tourne, decor] = paliersPourEnregistrer([four(), { ...palierVide(2), cycle_minutes: 3 }]);
+    expect(tourne.cycle_minutes).toBe(2);
+    expect(decor).not.toHaveProperty("cycle_minutes");
+  });
+
+  it("n'écrit plus ni `par_minute` ni `part`, et `direct` sur une consommation seulement", () => {
+    const [p] = paliersPourEnregistrer([four({ demarre_partiel: true })]);
+    expect(p.demarre_partiel).toBe(true);
+    expect(p.utilisation[0]).toEqual({ ressource: "ble", quantite: 20, direct: false, proximites: [] });
+    expect(p.production[0]).toEqual({
+      ressource: "pain",
+      quantite: 5,
+      indicateur: "",
+      tranches: [],
+      proximites: [],
+    });
+  });
+
+  it("retire les lignes à 0 par cycle — l'écran l'a dit avant", () => {
+    const p = four();
+    p.utilisation.push({ ressource: "bois", quantite: 0, direct: false, proximites: [] });
+    p.production.push({ ressource: "brique", quantite: 0, indicateur: "", tranches: [], proximites: [] });
+    const [sortie] = paliersPourEnregistrer([p]);
+    expect(sortie.utilisation.map((l) => l.ressource)).toEqual(["ble"]);
+    expect(sortie.production.map((l) => l.ressource)).toEqual(["pain"]);
+  });
+
+  it("retire un escalier SANS indicateur : « une ligne a UN cadenceur » (§4)", () => {
+    const p = four();
+    p.production[0].tranches = [{ seuil: 0, rendement: 60 }];
+    expect(paliersPourEnregistrer([p])[0].production[0].tranches).toEqual([]);
+  });
+
+  it("trie l'escalier d'une ligne qui suit un indicateur", () => {
+    const p = four();
+    p.production[0].indicateur = "satisfaction";
+    p.production[0].tranches = [
+      { seuil: 0, rendement: 60 },
+      { seuil: 80, rendement: 100 },
+    ];
+    expect(paliersPourEnregistrer([p])[0].production[0].tranches.map((t) => t.seuil)).toEqual([80, 0]);
+  });
+});
+
+describe("libelleCycle", () => {
+  it("dit la quantité PAR CYCLE, plus « par minute »", () => {
+    expect(libelleCycle({ cycle_minutes: 2 })).toBe("par cycle de 2 min");
+    expect(libelleCycle({ cycle_minutes: 90 })).toBe("par cycle de 1.5 h");
+    expect(libelleCycle({ cycle_minutes: 0 })).toBe("par cycle (durée non déclarée)");
   });
 });
 

@@ -46,7 +46,6 @@
  */
 
 import { pb } from "@/lib/pb";
-import { nombre } from "@/lib/tuiles";
 
 export const COLLECTION_TECHNOLOGIES = "technologies";
 
@@ -228,8 +227,37 @@ export interface LigneAchat {
  */
 export interface LigneEntretien {
   ressource: string;
-  /** Le débit d'entretien, PAR MINUTE (2026-09-08). Peut être décimal. */
+  /**
+   * Le débit d'entretien, PAR MINUTE (2026-09-08). Peut être décimal.
+   *
+   * ⚠️ **Hors moteur depuis le 2026-09-11** (décision de Guillaume) : le moteur
+   * à cycles n'applique ni l'entretien ni les effets des technos — voir
+   * `TECHNOS_HORS_MOTEUR`. La notation `par_minute` est donc laissée TELLE
+   * QUELLE, exprès : les tuiles l'ont perdue au profit d'une quantité par
+   * cycle, mais une techno n'a pas de cycle, et inventer son format avant que
+   * le moteur le lise serait décider à sa place.
+   */
   par_minute: number;
+}
+
+/**
+ * L'avertissement orange de l'écran Technologies — un seul texte, pour que la
+ * liste et la fenêtre disent la même chose. Retirer AVEC le mécanisme.
+ */
+export const TECHNOS_HORS_MOTEUR =
+  "L'entretien et les effets ne sont pas appliqués par le moteur à cycles : ils sont enregistrés, mais rien ne les prélève ni ne les applique en jeu pour l'instant.";
+
+/**
+ * Un nombre éventuellement DÉCIMAL — un entretien par minute peut valoir 2,5.
+ * Un `Math.trunc` le tronquerait à 2, soit 20 % de moins, sans rien dire.
+ *
+ * ⚠️ Vivait dans `tuiles.ts` jusqu'au 11/09 ; les tuiles n'ont plus de débit
+ * décimal (une quantité par cycle est un entier), l'entretien est son dernier
+ * lecteur.
+ */
+function nombre(v: unknown, defaut = 0): number {
+  const n = typeof v === "number" ? v : parseFloat(String(v));
+  return Number.isFinite(n) ? n : defaut;
 }
 
 export interface CoutTechno {

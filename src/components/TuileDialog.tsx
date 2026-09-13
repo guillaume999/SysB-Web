@@ -24,6 +24,7 @@ import {
   cheminIconeAttendu,
   contrainteDe,
   couleurAuto,
+  erreursPaliers,
   logistiqueDe,
   logistiquePourEnregistrer,
   palierVide,
@@ -280,7 +281,18 @@ export default function TuileDialog({
     else ouvrirGestion(nouvelle);
   };
 
-  const bloque = saving || nom.trim() === "" || modele === "" || idHorsBornes || conflit !== null;
+  // ⚠️ Ce que le serveur REFUSERAIT de charger (un palier qui tourne sans
+  // cycle, un indicateur sans tranche) bloque l'enregistrement : une tuile
+  // refusee ne se verrait qu'en jeu, par un batiment qui ne fait rien.
+  const erreursCout = erreursPaliers(paliers);
+
+  const bloque =
+    saving ||
+    nom.trim() === "" ||
+    modele === "" ||
+    idHorsBornes ||
+    conflit !== null ||
+    erreursCout.length > 0;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -991,6 +1003,19 @@ export default function TuileDialog({
           <p className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
             tileId invalide : il faut un entier entre {TILE_ID_MIN} et {TILE_ID_MAX}.
           </p>
+        )}
+        {/* Dit ICI et pas seulement dans l'onglet Cout : le bouton se grise
+            quel que soit l'onglet ouvert, et un bouton gris muet ne se
+            diagnostique pas. */}
+        {erreursCout.length > 0 && (
+          <div className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
+            <p>Onglet Cout — le serveur refuserait cette tuile :</p>
+            <ul className="ml-4 list-disc">
+              {erreursCout.map((e) => (
+                <li key={e}>{e}</li>
+              ))}
+            </ul>
+          </div>
         )}
         {erreur && (
           <p className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">

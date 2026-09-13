@@ -448,12 +448,6 @@ export default function TuileStockage({
             Cette tuile <strong>va chercher</strong> ailleurs. Son <strong>rayon de récolte</strong>{" "}
             dit jusqu'où elle se déplace, et sa liste dit ce qu'elle peut prendre.
           </Terme>
-          <Terme nom="je produis">
-            Cette tuile <strong>fabrique</strong>. <strong>Ni cible, ni rayon</strong> : n'importe
-            qui peut venir s'y servir, s'il a la portée et le besoin. C'est le{" "}
-            <strong>preneur</strong> qui décide de sa zone, pas le producteur — sinon il faudrait
-            accorder deux rayons pour chaque paire, et personne ne saurait lequel bloque.
-          </Terme>
           <Terme nom="j'envoie">
             Cette tuile <strong>livre</strong> chez les autres, dans son{" "}
             <strong>rayon d'envoi</strong>. C'est le seul cas où quelque chose part de soi-même, et
@@ -461,39 +455,22 @@ export default function TuileStockage({
             l'abattoir.
           </Terme>
           <Terme nom="combien on produit vraiment">
-            Le débit d'une règle « je produis » est <strong>ce que la tuile fabrique</strong> — et
-            c'est un <strong>maximum</strong>. La production réelle vaut :
+            Pas ici : la production se déclare dans l'onglet <em>Coût</em>, en quantité{" "}
+            <strong>par cycle</strong>. Ce qu'on règle ici, c'est par où elle arrive et repart.
             <br />
-            <code>débit × couverture des intrants × satisfaction du plateau</code>
+            Rappel de la règle (spec du 11/09) : une ligne ordinaire livre{" "}
+            <code>quantité × satisfaction du bâtiment</code>, arrondi vers le bas — ce qu'il a reçu
+            sur ce qu'il demandait. Un abattoir à 20 viandes par cycle qui n'a reçu que la moitié
+            de ses bovins en sort <strong>10</strong>. Une ligne qui suit un indicateur est
+            cadencée par son escalier, et par lui seul.
             <br />
-            Un abattoir à 20 viandes / 2 min, qui n'a reçu que la moitié de ses bovins, sur un
-            plateau à 60 % de satisfaction, sort <strong>6</strong>. La couverture est un
-            pourcentage, pas un tout-ou-rien : à moitié approvisionné, on produit la moitié.
-            <br />
-            ⚠️ Et sans sa main-d'œuvre, un bâtiment ne produit <strong>rien du tout</strong>,
-            quelle que soit la couverture.
+            ⚠️ Et sans sa main-d'œuvre, un bâtiment ne produit <strong>rien du tout</strong>.
           </Terme>
-          <Terme nom="produire un indicateur">
-            Une <strong>habitation</strong> produit la satisfaction : choisis-la comme ressource
-            produite, et il n'y a <strong>rien d'autre à saisir</strong>. Sa valeur se{" "}
-            <strong>calcule</strong> à partir de ce que l'habitation arrive réellement à
-            consommer — bien nourrie, elle la produit à 100 % ; à moitié servie, à 50 %.
-          </Terme>
-          <Terme nom="freinée par">
-            L'autre bout de la chaîne : une production ordinaire déclare{" "}
-            <strong>quel indicateur la freine, et à quel point</strong>.
-            <br />
-            <code>facteur = 1 − impact% × (1 − indicateur)</code>
-            <br />
-            À 100 % d'impact et 60 % de satisfaction, la ferme produit à 60 %. À 80 % d'impact,
-            elle produit à 68 %. À 0 %, elle produit à plein quoi qu'il arrive. La phrase sous
-            chaque règle te montre le calcul sur tes vrais chiffres.
-            <br />
-            ⚠️ <strong>C'est le garde-fou contre la spirale.</strong> Mets 0 sur les fermes et
-            elles continuent de nourrir même quand tout va mal. Sans au moins une production
-            insensible quelque part, la boucle satisfaction → production → nourriture →
-            satisfaction s'effondre toute seule pendant que le joueur dort — et il ne peut plus
-            rien reconstruire, puisque construire coûte ce qu'il ne produit plus.
+          <Terme nom="en direct">
+            Une consommation cochée <em>en direct</em> dans l'onglet <em>Coût</em> est prise sans
+            navette, sur tout le plateau. ⚠️ <strong>Aucune règle d'ici ne part la
+            chercher</strong> : une règle qui la cite n'envoie rien pour elle — ce serait payer
+            deux fois le même approvisionnement.
           </Terme>
           <Terme nom="qui passe en premier">
             ⚠️ Les <strong>consommateurs directs se servent avant les entrepôts</strong>. Sans ça,

@@ -391,18 +391,24 @@ export interface LigneCout {
 }
 
 /**
- * **Un débit s'écrit avec UN SEUL nombre : `par_minute`.** (2026-09-08)
+ * ⚠️⚠️ **LE MODÈLE À CYCLES (2026-09-11, `SysB/SPEC_MOTEUR_CYCLES.md` §2ter).**
+ * Un bâtiment n'est plus un débit : il **démarre** un cycle quand ses
+ * ressources sont là, il **dure** `cycle_minutes`, il **livre d'un coup**. Une
+ * ligne porte donc une **quantité ENTIÈRE par cycle**, et la période vit sur le
+ * PALIER, jamais sur la ligne — un bâtiment a UN rythme.
  *
- * ⚠️ **`quantite` + `periode_s` ont été retirés.** La période était une SECONDE
- * façon de dire le même débit, et c'est elle qui a permis de saisir « 10
- * nourriture par SECONDE » sur les Habitations Bois sans que ça se voie : à
- * l'écran, « 10 » et « 1 » se lisent pareil, seul leur rapport compte. Une
- * seule unité, plus d'ambiguïté possible — et plus de période commune à tenir.
+ * ⚠️ **`par_minute` N'EXISTE PLUS**, ni `periode_s` sur une ligne, ni `part` :
+ * le serveur REFUSE de charger une tuile qui porte les deux premiers
+ * (`pb_hooks/moteur/cycles/tuiles.js`, `chargerLigne`). Ils ne sont ni lus ni
+ * écrits ici — une ligne d'avant le 11/09 revient avec une quantité à 0, que
+ * l'écran signale et que l'enregistrement retire. On ne les relit pas « au cas
+ * où » : on repart de zéro.
  *
- * ⚠️ **Il peut être décimal** : l'ancien « 5 baies / 120 s » s'écrit `2.5`.
- * Le moteur compte en 1/3600 d'unité, donc **`par_minute × 60` doit être
- * entier** : `2.5` passe (150), `0.01` non (0,6). Le serveur REFUSE de charger
- * une ligne qui ne tombe pas juste, il ne l'arrondit pas en silence.
+ * ⚠️ Ce n'est PAS le retour du couple `quantite` + `periode_s` tué le 08/09 :
+ * dans un modèle à cycles, 10 par 60 s ne se comporte pas comme 5 par 30 s —
+ * l'un bloque deux fois plus longtemps, l'autre sert deux fois plus souvent.
+ * Et le 1/3600 a disparu avec le débit : une quantité par cycle est déjà un
+ * entier d'unités réelles, il n'y a plus rien à convertir (§3).
  */
 /**
  * **La règle de proximité** — posée le 2026-08-28 sur les consommations
@@ -444,10 +450,17 @@ export interface LigneCout {
  * ⚠️ **Le format a changé le 30/08, et les deux bouts ont suivi** : `tileId`
  * (un seul) est devenu `tileIds` (une liste), et le champ d'une ligne est passé
  * de `proximite` (un objet) à `proximites` (une liste). Les TROIS lecteurs
- * relisent l'ancien format en plus du nouveau — ici `normaliserProximites`,
- * côté moteur `proximitesDe` (`pb_hooks/moteur/catalogue.js`), côté jeu
- * `Proximite.Reunir` (`TuileModele.cs`) — donc une proximité saisie avant le
- * 30/08 agit toujours. Seul le nouveau format s'écrit.
+ * ⚠️ SEUL LE SITE relit encore l'ancien format, et c'est le chemin de
+ * migration : le serveur et le jeu ne lisent plus que `tileIds`/`proximites`
+ * depuis le 11/09. Rouvrir puis enregistrer une vieille tuile la convertit —
+ * et il faut de toute facon toutes les rouvrir, puisque `par_minute` est
+ * refusé. Seul le nouveau format s'écrit.
+ *
+ * ⚠️ **Le moteur à cycles LES APPLIQUE** (spec §4bis, 11/09) : le facteur
+ * redéfinit la taille du cycle — `quantité × min(compté, nombre) / nombre`,
+ * arrondi vers le bas — et il plafonne **TOUT LE PALIER**, pas la seule ligne
+ * qui le porte. Plusieurs `tileIds` dans une règle : les cibles s'ADDITIONNENT
+ * (OU). Plusieurs règles sur une ligne : on garde le **MINIMUM** (ET).
  */
 export interface Proximite {
   /**
@@ -541,33 +554,39 @@ function normaliserProximite(brut: unknown): Proximite {
   };
 }
 
+/**
+ * Une ligne de CONSOMMATION : ce que le bâtiment mange à chaque cycle.
+ *
+ * ⚠️ **`part` a disparu le 2026-09-11** (§5.4) : la satisfaction ne se
+ * DÉCLARE plus, elle se CONSTATE. Tout bâtiment qui consomme publie la sienne,
+ * `servi / demandé` sur l'ensemble de ses lignes — 15 blé servis sur 20
+ * demandés donnent 75 %, sans rien saisir. Les parts déclarées étaient
+ * précisément ce qui portait le bug mesuré le 11/09 : cinq maisons
+ * parfaitement nourries dont les parts totalisaient 50 % rendaient 60 % pour
+ * toujours.
+ */
 export interface LigneFlux {
   ressource: string;
-  /** Le débit, par minute. Peut être décimal — voir le commentaire ci-dessus. */
-  par_minute: number;
+  /** Combien, PAR CYCLE. Un entier d'unités réelles (§3). */
+  quantite: number;
   /**
-   * **Part de satisfaction couverte par cette consommation**, en pourcentage.
-   * `0` = consommation ordinaire, elle ne produit pas de satisfaction.
+   * **« en direct »** (§4) : la ressource est prise **sans navette**, sur
+   * **tout le plateau** — sauf chez un bâtiment qui la consomme lui aussi.
    *
-   * Modèle de l'utilisateur, avec ses chiffres (26/08) :
-   * *« je consomme 20 nourriture / 120 s = 100 % satisfaction ; si ça ne
-   * consomme que 15 car pas assez de stock : satisfaction à 75 %. Plus on
-   * ajoute d'autres consommations : je consomme 10 de pierre / 120 s =
-   * satisfaction +10 % »*.
+   * ⚠️ Une ressource consommée en direct **n'est jamais allée chercher par une
+   * navette** : c'est tout l'intérêt, elle arrive sans transport donc sans
+   * aléa. Une règle d'appro de ce bâtiment qui la cite n'envoie rien pour elle.
    *
-   * Donc, ligne par ligne : `part × (reçu / demandé)`, et on additionne.
-   * 15 nourriture sur 20 demandées, part 100 % → **75 %**.
-   * En ajoutant 10 pierre servies à plein, part 10 % → 75 + 10 = **85 %**.
+   * ⚠️ Tous les preneurs en direct d'un même type ne font **qu'un** : ils
+   * consomment et produisent comme un seul bâtiment, et publient une seule
+   * satisfaction. C'est ce qui lisse les indices.
    *
-   * ⚠️ Ce champ avait été posé puis retiré le 26/08 (il encombrait l'onglet
-   * Coût). Il est revenu le même jour, l'utilisateur ayant redonné le modèle
-   * avec ses chiffres. **Ne pas le re-retirer sans le remplacer.**
+   * Sur une consommation SEULEMENT : une production n'a pas ce champ.
    */
-  part: number;
+  direct: boolean;
   /**
-   * **Les règles de proximité** de cette consommation — voir `Proximite`.
-   * Liste vide = aucune règle, et c'est le cas normal. Plusieurs règles se
-   * lisent en **ET**, la plus contraignante commande.
+   * **Les règles de proximité** de cette consommation — voir `Proximite`, et
+   * son avertissement : HORS MOTEUR depuis le 11/09.
    */
   proximites: Proximite[];
 }
@@ -575,23 +594,20 @@ export interface LigneFlux {
 export function fluxVide(ressource: string): LigneFlux {
   return {
     ressource,
-    par_minute: 1,
-    part: 0,
+    quantite: 1,
+    direct: false,
     proximites: [],
   };
 }
 
 /**
- * Un palier de la tuile. Le champ `niveau` est **explicite en plus** de la
- * position dans le tableau : un réordonnancement accidentel se voit alors, au
- * lieu de tout décaler en silence.
- *
- * `cout` = une fois, à la construction. `utilisation` = tant que le bâtiment
- * tourne.
- */
-/**
  * Un **cran** de l'escalier de rendement : « à partir de `seuil` %
- * d'indicateur, la ligne rend `rendement` % de son débit ».
+ * d'indicateur, la ligne rend `rendement` % de sa quantité par cycle ».
+ *
+ * ⚠️ Des **pour cent** (0–100), jamais des pour mille (§3). Le moteur ne
+ * calcule d'ailleurs jamais le pourcentage pour le comparer au seuil : il
+ * multiplie en croix (`servi × 100 >= seuil × demandé`). Le pourcentage n'est
+ * arrondi qu'à l'affichage.
  *
  * ⚠️ Seul le **seuil bas** se saisit. Le haut est celui de la tranche du
  * dessus, ou 100. C'est ce qui rend impossible un trou entre deux tranches, ou
@@ -601,14 +617,14 @@ export function fluxVide(ressource: string): LigneFlux {
 export interface Tranche {
   /** Valeur de l'indicateur, en %, à partir de laquelle cette tranche vaut. */
   seuil: number;
-  /** Ce que la ligne rend dans cette tranche, en % de son débit déclaré. */
+  /** Ce que la ligne rend dans cette tranche, en % de sa quantité par cycle. */
   rendement: number;
 }
 
 /**
  * Les deux tranches de l'exemple de l'utilisateur, proposées quand il ajoute un
- * indice : *« 60 nourriture × 100 % par 120 s pour satisfaction 100–80 %,
- * 60 × 80 % pour satisfaction 80–0 % »*.
+ * indice : *« 60 nourriture × 100 % pour satisfaction 100–80 %, 60 × 80 % pour
+ * satisfaction 80–0 % »*.
  */
 export const TRANCHES_PAR_DEFAUT: Tranche[] = [
   { seuil: 80, rendement: 100 },
@@ -616,28 +632,26 @@ export const TRANCHES_PAR_DEFAUT: Tranche[] = [
 ];
 
 /**
- * ⚠️ **QUAND l'indicateur est lu**, question posée par l'utilisateur le 26/08 :
- * *« ça prendra l'indice de la période d'avant pour calculer le rendement ? »*.
+ * ⚠️ **QUAND l'indicateur est lu** — l'ordre du cycle (§2), sans exception :
  *
- * La boucle **a l'air** circulaire : l'habitation consomme la nourriture →
- * produit la satisfaction → la satisfaction freine la ferme → la ferme produit
- * la nourriture. Mais elle se défait par l'**ordre**, parce que la consommation
- * ne dépend d'aucun indicateur. Dans une passe du moteur :
+ * 1. ARRIVÉE — les livraisons et récoltes qui atterrissent maintenant ;
+ * 2. INDICE — les indicateurs sont relus, depuis les satisfactions à jour ;
+ * 3. CONSO/PROD — le bâtiment mange et livre, dans le même geste ;
+ * 4. DÉPART — les navettes repartent.
  *
- * 1. toutes les tuiles consomment — chacune mémorise sa satisfaction ;
- * 2. on calcule les indicateurs du plateau ;
- * 3. toutes les tuiles produisent, avec la valeur qu'on vient d'établir.
- *
- * Pas de période précédente, donc — ce serait moins bon : une nuit sans vivres
- * résolue en une seule passe produirait à plein régime, puisque personne
- * n'aurait eu le temps d'avoir faim.
+ * ⚠️ Relu à **CHAQUE cycle**, jamais une fois pour toutes, et **avant** la
+ * production : évaluée après, la satisfaction faisait tourner à plein régime
+ * un bâtiment qui produit plus vite qu'il ne mange (150 unités d'écart sur une
+ * heure, mesuré au miroir le 25/08).
  */
-export const INDICE_LU = "après la consommation de la passe, avant la production";
+export const INDICE_LU =
+  "à chaque cycle, juste avant que le bâtiment consomme et produise — jamais celle d'un cycle précédent";
 
 /**
- * Valeur d'un indicateur avant qu'une seule habitation existe. **100, pas 0** :
- * une colonie neuve démarrerait sinon à rendement minimal, sans jamais pouvoir
- * construire de quoi remonter — la spirale du 25/08 dès la première seconde.
+ * Valeur d'un indicateur quand personne ne vote encore — **100, pas 0** : un
+ * plateau sans consommateur n'est pas un plateau affamé, et une colonie neuve
+ * démarrerait sinon à rendement minimal, sans jamais pouvoir construire de
+ * quoi remonter.
  */
 export const INDICE_AU_DEMARRAGE = 100;
 
@@ -681,13 +695,12 @@ export function seuilsEnDouble(tranches: Tranche[]): boolean {
   return new Set(seuils).size !== seuils.length;
 }
 
+// ⚠️ L'ancien `rendement` seul (26/08 au matin) n'est plus relu : il devenait
+// une tranche sans indicateur, le « plafond fixe » — mort le 11/09 avec la
+// règle « une ligne a UN cadenceur » (voir `LigneProduction.tranches`).
 function normaliserTranches(l: unknown): Tranche[] {
-  const o = l as { tranches?: unknown; rendement?: unknown };
-  if (Array.isArray(o?.tranches)) return tranchesTriees(o.tranches as Tranche[]);
-  // Lecture des enregistrements du matin : un `rendement` seul devient une
-  // tranche unique a seuil 0, soit exactement le plafond fixe qu'il etait.
-  const ancien = Math.min(100, Math.max(0, Math.trunc(Number(o?.rendement) || 0)));
-  return ancien > 0 ? [{ seuil: 0, rendement: ancien }] : [];
+  const o = l as { tranches?: unknown };
+  return Array.isArray(o?.tranches) ? tranchesTriees(o.tranches as Tranche[]) : [];
 }
 
 /**
@@ -706,11 +719,32 @@ function normaliserTranches(l: unknown): Tranche[] {
  */
 export interface LigneProduction {
   ressource: string;
-  /** Le débit, par minute. Peut être décimal — voir le commentaire ci-dessus. */
-  par_minute: number;
+  /** Combien, PAR CYCLE, au maximum. Un entier d'unités réelles (§3). */
+  quantite: number;
   /**
-   * **L'escalier de rendement** de cette ligne. Liste vide = rien ne freine
-   * cette production, elle tourne à plein (dans la limite de ses intrants).
+   * **L'escalier de rendement** de cette ligne. N'a de sens qu'avec un
+   * `indicateur` : vide = ligne ordinaire.
+   *
+   * ⚠️⚠️ **UNE LIGNE A UN CADENCEUR, ET UN SEUL** (§4, 11/09) :
+   *
+   * - ligne **ordinaire** (sans indicateur) : elle livre `quantité ×
+   *   satisfaction du bâtiment`, arrondi vers le bas — il a 80 % de ce qu'il
+   *   attend, il livre 80 % ;
+   * - ligne qui **suit un indicateur** : cadencée par l'escalier, et par lui
+   *   seul. La remultiplier par la satisfaction propre du bâtiment compterait
+   *   la pénurie deux fois — un bâtiment à 50 % rendrait 25 %.
+   *
+   * ⚠️ Le « plafond fixe » (des tranches sans indicateur) est donc MORT le
+   * 11/09 : le moteur ignore l'escalier d'une ligne sans indicateur. L'écran
+   * le dit, et l'enregistrement le retire.
+   *
+   * ⚠️ Un indicateur sans aucune tranche est REFUSÉ par le serveur au
+   * chargement — c'est une erreur bloquante ici aussi (`erreursPalier`).
+   *
+   * ⚠️ **Lecture B de l'escalier** (§5) : chaque bâtiment qui consomme prend SA
+   * tranche, et le rendement est leur moyenne **pondérée par la population**.
+   * Ce n'est PAS `tranche(moyenne)` : les mal servis tirent le rendement vers
+   * le bas sur leur part de population seulement.
    *
    * ⚠️ **Troisième forme du même champ en une journée**, et c'est celle-ci qui
    * tient : booléen → prorata `rendement% × indice` → **tranches**. Le prorata
@@ -723,15 +757,16 @@ export interface LigneProduction {
    * chevaucher deux tranches — ce qui donnerait un rendement différent selon
    * l'ordre de lecture.
    *
-   *     à partir de 80 %  → rendement 100 %   → 60 par période
-   *     à partir de  0 %  → rendement  80 %   → 48 par période
-   *
-   * Sans indicateur, une tranche unique à seuil 0 est un **plafond fixe**.
+   *     à partir de 80 %  → rendement 100 %   → 60 par cycle
+   *     à partir de  0 %  → rendement  80 %   → 48 par cycle
    */
   tranches: Tranche[];
   /**
-   * **Quel indicateur pilote ce rendement.** Vide = le rendement est un plafond
-   * fixe, il ne suit rien.
+   * **Quel indicateur cette ligne SUIT.** Vide = ligne ordinaire, cadencée par
+   * la satisfaction propre du bâtiment (voir `tranches`).
+   *
+   * ⚠️ Une ligne SUIT un indicateur, elle ne le FABRIQUE jamais (§5.4) : il n'y
+   * a plus de ligne « produit X satisfaction ».
    *
    * ⚠️ Ajouté le 26/08 juste après le champ `rendement` : *« et je veux pouvoir
    * choisir l'indice ! »*. Le pourcentage seul ne disait pas **de quoi** il
@@ -750,7 +785,7 @@ export interface LigneProduction {
    *
    * ⚠️ Contrairement à celles d'une consommation, elles ne freinent pas que
    * leur ligne : le facteur plafonne **tout le palier**. La ligne n'est que
-   * l'endroit où on l'écrit.
+   * l'endroit où on l'écrit. ⚠️ HORS MOTEUR depuis le 11/09 — voir `Proximite`.
    */
   proximites: Proximite[];
 }
@@ -758,7 +793,7 @@ export interface LigneProduction {
 export function productionVide(ressource: string): LigneProduction {
   return {
     ressource,
-    par_minute: 5,
+    quantite: 1,
     tranches: [],
     indicateur: "",
     proximites: [],
@@ -770,71 +805,71 @@ export interface Palier {
   /**
    * Durée du chantier, en secondes. `0` = instantané.
    *
-   * ⚠️ **Appliqué depuis le 28/08.** La pose écrit la fin du chantier dans
-   * l'état de la case (`EtatCase.chantier`, en heure serveur), et la case reste
-   * INERTE jusque-là : elle ne produit pas, ne consomme pas, et ses navettes
-   * ne partent pas. Les deux moteurs le font — `Construction.Poser` côté jeu,
-   * `geste.js` côté serveur — et la résolution compte la production depuis
-   * cette frontière, en temps absolu, donc invariante aux cadences.
+   * ⚠️ La pose écrit la fin du chantier dans l'état de la case
+   * (`chantier_fin`, en heure serveur), et la case reste INERTE jusque-là :
+   * elle ne produit pas, ne consomme pas, ses navettes ne partent pas, et elle
+   * ne vote pas à l'escalier (§7).
    *
-   * ⚠️ **Le prix est payé à la pose, pas à la livraison** : démolir en plein
-   * chantier ne rembourse rien, même sanction qu'un bâtiment fini. L'avertissement
-   * orange de l'écran est parti le 28/08, avec l'arrivée du mécanisme.
+   * ⚠️ **Le prix est payé à la pose, pas à la livraison** (§6bis) : démolir en
+   * plein chantier ne rembourse rien, même sanction qu'un bâtiment fini.
    */
   duree_construction_s: number;
+  /**
+   * **La durée d'UN cycle, en MINUTES ENTIÈRES** (§2ter) : `duree_cycle_s =
+   * cycle_minutes × 60`. Le cycle le plus court est donc UNE minute — assumé.
+   *
+   * ⚠️ **Obligatoire dès que le palier consomme ou produit** : le serveur
+   * refuse une tuile qui tourne sans rythme déclaré, et il n'y a volontairement
+   * AUCUN défaut — un rythme choisi à la place de l'admin se découvrirait en
+   * jeu. `0` = pas encore déclaré, dit en rouge et bloquant (`erreursPalier`).
+   *
+   * ⚠️ Un palier qui ne fait rien n'a pas de cycle : le champ n'est alors PAS
+   * écrit en base (`paliersPourEnregistrer`). Surtout pas `0`, que le serveur
+   * refuse — « 0 minute » n'est pas un rythme.
+   */
+  cycle_minutes: number;
+  /**
+   * ☑️ **« démarre avec ce qu'il y a »** (§2, tranché le 11/09) — DÉCOCHÉ par
+   * défaut.
+   *
+   * - décoché : **tout ou rien**. Un four qui demande 20 blé et n'en a que 12
+   *   ne démarre pas : il n'en mange aucun, il attend sa cargaison complète ;
+   * - coché : un cycle part dès qu'il y a **quelque chose**, mange ce qu'il
+   *   trouve et livre à proportion. Une ressource totalement absente bloque
+   *   toujours.
+   *
+   * ⚠️ C'est l'UNIQUE réglage qui décide entre les deux modes, et aucun autre
+   * comportement ne s'y accroche. Si un jour on veut y suspendre une deuxième
+   * règle, c'est qu'il faut une deuxième case.
+   *
+   * ⚠️ Conséquence assumée du mode coché : un bâtiment qui a 1 unité sur 100 la
+   * consomme à chaque cycle et ne produit rien (arrondi vers le bas). C'est
+   * pour ça que ce n'est pas le défaut.
+   */
+  demarre_partiel: boolean;
   /**
    * Ce que le palier demande en ressources. Le champ `mode` dit **quand** :
    * `paye` à la construction, `mobilise` tant que ça tourne. Une seule liste en
    * base, deux sections à l'écran.
    */
   cout: LigneCout[];
-  /** Ce qu'il consomme pendant qu'il tourne. Rien n'est prélevé en veille. */
+  /** Ce qu'il consomme à chaque cycle. Rien n'est prélevé en veille. */
   utilisation: LigneFlux[];
-  /** Ce qu'il fabrique pendant qu'il tourne. Rien n'est produit en veille. */
+  /** Ce qu'il livre à chaque cycle. Rien n'est produit en veille. */
   production: LigneProduction[];
 }
 
 /*
- * ⚠️ **RETIRÉ le 2026-08-26, le jour même où c'était posé.** Un palier portait
- * aussi `indicateur` (la ressource calculée qu'il produit — la satisfaction) et
- * `plancher_efficacite` (l'efficacité minimale garantie, garde-fou contre la
- * spirale). L'utilisateur les a fait retirer de l'écran en les voyant :
- * *« on supprime produit l'indicateur, efficacité minimale, totalement soumise
- * à la satisfaction »*. Les champs sont partis avec, plutôt que de rester
- * saisis nulle part et lus par personne.
- *
- * Le MODÈLE, lui, reste décidé et vaut toujours — parts de satisfaction par
- * consommation, malus par plateau, plancher par tuile. Il attend seulement un
- * autre endroit où vivre. Tout est dans la note mémoire `sysb-satisfaction-v2`,
- * y compris pourquoi le plancher est indispensable : sans lui la boucle
- * satisfaction → production → nourriture → satisfaction est mortelle.
+ * ⚠️ Un palier a porté `indicateur` et `plancher_efficacite` le 26/08, retirés
+ * le jour même, puis ses consommations des `part` de satisfaction jusqu'au
+ * 11/09. Tout ce vocabulaire est mort avec la décision du 11/09 (§5.4) : la
+ * satisfaction NE SE DÉCLARE PAS, elle se CONSTATE — `servi / demandé`, sur
+ * tout bâtiment qui consomme. Il n'y a plus rien à saisir pour elle.
  */
-
-/** Somme des parts de satisfaction d'un palier. Devrait faire 100 sur une habitation. */
-export function totalParts(p: Palier): number {
-  return p.utilisation.reduce((n, l) => n + Math.max(0, l.part), 0);
-}
 
 /** Ce qui est payé une fois, à la construction. */
 export function coutConstruction(p: Palier): LigneCout[] {
   return p.cout.filter((l) => l.mode === "paye");
-}
-
-// `chantierPasEncoreApplique()` est parti le 28/08 avec l'arrivée des
-// chantiers en jeu (EtatCase.chantier : inerte jusqu'à la fin, production
-// comptée depuis la frontière, badge CHANTIER).
-
-/** Période par défaut d'un flux, en secondes. Voir l'avertissement de `LigneFlux`. */
-/**
- * ⚠️ `PERIODE_PAR_DEFAUT` a été SUPPRIMÉ le 2026-09-08 : il n'y a plus de
- * période à choisir, un débit s'écrit `par_minute`. Ne pas le réintroduire.
- *
- * Un nombre éventuellement DÉCIMAL — un débit par minute peut valoir 2,5.
- * `entier()` le tronquerait à 2, soit 20 % de moins, sans rien dire.
- */
-export function nombre(v: unknown, defaut = 0): number {
-  const n = typeof v === "number" ? v : parseFloat(String(v));
-  return Number.isFinite(n) ? n : defaut;
 }
 
 /**
@@ -850,7 +885,15 @@ export const CRANS_INITIAL = 1;
 export const PERIODE_VITESSE_INITIALE = 20;
 
 export function palierVide(numero: number): Palier {
-  return { niveau: numero, duree_construction_s: 0, cout: [], utilisation: [], production: [] };
+  return {
+    niveau: numero,
+    duree_construction_s: 0,
+    cycle_minutes: 0,
+    demarre_partiel: false,
+    cout: [],
+    utilisation: [],
+    production: [],
+  };
 }
 
 /**
@@ -874,8 +917,8 @@ export function palierVide(numero: number): Palier {
  * Ce qui a été **payé** ne revient jamais, ni en veille ni à la destruction.
  *
  * C'est le joueur qui décide de la veille, et lui seul : la pénurie de
- * ressources fait **ralentir** au prorata (voir la satisfaction), elle n'éteint
- * rien. Un problème, un mécanisme.
+ * ressources fait **attendre** le cycle (§2), elle n'éteint rien. Un problème,
+ * un mécanisme.
  */
 export function rendEnVeille(p: Palier): LigneCout[] {
   return p.cout.filter((l) => l.mode === "mobilise");
@@ -895,63 +938,154 @@ export function paliersDe(tuile: { niveaux?: unknown }): Palier[] {
 export function normaliserPalier(n: unknown, position: number): Palier {
   const o = (n ?? {}) as Partial<Palier>;
   const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
+  const texte = (v: unknown) => (typeof v === "string" ? v : "");
   return {
     niveau: entier(o.niveau) || position,
     duree_construction_s: Math.max(0, entier(o.duree_construction_s)),
+    cycle_minutes: Math.max(0, entier(o.cycle_minutes)),
+    demarre_partiel: o.demarre_partiel === true,
     cout: Array.isArray(o.cout)
       ? o.cout.map((l) => ({
-          ressource: typeof l?.ressource === "string" ? l.ressource : "",
+          ressource: texte(l?.ressource),
           quantite: Math.max(0, entier(l?.quantite)),
           mode: l?.mode === "mobilise" ? "mobilise" : "paye",
         }))
       : [],
+    // ⚠️ Seuls les champs du modèle à cycles sont lus : un `par_minute` ou une
+    // `part` d'avant le 11/09 n'est PAS converti, la ligne revient à 0 par
+    // cycle et l'écran le dit (voir le commentaire de `LigneFlux`).
     utilisation: Array.isArray(o.utilisation)
       ? o.utilisation.map((l) => ({
-          ressource: typeof l?.ressource === "string" ? l.ressource : "",
-          par_minute: Math.max(0, nombre(l?.par_minute)),
-          part: Math.min(100, Math.max(0, entier(l?.part))),
-          // Les DEUX formats sont relus : l'objet unique d'avant le 30/08 et
-          // la liste d'aujourd'hui. Plus vieux encore : aucune regle, donc [].
+          ressource: texte(l?.ressource),
+          quantite: Math.max(0, entier(l?.quantite)),
+          direct: l?.direct === true,
+          // Les DEUX formats de proximité sont relus : l'objet unique d'avant
+          // le 30/08 et la liste d'aujourd'hui.
           proximites: normaliserProximites(l),
         }))
       : [],
     production: Array.isArray(o.production)
       ? o.production.map((l) => ({
-          ressource: typeof l?.ressource === "string" ? l.ressource : "",
-          par_minute: Math.max(0, nombre(l?.par_minute)),
+          ressource: texte(l?.ressource),
+          quantite: Math.max(0, entier(l?.quantite)),
           tranches: normaliserTranches(l),
-          indicateur: typeof l?.indicateur === "string" ? l.indicateur : "",
+          indicateur: texte(l?.indicateur),
           proximites: normaliserProximites(l),
         }))
       : [],
   };
 }
 
+/** Une ligne qui AGIT : elle nomme une ressource et en demande au moins une. */
+function ligneQuiAgit(l: { ressource: string; quantite: number }): boolean {
+  return l.ressource !== "" && l.quantite > 0;
+}
+
+/**
+ * Vrai si le palier consomme ou produit quelque chose — donc s'il lui faut un
+ * cycle. Jugé sur les lignes qui PARTIRONT en base (`ligneQuiAgit`), exactement
+ * comme le serveur le juge sur ce qu'il reçoit : une ligne à 0 retirée à
+ * l'enregistrement ne doit pas exiger un cycle qu'il ne demandera pas.
+ */
+export function palierTourne(p: Palier): boolean {
+  return p.utilisation.some(ligneQuiAgit) || p.production.some(ligneQuiAgit);
+}
+
+/** Un entier positif ou nul — la seule forme d'une quantité depuis le 11/09 (§3). */
+function entierPositif(v: number): boolean {
+  return Number.isInteger(v) && v >= 0;
+}
+
+/**
+ * **Ce que le serveur REFUSERAIT de charger**, en français — donc ce qui bloque
+ * l'enregistrement. Liste vide = le palier passe.
+ *
+ * ⚠️ Rouge et BLOQUANT, contrairement aux avertissements orange de l'écran :
+ * chacune de ces fautes fait refuser la tuile par
+ * `pb_hooks/moteur/cycles/tuiles.js` (`chargerTuile` / `chargerLigne`), et une
+ * tuile refusée ne se voit qu'en jeu, par un bâtiment qui ne fait rien.
+ * Enregistrer quand même ne rendrait service à personne.
+ */
+export function erreursPalier(p: Palier): string[] {
+  const erreurs: string[] = [];
+  if (palierTourne(p) && !(Number.isInteger(p.cycle_minutes) && p.cycle_minutes >= 1)) {
+    erreurs.push(
+      "il consomme ou produit sans cycle : déclare sa durée, un entier de minutes ≥ 1.",
+    );
+  }
+  const quantites = [...p.cout, ...p.utilisation, ...p.production];
+  if (quantites.some((l) => !entierPositif(l.quantite))) {
+    erreurs.push("une quantité n'est pas un entier ≥ 0.");
+  }
+  for (const l of p.production.filter(ligneQuiAgit)) {
+    if (l.indicateur !== "" && l.tranches.length === 0) {
+      erreurs.push(
+        `la production « ${l.ressource} » suit l'indicateur « ${l.indicateur} » sans aucune tranche.`,
+      );
+    }
+  }
+  return erreurs;
+}
+
+/** Les erreurs de TOUS les paliers, préfixées de leur numéro — pour le bas de la fenêtre. */
+export function erreursPaliers(paliers: Palier[]): string[] {
+  return paliers.flatMap((p, i) => erreursPalier(p).map((e) => `Palier ${i + 1} : ${e}`));
+}
+
+/**
+ * Un palier tel qu'il PART en base : `cycle_minutes` n'y figure que si le
+ * palier tourne, et une consommation seule porte `direct`.
+ */
+export type PalierEnregistre = Omit<Palier, "cycle_minutes"> & { cycle_minutes?: number };
+
 /**
  * Renumérotation de sécurité avant l'envoi : la position dans le tableau et le
- * champ `niveau` restent d'accord. Les lignes sans ressource sont écartées —
- * le jeu les ignorerait, autant ne pas laisser croire qu'elles agissent.
+ * champ `niveau` restent d'accord. Les lignes sans ressource ou à 0 par cycle
+ * sont écartées — le jeu les ignorerait, autant ne pas laisser croire qu'elles
+ * agissent. L'écran les signale en orange AVANT, pour que rien ne disparaisse
+ * sans avoir été dit.
  */
-export function paliersPourEnregistrer(paliers: Palier[]): Palier[] {
-  return paliers.map((p, i) => ({
-    niveau: i + 1,
-    duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
-    cout: p.cout.filter((l) => l.ressource !== "" && l.quantite > 0),
-    utilisation: p.utilisation
-      .filter((l) => l.ressource !== "" && l.par_minute > 0)
-      // Une proximite ouverte puis abandonnee n'est pas une regle : elle part
-      // ici, plutot que d'aller occuper une place en base.
-      .map((l) => ({ ...l, proximites: l.proximites.filter(proximitePosee) })),
-    production: p.production
-      .filter((l) => l.ressource !== "")
-      // Tri a l'enregistrement : le jeu lit un escalier deja ordonne, il n'a
-      // pas a re-trier pour tomber sur le meme rendement que l'ecran.
-      .map((l) => ({
-        ...l,
-        tranches: tranchesTriees(l.tranches),
+export function paliersPourEnregistrer(paliers: Palier[]): PalierEnregistre[] {
+  return paliers.map((p, i) => {
+    const sortie: PalierEnregistre = {
+      niveau: i + 1,
+      duree_construction_s: Math.max(0, Math.trunc(p.duree_construction_s || 0)),
+      demarre_partiel: p.demarre_partiel === true,
+      cout: p.cout.filter(ligneQuiAgit),
+      utilisation: p.utilisation.filter(ligneQuiAgit).map((l) => ({
+        ressource: l.ressource,
+        quantite: l.quantite,
+        direct: l.direct === true,
+        // Une proximite ouverte puis abandonnee n'est pas une regle : elle part
+        // ici, plutot que d'aller occuper une place en base.
         proximites: l.proximites.filter(proximitePosee),
       })),
-  }));
+      production: p.production.filter(ligneQuiAgit).map((l) => ({
+        ressource: l.ressource,
+        quantite: l.quantite,
+        indicateur: l.indicateur,
+        // ⚠️ Sans indicateur, l'escalier ne cadence rien (« une ligne a UN
+        // cadenceur ») : il part ici plutôt que de dormir en base, lu par
+        // personne. Trié à l'enregistrement : le jeu lit un escalier déjà
+        // ordonné, il n'a pas à re-trier pour tomber sur le même rendement.
+        tranches: l.indicateur === "" ? [] : tranchesTriees(l.tranches),
+        proximites: l.proximites.filter(proximitePosee),
+      })),
+    };
+    if (palierTourne(p)) sortie.cycle_minutes = p.cycle_minutes;
+    return sortie;
+  });
+}
+
+/**
+ * « par cycle de 2 min » — le rythme d'un palier, lu en français. C'est ce
+ * qui remplace les « / min » du modèle à débit : une quantité n'a de sens
+ * qu'avec la durée du cycle qui la livre.
+ */
+export function libelleCycle(p: Pick<Palier, "cycle_minutes">): string {
+  return p.cycle_minutes >= 1
+    ? `par cycle de ${formatDuree(p.cycle_minutes * 60)}`
+    : "par cycle (durée non déclarée)";
 }
 
 /** Résumé d'une durée en secondes, pour l'affichage. */
@@ -1007,38 +1141,36 @@ export const SENS_APPRO: { valeur: SensAppro; libelle: string; aide: string }[] 
 ];
 
 /**
- * ⚠️ **Le débit déclaré d'une ligne de production est un MAXIMUM**, jamais une
- * garantie :
+ * ⚠️ **La quantité déclarée d'une ligne de production est un MAXIMUM**, jamais
+ * une garantie. Dans le modèle à cycles (§4, tranché le 11/09) :
  *
  * ```
- * production réelle = quantité déclarée
- *                   × couverture des intrants          (0 → 1)
- *                   × rendement de la tranche atteinte (0 → 1)
+ * ligne ordinaire          livre  quantité × satisfaction du bâtiment
+ * ligne qui suit un indice livre  quantité × rendement de sa tranche
+ *                          — arrondi vers le bas, jamais les deux à la fois
  * ```
  *
- * ⚠️ Le sens `produit` (et son ancêtre `sortant`) a été **retiré le 26/08** :
- * la production ne se déclare plus ici mais dans l'onglet *Coût*, à côté des
- * consommations. Cette formule décrit donc une ligne de `Palier.production`,
- * plus une règle d'appro.
+ * `satisfaction = servi / demandé`, sur toutes ses lignes de consommation.
  *
- * Mot de l'utilisateur : *« on produit tant de ressources si on a les
- * ressources ou seulement un pourcentage en fonction de ce que les ressources
- * correspondent au pourcentage de besoin, puis on applique le % de
- * satisfaction »*.
+ * ⚠️ **Le cycle ne démarre qu'avec TOUT ce qu'il demande** (§2), sauf si le
+ * palier coche « démarre avec ce qu'il y a ». Sinon il ATTEND, inerte, et quand
+ * ça débloque il repart pour UN cycle : le temps d'arrêt est perdu, on ne
+ * rattrape pas soixante cycles d'un coup. La satisfaction partielle existe
+ * quand même dans le mode par défaut — un cycle parti complet peut finir court
+ * si une navette vide le coffre pendant qu'il tourne.
  *
- * ⚠️ La couverture est un **pourcentage, pas un tout-ou-rien** : à moitié
- * approvisionné, on produit la moitié. Le tout-ou-rien n'était pas invariant
- * aux cadences — c'est la leçon du 25/08, ne pas la reperdre.
+ * ⚠️ C'est la règle « une ligne a UN cadenceur » qui empêche le mode « démarre
+ * avec ce qu'il y a » de fabriquer de la matière : sans elle, un four avec 1
+ * blé sur 10 sortirait un pain entier à chaque cycle.
  *
- * ⚠️ Et il reste la porte : **sans main-d'œuvre mobilisée, production nulle**,
- * quelle que soit la couverture.
+ * ⚠️ Et il reste la porte : **sans main-d'œuvre mobilisée, production nulle**.
  *
  * ⚠️ **Une ligne de production n'a ni cible ni rayon** : un producteur ne livre
  * pas, il fabrique dans son propre coffre et c'est le preneur qui vient, avec
  * SON rayon. C'est le cas de la ferme dont l'entrepôt ramasse la récolte.
  */
 export const FORMULE_PRODUCTION =
-  "débit déclaré × couverture des intrants × rendement de la tranche d'indicateur";
+  "quantité par cycle × satisfaction du bâtiment — ou × rendement de la tranche si la ligne suit un indicateur, jamais les deux — arrondi vers le bas";
 
 /**
  * ⚠️ **L'ORDRE DES PASSES**, posé par l'utilisateur le 26/08 :
@@ -1617,7 +1749,8 @@ export interface ValeursTuile {
   indestructible: boolean;
   non_remplacable: boolean;
   placement: ReglePlacement[];
-  niveaux: Palier[];
+  /** Tels qu'ils PARTENT en base : `cycle_minutes` seulement sur un palier qui tourne. */
+  niveaux: PalierEnregistre[];
   /** Telle qu'elle PART en base : une règle « sans limite » n'emporte ni flotte ni vitesse. */
   logistique: LogistiqueEnregistree;
 }

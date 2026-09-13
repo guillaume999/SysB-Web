@@ -656,6 +656,11 @@ function RessourceDialog({
             <br />
             ⚠️ Comme le genre mobilise, il n'est propose ni dans la liste
             « produit » d'un palier, ni dans les regles d'approvisionnement.
+            <br />
+            ⚠️ Depuis le 11/09 la satisfaction <strong>ne se declare plus, elle se constate</strong>{" "}
+            : tout batiment qui consomme publie la sienne, ce qu&apos;il a recu sur ce qu&apos;il
+            demandait, en pour cent. Une production peut la SUIVRE (« + indice »), jamais la
+            fabriquer.
           </Terme>
           <Terme nom="genre, FluxStock">
             Une seule reserve pour tout le plateau, sans coffre et sans plafond : la monnaie en
