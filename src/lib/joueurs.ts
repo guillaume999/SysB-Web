@@ -55,8 +55,16 @@ export interface ValeursJoueur {
 }
 
 export const ROLES: { valeur: Role; libelle: string; aide: string }[] = [
-  { valeur: "player", libelle: "joueur", aide: "compte ordinaire, ne voit que ses propres plateaux" },
-  { valeur: "admin", libelle: "admin", aide: "peut écrire tout le contenu du jeu et ouvrir ce site" },
+  {
+    valeur: "player",
+    libelle: "joueur",
+    aide: "compte ordinaire : ne voit que ses propres plateaux, et sur ce site la Conception seule",
+  },
+  {
+    valeur: "admin",
+    libelle: "admin",
+    aide: "peut écrire tout le contenu du jeu et ouvrir les écrans de contenu de ce site",
+  },
   { valeur: "tester", libelle: "testeur", aide: "compte de test, mêmes droits qu'un joueur" },
 ];
 

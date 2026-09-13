@@ -1,10 +1,19 @@
-# SysB — interface web d'administration
+# SysB — le site
 
-Admin web du contenu du jeu Unity **SysB**, branchée sur PocketBase.
+Le site du jeu Unity **SysB**, branché sur PocketBase. Il sert deux publics depuis
+la même adresse :
 
-L'admin se connecte avec son **compte de jeu PocketBase** (collection `users`)
-à condition que son champ `role` vaille `admin`. Le **superuser PocketBase n'est pas
-utilisé ici** : il reste réservé à l'admin PocketBase brut sur `pb-sysb.physiooffice.com/_/`.
+- **tout compte de jeu** (collection `users`) ouvre l'onglet **Conception**, le
+  document de design en lecture seule — et rien d'autre ;
+- un compte dont le champ `role` vaut **`admin`** ouvre en plus les **huit écrans
+  de contenu** (catalogue, plateaux, comptes).
+
+Ce partage est écrit à un seul endroit, `src/lib/acces.ts`. ⚠️ Il **cache des
+écrans, il ne protège rien** : la protection des données, ce sont les règles d'API
+PocketBase.
+
+Le **superuser PocketBase n'est pas utilisé ici** : il reste réservé à l'admin
+PocketBase brut sur `pb-sysb.physiooffice.com/_/`.
 
 Les règles d'API de `config`, `fiches`, `templates`, `productions` et `evolutions`
 autorisent la lecture à tout le monde et l'écriture à `@request.auth.role = 'admin'`.

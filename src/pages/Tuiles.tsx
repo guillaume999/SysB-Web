@@ -33,6 +33,7 @@ import {
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
+import { rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
 
 /**
  * Une colonne au choix : ce qu'elle affiche, et sur quoi elle se trie.
@@ -289,6 +290,7 @@ function ecrirePref(cle: string, valeur: string) {
  * face a deux colonnes fixes de plus.
  */
 export default function Tuiles() {
+  const { portee, templates } = usePartage();
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [modeles, setModeles] = useState<Modele3D[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
@@ -515,7 +517,10 @@ export default function Tuiles() {
         loadAges().catch(() => [] as Age[]),
         loadTechnologies().catch(() => [] as Technologie[]),
       ]);
-      setTuiles(t);
+      // ⚠️ SEULE la liste que l'écran ÉDITE est filtrée. Les modèles 3D, les
+      //    ressources et les technos restent entiers : ils alimentent les listes
+      //    du formulaire, où un concepteur doit pouvoir citer ce qui existe.
+      setTuiles(visiblesPour(t, portee));
       setModeles(m);
       setRessources(r);
       setAges(a);
@@ -525,7 +530,7 @@ export default function Tuiles() {
     } finally {
       setChargement(false);
     }
-  }, []);
+  }, [portee]);
 
   useEffect(() => {
     void charger();
@@ -538,7 +543,11 @@ export default function Tuiles() {
     setErreurDialog(null);
     try {
       if (dialog.tuile) await pb.collection(COLLECTION_TUILES).update(dialog.tuile.id, valeurs);
-      else await pb.collection(COLLECTION_TUILES).create(valeurs);
+      else
+        await pb.collection(COLLECTION_TUILES).create({
+          ...valeurs,
+          rattachement: rattachementParDefaut(portee, templates, valeurs.typeOfPlateau),
+        });
       setDialog(null);
       await charger();
     } catch (e) {

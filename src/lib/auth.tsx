@@ -1,17 +1,26 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { pb } from "@/lib/pb";
+import { roleEstAdmin } from "@/lib/acces";
 
 /**
- * Le site s'authentifie avec un **compte joueur PocketBase dont `role = "admin"`**
- * (collection `users`), pas avec le superuser : le superuser reste réservé à
- * l'admin PocketBase brut sur pb-sysb.physiooffice.com/_/.
+ * Le site s'authentifie avec un **compte de la collection `users`**, pas avec
+ * le superuser : le superuser reste réservé à l'admin PocketBase brut sur
+ * pb-sysb.physiooffice.com/_/.
  *
- * Les règles d'API de `config`, `fiches`, `templates`, `productions` et
- * `evolutions` autorisent create/update/delete pour `@request.auth.role = 'admin'`.
+ * ⚠️ CHANGEMENT DU 2026-09-13 : **tout compte `users` peut se connecter**, plus
+ * seulement `role = "admin"`. Avant, un joueur était rejeté dès `signIn` avec
+ * « ce compte n'a pas le rôle admin » ; il entre désormais et voit l'onglet
+ * Conception, et rien d'autre.
+ *
+ * Le rôle ne décide donc plus de l'ENTRÉE, il décide des ÉCRANS — voir
+ * `lib/acces.ts`, seul endroit où ce partage est écrit. Les règles d'API de
+ * `tuiles`, `ressources`, `templates`… gardent, elles, leur
+ * `@request.auth.role = 'admin'` en écriture : c'est ça qui protège les
+ * données, pas la barre latérale.
  */
 export type Role = "player" | "admin" | "tester";
 
-export type AdminUser = {
+export type CompteUser = {
   id: string;
   email?: string;
   pseudo?: string;
@@ -20,34 +29,35 @@ export type AdminUser = {
 } & Record<string, unknown>;
 
 interface AuthContextValue {
-  user: AdminUser | null;
+  user: CompteUser | null;
+  /** Le compte connecté ouvre-t-il les écrans de contenu ? */
+  estAdmin: boolean;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => void;
 }
 
-const NOT_ADMIN =
-  "Ce compte n'a pas le rôle admin. Demande à un administrateur de te l'attribuer dans PocketBase.";
-
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function readUser(): AdminUser | null {
+function readUser(): CompteUser | null {
   if (!pb.authStore.isValid) return null;
-  const record = pb.authStore.record as AdminUser | null;
-  // Seuls les comptes `users` avec le rôle admin ouvrent l'interface :
-  // une session superuser ou un compte joueur ordinaire n'y donne pas accès.
-  if (!record || record.collectionName !== "users" || record.role !== "admin") return null;
+  const record = pb.authStore.record as CompteUser | null;
+  // ⚠️ La collection reste vérifiée : une session **superuser** traîne dans le
+  // même `localStorage` (l'admin PocketBase est sur le même domaine), et elle
+  // ignore toutes les règles d'API. Elle n'ouvre pas ce site.
+  if (!record || record.collectionName !== "users") return null;
   return record;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AdminUser | null>(readUser());
+  const [user, setUser] = useState<CompteUser | null>(readUser());
   const [loading, setLoading] = useState<boolean>(pb.authStore.isValid);
 
   useEffect(() => pb.authStore.onChange(() => setUser(readUser())), []);
 
   // Au montage : un token en localStorage est revalidé côté serveur, ce qui
-  // rafraîchit aussi le rôle (un admin rétrogradé perd l'accès au rechargement).
+  // rafraîchit aussi le rôle — un admin rétrogradé perd les écrans de contenu
+  // au rechargement, et se retrouve sur la Conception.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -75,14 +85,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      estAdmin: roleEstAdmin(user?.role),
       loading,
       signIn: async (email, password) => {
         try {
-          const auth = await pb.collection("users").authWithPassword(email, password);
-          if ((auth.record as AdminUser)?.role !== "admin") {
-            pb.authStore.clear();
-            return { error: new Error(NOT_ADMIN) };
-          }
+          await pb.collection("users").authWithPassword(email, password);
           setUser(readUser());
           return { error: null };
         } catch (e) {

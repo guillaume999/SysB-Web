@@ -180,18 +180,19 @@ export default function Joueurs() {
           empreinte. Le joueur est déconnecté de ses appareils et doit ressaisir le nouveau.
         </Terme>
         <Terme nom="rôle admin">
-          Donne le droit d'ouvrir ce site et d'écrire tout le contenu du jeu : catalogue, plateaux
-          modèles, comptes. À ne confier qu'à quelqu'un qui doit vraiment y toucher. Le retirer
-          coupe cet accès dès le prochain chargement de page, sans rien casser côté jeu.
+          Donne le droit d'écrire tout le contenu du jeu : catalogue, plateaux modèles, comptes. À ne
+          confier qu'à quelqu'un qui doit vraiment y toucher. Le retirer coupe ces écrans dès le
+          prochain chargement de page, sans rien casser côté jeu — le compte garde le site, réduit à
+          l'onglet Conception.
         </Terme>
         <Terme nom="testeur">
           Un joueur ordinaire côté droits — l'étiquette sert juste à repérer les comptes d'essai.
           Elle se pose depuis la fiche, pas depuis la liste.
         </Terme>
         <Terme nom="ton propre compte">
-          Tu ne peux pas te retirer ton rôle admin : tu perdrais l'accès à ce site sur-le-champ, et
-          s'il ne reste aucun autre admin, plus personne ne pourrait te le rendre autrement que
-          dans l'admin PocketBase.
+          Tu ne peux pas te retirer ton rôle admin : tu perdrais ces écrans sur-le-champ, et s'il ne
+          reste aucun autre admin, plus personne ne pourrait te le rendre autrement que dans l'admin
+          PocketBase.
         </Terme>
         <Terme nom="suppression">
           Absente : supprimer un compte laisserait ses plateaux orphelins. À faire dans l'admin
@@ -561,8 +562,8 @@ function JoueurDialog({
           </select>
           <p className="mt-1 text-xs text-slate-500">
             {cestMoi
-              ? "C'est ton propre compte : ton rôle n'est pas modifiable ici, tu perdrais l'accès au site."
-              : "« admin » ouvre ce site et l'écriture de tout le contenu du jeu."}
+              ? "C'est ton propre compte : ton rôle n'est pas modifiable ici, tu perdrais les écrans de contenu."
+              : "« admin » ouvre les écrans de contenu de ce site ; les autres rôles n'y voient que la Conception."}
           </p>
         </div>
 
@@ -628,8 +629,8 @@ function JoueurDialog({
         {roleChange && (
           <p className="mt-4 rounded border border-amber-900/60 bg-amber-950/30 p-2 text-sm text-amber-300">
             {role === "admin"
-              ? "Le rôle passe à « admin » : ce compte pourra ouvrir ce site et écrire tout le contenu du jeu."
-              : `Le rôle passe à « ${libelleRole(role)} » : ce compte perdra l'accès à ce site.`}
+              ? "Le rôle passe à « admin » : ce compte pourra écrire tout le contenu du jeu depuis ce site."
+              : `Le rôle passe à « ${libelleRole(role)} » : ce compte perdra les écrans de contenu de ce site — il gardera la Conception.`}
           </p>
         )}
         {emailChange && (

@@ -16,6 +16,7 @@ import {
   type RessourceRangee,
   type ValeursRessource,
 } from "@/lib/ressources";
+import { rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
 
 /**
  * Le vocabulaire des ressources du jeu, **rangé comme l'arbre** — demande du
@@ -34,6 +35,7 @@ import {
  * sur chaque carte, sinon il deviendrait impossible à régler.
  */
 export default function Ressources() {
+  const { portee, templates } = usePartage();
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [ages, setAges] = useState<Age[]>([]);
@@ -58,7 +60,8 @@ export default function Ressources() {
         loadTuiles().catch(() => [] as Tuile[]),
         loadAges().catch(() => [] as Age[]),
       ]);
-      setRessources(r);
+      // ⚠️ Seule la liste éditée est filtrée — les tuiles servent aux usages.
+      setRessources(visiblesPour(r, portee));
       setTuiles(t);
       setAges(a);
     } catch (e) {
@@ -66,7 +69,7 @@ export default function Ressources() {
     } finally {
       setChargement(false);
     }
-  }, []);
+  }, [portee]);
 
   useEffect(() => {
     void charger();
@@ -102,7 +105,11 @@ export default function Ressources() {
     try {
       if (dialog.ressource)
         await pb.collection(COLLECTION_RESSOURCES).update(dialog.ressource.id, valeurs);
-      else await pb.collection(COLLECTION_RESSOURCES).create(valeurs);
+      else
+        await pb.collection(COLLECTION_RESSOURCES).create({
+          ...valeurs,
+          rattachement: rattachementParDefaut(portee, templates),
+        });
       setDialog(null);
       await charger();
     } catch (e) {

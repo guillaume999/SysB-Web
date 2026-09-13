@@ -27,6 +27,13 @@
 //  ⚠️ Le jour où les écrans passeront aux routes « data » (`createBrowserRouter`,
 //  loaders), c'est ce fichier qui dira si le joker et le `:id` se comportent
 //  encore pareil. Le mettre à jour AVEC la bascule, pas après.
+//
+//  ⚠️ AJOUT DU 2026-09-13, à l'ouverture du site aux joueurs : `App.tsx` ne
+//  déclare plus les routes d'admin qu'À L'INTÉRIEUR d'un `{estAdmin && <>…</>}`.
+//  Ça repose sur DEUX comportements de react-router que rien ne type : un
+//  fragment est aplati dans `<Routes>`, et un enfant `false` est ignoré. Si l'un
+//  des deux tombait, un joueur récupérerait les onze routes d'admin — sans la
+//  moindre erreur.
 // ============================================================
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -96,5 +103,46 @@ describe("le rendu", () => {
       </StaticRouter>,
     );
     expect(html).toContain('href="/tuiles"');
+  });
+});
+
+// ------------------------------------------------------------
+//  Le partage admin / joueur (2026-09-13)
+// ------------------------------------------------------------
+
+describe("les routes déclarées sous condition", () => {
+  /** La forme exacte d'`App.tsx` : une route commune, les autres sous condition. */
+  const arbre = (estAdmin: boolean) => (
+    <Routes>
+      <Route path="/conception" element={<p>conception</p>} />
+      {estAdmin && (
+        <>
+          <Route path="/" element={<p>accueil</p>} />
+          <Route path="/joueurs" element={<p>joueurs</p>} />
+        </>
+      )}
+      <Route path="*" element={<p>joker</p>} />
+    </Routes>
+  );
+
+  const rendu = (estAdmin: boolean, chemin: string) =>
+    renderToStaticMarkup(<StaticRouter location={chemin}>{arbre(estAdmin)}</StaticRouter>);
+
+  it("aplatit le fragment : l'admin atteint bien ses écrans", () => {
+    expect(rendu(true, "/joueurs")).toContain("joueurs");
+    expect(rendu(true, "/")).toContain("accueil");
+  });
+
+  it("ignore l'enfant `false` : le joueur tombe sur le joker", () => {
+    // ⚠️ L'ASSERTION QUI COMPTE. Si `false` était monté au lieu d'être ignoré,
+    // ou le fragment déclaré quand même, c'est ici que ça se verrait — l'essai
+    // de l'admin ci-dessus resterait vert dans les deux cas.
+    expect(rendu(false, "/joueurs")).toContain("joker");
+    expect(rendu(false, "/joueurs")).not.toContain("<p>joueurs</p>");
+  });
+
+  it("laisse la route commune ouverte aux deux", () => {
+    expect(rendu(false, "/conception")).toContain("conception");
+    expect(rendu(true, "/conception")).toContain("conception");
   });
 });

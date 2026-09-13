@@ -21,10 +21,14 @@ export default function Login() {
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <form onSubmit={submit} className="card w-full max-w-sm p-6">
-        <h1 className="text-xl font-semibold text-white">SysB — administration</h1>
+        <h1 className="text-xl font-semibold text-white">SysB</h1>
         <p className="mt-1 text-sm text-slate-400">
-          Connexion avec ton compte de jeu SysB, à condition qu'il ait le rôle{" "}
-          <strong className="text-slate-300">admin</strong>.
+          Connexion avec ton <strong className="text-slate-300">compte de jeu SysB</strong> — le même
+          que dans l'application.
+        </p>
+        <p className="mt-2 text-xs text-slate-500">
+          Un compte joueur ouvre le document de conception ; un compte admin ouvre en plus le contenu
+          du jeu.
         </p>
 
         <div className="mt-6 space-y-4">
