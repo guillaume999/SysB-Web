@@ -867,7 +867,7 @@ export default function Tuiles() {
                           <tr className="bg-ink/30">
                             <td
                               colSpan={3}
-                              className="px-3 py-1 text-[10px] uppercase tracking-wide text-slate-500"
+                              className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#39ff14]"
                             >
                               {c.categorie}
                             </td>
