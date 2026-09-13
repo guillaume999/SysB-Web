@@ -15,6 +15,8 @@ import { describe, expect, it } from "vitest";
 import { type Plateau } from "@/lib/plateaux";
 import {
   estConcepteur,
+  mondeDuModele,
+  mondeImpose,
   modelesPartages,
   modelesVisibles,
   nomDuModele,
@@ -160,5 +162,66 @@ describe("le nom d'un modèle", () => {
     expect(nomDuModele(TEMPLATES, "m-terre")).toBe("Modèle Terre");
     expect(nomDuModele(TEMPLATES, "")).toBe("aucun modèle");
     expect(nomDuModele(TEMPLATES, "m-disparu")).toBe("modèle inconnu");
+  });
+});
+
+// ============================================================
+//  LE MONDE (`typeOfPlateau2`) — 13/09
+//
+//  ⚠️ DEUX AXES QU'ON NE MÉLANGE PAS : `typeOfPlateau` dit la SURFACE
+//  (ground / space), `typeOfPlateau2` dit le MONDE (Terre / Jupiter). Seb,
+//  concepteur sur Jupiter, reçoit le monde et choisit la surface.
+// ============================================================
+
+const JUPITER_SOL = modele("m-jup-sol", "Modèle Jupiter", {
+  typeOfPlateau2: " Jupiter ", // ⚠️ avec des espaces : ils ne doivent pas ressortir
+  partages: ["u-seb"],
+  created: "2026-03-01 00:00:00Z",
+});
+const JUPITER_ESPACE = modele("m-jup-espace", "Modèle Jupiter", {
+  typeOfPlateau: "space",
+  typeOfPlateau2: "Jupiter",
+  partages: ["u-seb"],
+  created: "2026-03-02 00:00:00Z",
+});
+const MONDES = [...TEMPLATES, JUPITER_SOL, JUPITER_ESPACE];
+
+const SEB = porteeDe(false, MONDES, "u-seb");
+const CHEF = porteeDe(true, MONDES, "u-chef");
+
+describe("le monde d'un modèle", () => {
+  it("se lit sur le modèle, espaces compris", () => {
+    expect(mondeDuModele(MONDES, "m-jup-sol")).toBe("Jupiter");
+    expect(mondeDuModele(MONDES, "m-jup-espace")).toBe("Jupiter");
+  });
+
+  it("rend vide pour un modèle sans étiquette ou introuvable", () => {
+    expect(mondeDuModele(MONDES, "m-terre")).toBe("");
+    expect(mondeDuModele(MONDES, "m-disparu")).toBe("");
+    expect(mondeDuModele(MONDES, "")).toBe("");
+  });
+});
+
+describe("le monde imposé à ce qu'on écrit", () => {
+  it("⚠️ l'essai qui compte : le CONCEPTEUR reçoit le monde de son modèle", () => {
+    expect(mondeImpose(SEB, MONDES, "ground")).toBe("Jupiter");
+    // ⚠️ …et la surface n'y change rien : ses deux modèles sont le même monde.
+    expect(mondeImpose(SEB, MONDES, "space")).toBe("Jupiter");
+  });
+
+  it("laisse l'admin libre — il range comme il veut", () => {
+    expect(mondeImpose(CHEF, MONDES, "ground")).toBeNull();
+    expect(mondeImpose(CHEF, MONDES, "space")).toBeNull();
+  });
+
+  it("n'impose rien à un compte sans modèle : il n'écrit rien de toute façon", () => {
+    expect(mondeImpose(PASSANT, MONDES)).toBeNull();
+    expect(mondeImpose(porteeDe(false, [], "u-seb"), [])).toBeNull();
+  });
+
+  it("impose le VIDE quand le modèle partagé n'a pas d'étiquette", () => {
+    // Un concepteur sur « Modèle Terre », qui ne porte aucun type 2 : sa tuile
+    // n'appartient à aucun monde, et c'est une valeur, pas une absence.
+    expect(mondeImpose(SAMP, TEMPLATES, "ground")).toBe("");
   });
 });

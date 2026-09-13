@@ -33,7 +33,7 @@ import {
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
-import { rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
+import { mondeImpose, rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
 
 /**
  * Une colonne au choix : ce qu'elle affiche, et sur quoi elle se trie.
@@ -542,10 +542,17 @@ export default function Tuiles() {
     setSaving(true);
     setErreurDialog(null);
     try {
-      if (dialog.tuile) await pb.collection(COLLECTION_TUILES).update(dialog.tuile.id, valeurs);
+      // ⚠️ LE MONDE S'IMPOSE ICI, ET NULLE PART AILLEURS (13/09). Un concepteur
+      //    ne choisit pas son `typeOfPlateau2` : il reçoit celui de son modèle,
+      //    à la création COMME à la modification — sinon il lui suffirait de
+      //    rouvrir une tuile pour la déplacer dans le monde du voisin. La
+      //    fenêtre, elle, ne fait que l'afficher.
+      const monde = mondeImpose(portee, templates, valeurs.typeOfPlateau);
+      const aEcrire = monde === null ? valeurs : { ...valeurs, typeOfPlateau2: monde };
+      if (dialog.tuile) await pb.collection(COLLECTION_TUILES).update(dialog.tuile.id, aEcrire);
       else
         await pb.collection(COLLECTION_TUILES).create({
-          ...valeurs,
+          ...aEcrire,
           rattachement: rattachementParDefaut(portee, templates, valeurs.typeOfPlateau),
         });
       setDialog(null);
@@ -971,6 +978,7 @@ export default function Tuiles() {
           tuile={dialog.tuile}
           tuiles={tuiles}
           templates={templates}
+          monde={mondeImpose(portee, templates, dialog.tuile?.typeOfPlateau ?? "ground")}
           modeles={modeles}
           ressources={ressources}
           ages={ages}

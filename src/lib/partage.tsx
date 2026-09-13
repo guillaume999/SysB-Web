@@ -45,7 +45,7 @@ import {
 } from "react";
 import { useAuth } from "@/lib/auth";
 import { type TypePlateau } from "@/lib/modeles3d";
-import { type Plateau, loadTemplates } from "@/lib/plateaux";
+import { type Plateau, loadTemplates, type2Normalise } from "@/lib/plateaux";
 
 /** Le nom du champ, dit une fois — il est le même sur les trois collections. */
 export const CHAMP_RATTACHEMENT = "rattachement";
@@ -148,6 +148,47 @@ export function rattachementParDefaut(
   const parAnciennete = [...templates].sort((a, b) => (a.created < b.created ? -1 : 1));
   const duType = parAnciennete.filter((t) => t.typeOfPlateau === type);
   return (duType[0] ?? parAnciennete[0])?.id ?? "";
+}
+
+/**
+ * **Le MONDE d'un modèle** — son `typeOfPlateau2` : `Terre`, `Jupiter`…
+ *
+ * ⚠️ Ne pas le confondre avec `typeOfPlateau`, qui dit la SURFACE (`ground` /
+ * `space` / `TPTplateau`). Un modèle est un monde ET une surface : « Modèle
+ * Jupiter (space) » porte les deux, et ce sont deux axes indépendants.
+ */
+export function mondeDuModele(templates: Plateau[], idModele: string): string {
+  return type2Normalise(templates.find((t) => t.id === idModele)?.typeOfPlateau2);
+}
+
+/**
+ * **Le monde IMPOSÉ à ce qu'on écrit**, ou `null` quand il est libre.
+ *
+ * Demande de Guillaume le 13/09 : *« les tuiles créées par les joueurs doivent
+ * être du type du plateau modèle qui lui est partagé — en l'occurrence Jupiter
+ * pour Seb ; il peut choisir ground ou space »*. Donc un concepteur ne SAISIT
+ * plus son monde : il le reçoit de son modèle, et ne garde le choix que de la
+ * surface.
+ *
+ * - un **concepteur** : le monde de son modèle — imposé, même en modification ;
+ * - un **admin** : `null`, il range comme il veut ;
+ * - un compte **sans modèle** : `null` aussi — il n'a rien à écrire de toute
+ *   façon, et lui imposer « aucun monde » effacerait l'étiquette d'une tuile
+ *   qu'il n'aurait jamais dû pouvoir ouvrir.
+ *
+ * ⚠️ **Une seule vérité** : le monde d'une tuile n'est pas une saisie de plus,
+ * il se LIT sur le modèle auquel elle est rattachée. La fenêtre de saisie ne
+ * fait que l'AFFICHER ; c'est l'écran qui écrit qui l'applique.
+ */
+export function mondeImpose(
+  portee: Portee,
+  templates: Plateau[],
+  type: TypePlateau = "ground",
+): string | null {
+  if (portee.estAdmin) return null;
+  const modele = rattachementParDefaut(portee, templates, type);
+  if (!modele) return null;
+  return mondeDuModele(templates, modele);
 }
 
 /** Le nom d'un modèle d'après son id — pour les écrans, jamais pour décider. */
