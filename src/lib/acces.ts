@@ -41,6 +41,7 @@ export const ECRANS_CONTENU: Lien[] = [
   { to: "/tuiles", label: "Tuiles" },
   { to: "/technologies", label: "Technologie" },
   { to: "/modeles", label: "Modèles" },
+  { to: "/planetes", label: "Planètes" },
   { to: "/plateaux", label: "Plateaux joueurs" },
   { to: "/joueurs", label: "Joueurs" },
 ];

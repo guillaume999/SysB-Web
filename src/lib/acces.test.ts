@@ -5,7 +5,7 @@
 //
 //  ⚠️ POURQUOI CE FICHIER EXISTE. Tant que `signIn` refusait tout compte non
 //  admin, « qui voit quoi » n'existait pas : personne d'autre n'entrait. Le
-//  jour où un joueur se connecte, la seule chose qui tient les huit écrans de
+//  jour où un joueur se connecte, la seule chose qui tient les neuf écrans de
 //  contenu hors de sa vue est une poignée de fonctions — et aucun type ne dit
 //  qu'elles rendent la bonne liste.
 //
@@ -102,8 +102,11 @@ describe("ce que voit un concepteur", () => {
 describe("ce que voit un admin", () => {
   const vu = ecransVisibles(true);
 
-  it("garde les huit écrans de contenu ET la Conception", () => {
-    expect(vu.contenu).toHaveLength(8);
+  // ⚠️ NEUF depuis le 14/09 : « Planètes » est arrivé avec le chantier du même
+  //    nom. Le compte est volontairement écrit en dur — c'est lui qui fait
+  //    rougir l'essai quand un écran est ajouté sans être décidé.
+  it("garde les neuf écrans de contenu ET la Conception", () => {
+    expect(vu.contenu).toHaveLength(9);
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
   });
