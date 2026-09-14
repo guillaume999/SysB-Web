@@ -197,3 +197,48 @@ export function loadPlanetes(): Promise<Planete[]> {
 export function loadIcones(): Promise<Icone[]> {
   return pb.collection(COLLECTION_ICONES).getFullList<Icone>({ sort: "chemin" });
 }
+
+/* ------------------------------------------------------------------ */
+/* La planète du joueur — créée par le SERVEUR, jamais par le client    */
+/* ------------------------------------------------------------------ */
+
+/** Ce que rend `POST /api/sysb/ma-planete`. */
+export type MaPlaneteCreee = {
+  ok: boolean;
+  cree: boolean;
+  verdict: string;
+  planete?: { id: string; nom: string; proprietaire: string };
+  modeles?: { id: string; typeOfPlateau: string }[];
+};
+
+/**
+ * Crée la planète du joueur connecté, **et ses deux modèles de plateau**.
+ *
+ * ⚠️⚠️ **PAS UN `pb.collection("planetes").create()`** : la collection est en
+ * création **admin**, exprès. Et surtout, une planète sans ses deux modèles est
+ * une planète qu'on ne peut pas ouvrir — les trois records partent ensemble,
+ * dans une transaction, ou pas du tout. C'est pour ça qu'il y a une route.
+ *
+ * ⚠️ **Une seule planète par joueur**, et c'est le serveur qui le tient :
+ * l'index unique de `planetes` ne porte que le nom. Un deuxième appel répond
+ * **409** en nommant celle qu'il a déjà.
+ */
+export async function creerMaPlanete(
+  nom: string,
+  modele3d: string,
+  icone: string,
+): Promise<MaPlaneteCreee> {
+  return pb.send("/api/sysb/ma-planete", {
+    method: "POST",
+    body: { nom, modele3d, icone },
+  });
+}
+
+/**
+ * La planète d'un joueur, ou `null`. ⚠️ **`proprietaire` est la seule marque** —
+ * ne pas la chercher par son nom.
+ */
+export function maPlanete(planetes: Planete[], userId: string | undefined): Planete | null {
+  if (!userId) return null;
+  return planetes.find((p) => p.proprietaire === userId) ?? null;
+}

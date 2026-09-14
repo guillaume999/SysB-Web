@@ -51,7 +51,7 @@ describe("ce que voit un joueur", () => {
   });
 
   it("contient la Conception, et elle seule", () => {
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
+    expect(vu.documents.map((l) => l.to)).toEqual(["/conception", "/ma-planete"]);
   });
 
   it("entre par /conception, pas par le tableau de bord", () => {
@@ -84,7 +84,7 @@ describe("ce que voit un concepteur", () => {
   });
 
   it("garde la Conception, comme tout le monde", () => {
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
+    expect(vu.documents.map((l) => l.to)).toEqual(["/conception", "/ma-planete"]);
   });
 
   it("entre par ses modèles", () => {
@@ -108,7 +108,7 @@ describe("ce que voit un admin", () => {
   it("garde les neuf écrans de contenu ET la Conception", () => {
     expect(vu.contenu).toHaveLength(9);
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
+    expect(vu.documents.map((l) => l.to)).toEqual(["/conception", "/ma-planete"]);
   });
 
   it("entre par le tableau de bord", () => {

@@ -47,10 +47,24 @@ export const ECRANS_CONTENU: Lien[] = [
 ];
 
 /**
- * Les écrans qui n'écrivent dans aucune collection. **Ouverts à tout compte
- * connecté** — c'est par eux que le joueur entre sur le site.
+ * **Les écrans ouverts à TOUT COMPTE CONNECTÉ** — c'est par eux que le joueur
+ * entre sur le site.
+ *
+ * ⚠️ **Le nom ment un peu depuis le 14/09**, et c'est assumé : « Ma planète »
+ * ÉCRIT, lui — il crée une planète et ses deux modèles. Ce qui réunit ces
+ * écrans n'est plus « ils ne touchent à rien », c'est **« ils sont à tout le
+ * monde »**. Renommer la constante toucherait la barre latérale, le menu
+ * mobile, le routeur et deux essais, pour un gain de vocabulaire ; ce
+ * commentaire dit la vérité à moindre frais.
+ *
+ * ⚠️ **« Ma planète » n'écrit PAS dans `planetes` en direct** : la collection
+ * est en création admin. Il passe par `POST /api/sysb/ma-planete`, qui crée la
+ * planète **et ses deux modèles** d'un bloc. Voir `lib/planetes.ts`.
  */
-export const ECRANS_DOCUMENT: Lien[] = [{ to: "/conception", label: "Conception" }];
+export const ECRANS_DOCUMENT: Lien[] = [
+  { to: "/conception", label: "Conception" },
+  { to: "/ma-planete", label: "Ma planète" },
+];
 
 /**
  * **Les écrans d'un CONCEPTEUR** — un joueur à qui l'admin a ouvert un modèle

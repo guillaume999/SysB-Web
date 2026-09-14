@@ -18,6 +18,7 @@
 import { describe, expect, it } from "vitest";
 import {
   autoriseeSur,
+  maPlanete,
   avecPlanete,
   estGame,
   estPlaneteGame,
@@ -162,5 +163,24 @@ describe("le nom d'une planète", () => {
     expect(nomDePlanete([TERRE], TERRE.id)).toBe("Terre");
     expect(nomDePlanete([TERRE], undefined)).toBe("aucune planète");
     expect(nomDePlanete([TERRE], "id_inconnu")).toBe("planète inconnue");
+  });
+});
+
+describe("retrouver SA planète", () => {
+  it("⚠️ se fait par le propriétaire, jamais par le nom", () => {
+    const toutes = [GAME, TERRE, ARAGONIA, CHEZ_SEB];
+    expect(maPlanete(toutes, "u_guillaume")?.nom).toBe("Aragonia");
+    expect(maPlanete(toutes, "u_seb")?.nom).toBe("Sebtopia");
+  });
+
+  it("rend null quand il n'en a pas — l'écran propose alors de la créer", () => {
+    expect(maPlanete([GAME, TERRE], "u_guillaume")).toBeNull();
+  });
+
+  it("⚠️ et ne confond pas « pas connecté » avec « planète game »", () => {
+    // Sans identifiant, la recherche ne doit PAS tomber sur la première planète
+    // sans propriétaire : on rendrait la Terre à un visiteur anonyme.
+    expect(maPlanete([GAME, TERRE], undefined)).toBeNull();
+    expect(maPlanete([GAME, TERRE], "")).toBeNull();
   });
 });
