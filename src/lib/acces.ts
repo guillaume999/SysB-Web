@@ -70,6 +70,13 @@ export const ECRANS_PUBLICS: Lien[] = [
 ];
 
 /**
+ * **L'écran du COMPTE CONNECTÉ (15/09)** — sa fiche, son email, son mot de
+ * passe. Pour tout compte connecté, admin compris ; jamais pour le visiteur
+ * (il n'a pas de compte à montrer).
+ */
+export const ECRANS_COMPTE: Lien[] = [{ to: "/compte", label: "Mon compte" }];
+
+/**
  * Le rôle donne-t-il les écrans de contenu ?
  *
  * ⚠️ `role` n'est pas requis sur `users` : un compte créé par l'inscription du
@@ -83,18 +90,21 @@ export function roleEstAdmin(role: Role | "" | undefined | null): boolean {
 /**
  * Les groupes de la barre latérale, pour le compte en cours.
  *
- * Deux cas : l'admin a tout, le joueur a la communauté et les documents.
+ * Deux cas : l'admin a tout, le joueur a la communauté, les documents et son
+ * compte.
  * (Le visiteur anonyme n'a pas de barre latérale : voir `PublicLayout`.)
  */
 export function ecransVisibles(admin: boolean): {
   contenu: Lien[];
   communaute: Lien[];
   documents: Lien[];
+  compte: Lien[];
 } {
   return {
     contenu: admin ? ECRANS_CONTENU : [],
     communaute: ECRANS_PUBLICS,
     documents: ECRANS_DOCUMENT,
+    compte: ECRANS_COMPTE,
   };
 }
 

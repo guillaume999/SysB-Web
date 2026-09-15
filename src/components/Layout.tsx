@@ -25,8 +25,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { user, estAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { contenu, communaute, documents } = ecransVisibles(estAdmin);
-  const tous = [...contenu, ...communaute, ...documents];
+  const { contenu, communaute, documents, compte } = ecransVisibles(estAdmin);
+  const tous = [...contenu, ...communaute, ...documents, ...compte];
 
   return (
     <div className="flex min-h-screen">
@@ -59,12 +59,18 @@ export default function Layout({ children }: { children: ReactNode }) {
             au-dessus.
           */}
           <Groupe titre="Documentation" liens={documents} filet />
+          <Groupe titre="Compte" liens={compte} filet />
         </nav>
 
         <div className="border-t border-edge p-3 text-xs">
-          <p className="truncate text-slate-300" title={String(user?.email ?? "")}>
+          {/* Le nom mène à « Mon compte » : c'est là qu'on le cherche d'instinct. */}
+          <NavLink
+            to="/compte"
+            className="block truncate text-slate-300 hover:text-white"
+            title={String(user?.email ?? "")}
+          >
             {String(user?.pseudo || user?.email || "compte")}
-          </p>
+          </NavLink>
           <p className="text-slate-500">
             rôle {libelleRole(user?.role ?? "")}
           </p>

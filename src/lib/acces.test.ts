@@ -17,6 +17,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  ECRANS_COMPTE,
   ECRANS_CONTENU,
   ECRANS_PUBLICS,
   accueil,
@@ -56,6 +57,10 @@ describe("ce que voit un joueur", () => {
     expect(vu.communaute.map((l) => l.to)).toEqual(["/news", "/forum"]);
   });
 
+  it("a son compte (fiche, email, mot de passe)", () => {
+    expect(vu.compte.map((l) => l.to)).toEqual(["/compte"]);
+  });
+
   it("entre par les News, pas par le tableau de bord", () => {
     // Le tableau de bord liste `users`, que la règle d'API lui refuse.
     expect(accueil(false)).toBe("/news");
@@ -68,6 +73,8 @@ describe("les écrans publics", () => {
     const publics = ECRANS_PUBLICS.map((l) => l.to);
     for (const ecran of ECRANS_CONTENU) expect(publics).not.toContain(ecran.to);
     expect(publics).not.toContain("/conception");
+    // ⚠️ « Mon compte » n'a pas de sens sans compte : jamais public.
+    for (const ecran of ECRANS_COMPTE) expect(publics).not.toContain(ecran.to);
     expect(publics).not.toContain("/");
   });
 });
@@ -86,6 +93,7 @@ describe("ce que voit un admin", () => {
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
     expect(vu.communaute.map((l) => l.to)).toEqual(["/news", "/forum"]);
+    expect(vu.compte.map((l) => l.to)).toEqual(["/compte"]);
   });
 
   it("entre par le tableau de bord", () => {

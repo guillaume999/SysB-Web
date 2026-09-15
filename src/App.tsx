@@ -11,6 +11,7 @@ import Icones from "@/pages/Icones";
 import Joueurs from "@/pages/Joueurs";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
+import MonCompte from "@/pages/MonCompte";
 import ListePlateaux from "@/pages/ListePlateaux";
 import News from "@/pages/News";
 import PlateauEditeur from "@/pages/PlateauEditeur";
@@ -71,6 +72,7 @@ export default function App() {
             </Suspense>
           }
         />
+        <Route path="/compte" element={<MonCompte />} />
         {estAdmin && (
           <>
             <Route path="/" element={<Home />} />
