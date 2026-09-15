@@ -18,7 +18,9 @@
 import { describe, expect, it } from "vitest";
 import {
   ECRANS_COMPTE,
+  ECRANS_CONCEPTION,
   ECRANS_CONTENU,
+  ECRANS_GUILDE,
   ECRANS_PUBLICS,
   accueil,
   ecransVisibles,
@@ -44,12 +46,27 @@ describe("le rôle qui ouvre les écrans de contenu", () => {
 describe("ce que voit un joueur", () => {
   const vu = ecransVisibles(false);
 
-  it("ne contient AUCUN écran de contenu", () => {
-    expect(vu.contenu).toEqual([]);
+  it("ne contient QUE ses quatre écrans de conception (15/09)", () => {
+    // ⚠️ L'ESSAI QUI COMPTE : ni Joueurs, ni Limites, ni les plateaux des
+    // autres, ni le catalogue 3D ou les icônes (c'est l'admin qui les ouvre).
+    expect(vu.contenu.map((l) => l.to)).toEqual(["/ressources", "/tuiles", "/technologies", "/modeles"]);
+    for (const interdit of ["/", "/joueurs", "/limites", "/guildes", "/plateaux", "/3dmodeltuile", "/icones", "/ages"]) {
+      expect(vu.contenu.map((l) => l.to)).not.toContain(interdit);
+    }
     for (const ecran of ECRANS_CONTENU) {
       expect(vu.documents.map((l) => l.to)).not.toContain(ecran.to);
       expect(vu.communaute.map((l) => l.to)).not.toContain(ecran.to);
+      expect(vu.guilde.map((l) => l.to)).not.toContain(ecran.to);
     }
+  });
+
+  it("a sa guilde et son salon (15/09)", () => {
+    expect(vu.guilde.map((l) => l.to)).toEqual(["/guilde", "/guilde/salon"]);
+    expect(ecransVisibles(true).guilde).toEqual(ECRANS_GUILDE);
+  });
+
+  it("des écrans de conception qui existent tous chez l'admin", () => {
+    expect(ECRANS_CONCEPTION.every((e) => ECRANS_CONTENU.includes(e))).toBe(true);
   });
 
   it("contient la Conception, les News et le Forum", () => {
@@ -82,12 +99,15 @@ describe("les écrans publics", () => {
 describe("ce que voit un admin", () => {
   const vu = ecransVisibles(true);
 
-  // ⚠️ NEUF depuis le 15/09 au soir : « Planètes » est fondu dans « Modèles »,
-  //    et « Icônes » est arrivé. Le compte est volontairement écrit en dur —
+  // ⚠️ ONZE depuis le 15/09 au soir : « Planètes » est fondu dans « Modèles »,
+  //    « Icônes », « Limites » puis « Guildes » sont arrivés. Le compte est volontairement écrit en dur —
   //    c'est lui qui fait rougir l'essai quand un écran est ajouté ou retiré
   //    sans être décidé.
-  it("garde les neuf écrans de contenu ET la Conception", () => {
-    expect(vu.contenu).toHaveLength(9);
+  it("garde les onze écrans de contenu ET la Conception", () => {
+    // Onze depuis le 15/09 au soir : « Limites » puis « Guildes » sont arrivés.
+    expect(vu.contenu).toHaveLength(11);
+    expect(vu.contenu.map((l) => l.to)).toContain("/limites");
+    expect(vu.contenu.map((l) => l.to)).toContain("/guildes");
     expect(vu.contenu.map((l) => l.to)).toContain("/icones");
     expect(vu.contenu.map((l) => l.to)).not.toContain("/planetes");
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");

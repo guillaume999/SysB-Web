@@ -35,6 +35,8 @@ export default function PartageJoueurs({
   chargement,
   planetesAutorisees = 0,
   objet,
+  question,
+  aideChoisis = "Personne de coché = réservé aux planètes du jeu (Terre, Jupiter…), qui ont tout.",
 }: {
   valeur: ValeurPartage;
   onChange: (v: ValeurPartage) => void;
@@ -44,6 +46,10 @@ export default function PartageJoueurs({
   planetesAutorisees?: number;
   /** « ce modèle 3D », « cette icône » — pour les phrases. */
   objet: string;
+  /** La question posée, si « Qui peut utiliser … ? » ne convient pas (onglet Limites). */
+  question?: string;
+  /** Ce que veut dire « personne de coché ». */
+  aideChoisis?: string;
 }) {
   const [recherche, setRecherche] = useState("");
   const tous = valeur.toutes_planetes;
@@ -63,7 +69,7 @@ export default function PartageJoueurs({
   return (
     <div className="space-y-4">
       <fieldset className="space-y-2">
-        <legend className="label mb-1">Qui peut utiliser {objet} ?</legend>
+        <legend className="label mb-1">{question ?? `Qui peut utiliser ${objet} ?`}</legend>
         <label className="flex items-start gap-2 text-sm text-slate-200">
           <input
             type="radio"
@@ -90,9 +96,7 @@ export default function PartageJoueurs({
           <span>
             Seulement les joueurs choisis{" "}
             <span className="text-xs text-slate-500">({choisis.length})</span>
-            <span className="block text-xs text-slate-500">
-              Personne de coché = réservé aux planètes du jeu (Terre, Jupiter…), qui ont tout.
-            </span>
+            <span className="block text-xs text-slate-500">{aideChoisis}</span>
           </span>
         </label>
       </fieldset>

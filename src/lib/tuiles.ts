@@ -34,11 +34,13 @@ export type { TypePlateau };
 export const COLLECTION_TUILES = "tuiles";
 
 /**
- * `tilesBase64` est un `byte[]` brut : un octet par case. L'id 0 est réservé à
- * la case vide côté `PlateauGenerator`, donc les tuiles vont de 1 à 255.
+ * Le plus grand numéro qu'une case peut porter : **deux octets par case depuis
+ * le 15/09** (voir `lib/plateaux.ts`). L'id 0 est la case vide.
+ *
+ * ⚠️ Le numéro n'est plus SAISI : le serveur l'attribue à la création
+ * (max + 1, jamais un trou recyclé) et ne le change plus ensuite.
  */
-export const TILE_ID_MIN = 1;
-export const TILE_ID_MAX = 255;
+export const TILE_ID_MAX = 65535;
 
 /**
  * Une liste de tileIds venue de la base : dédoublonnée, triée, sans zéro ni
@@ -1754,6 +1756,15 @@ export type Tuile = {
    * d'etiquette, donc peignable sur les seuls plateaux qui n'en ont pas.
    */
   typeOfPlateau2?: string;
+  /**
+   * **La planète où la tuile se joue** (14/09) — relation → `planetes`. C'est
+   * elle que le serveur lit pour construire le catalogue d'une planète ; elle
+   * dit aussi A QUI est la tuile (un joueur n'écrit que sur la sienne).
+   * `typeOfPlateau2` n'en est plus que le nom recopié, le temps de la bascule.
+   */
+  planete?: string;
+  /** Relation → `icones` (14/09). `chemin_icone` en est la copie que lit Unity. */
+  icone?: string;
   categorie: string;
   description: string;
   /**
@@ -1801,14 +1812,18 @@ export type Tuile = {
  * champs intacts pendant la remise a zero.
  */
 export interface ValeursTuile {
-  tileId: number;
   nom: string;
   code: string;
   age: number;
   chemin_icone: string;
   modele: string;
   typeOfPlateau: TypePlateau;
+  /** Le NOM de la planète, recopié pour le jeu d'avant les planètes (14/09). */
   typeOfPlateau2: string;
+  /** La planète où la tuile se joue. Un joueur n'écrit que la sienne. */
+  planete: string;
+  /** Relation → `icones`, posée par le choix d'icône d'un joueur. */
+  icone?: string;
   categorie: string;
   description: string;
   couleur: string;
@@ -1860,17 +1875,6 @@ export function tuilesParAlphabet(tuiles: Tuile[]): Tuile[] {
   return [...tuiles].sort((a, b) =>
     (a.nom ?? "").localeCompare(b.nom ?? "", "fr", { sensitivity: "base" }),
   );
-}
-
-/**
- * Prochain id à proposer : **max + 1**, pas le plus petit trou libre.
- * Un `tileId` ne doit jamais être recyclé : une règle de placement qui citait
- * l'ancienne tuile pointerait silencieusement vers la nouvelle.
- */
-export function prochainTileId(tuiles: Tuile[]): number | null {
-  const max = tuiles.reduce((m, t) => Math.max(m, t.tileId ?? 0), 0);
-  const suivant = Math.max(max + 1, TILE_ID_MIN);
-  return suivant > TILE_ID_MAX ? null : suivant;
 }
 
 /** Tuiles regroupées par modèle 3D, pour afficher les réutilisations. */

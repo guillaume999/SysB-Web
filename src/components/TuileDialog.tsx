@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import { ChoixIconeJoueur, ChoixPlanete } from "@/components/Conception";
 import TuileCouts from "@/components/TuileCouts";
 import TuilePlacement from "@/components/TuilePlacement";
 import TuileStockage from "@/components/TuileStockage";
@@ -15,8 +16,6 @@ import type { Ressource } from "@/lib/ressources";
 import type { Technologie } from "@/lib/technologies";
 import { SANS_AGE, libelleAge, type Age } from "@/lib/ages";
 import {
-  TILE_ID_MAX,
-  TILE_ID_MIN,
   SEPARATEUR_CATEGORIES,
   categoriesDe,
   categoriesRenommees,
@@ -32,7 +31,6 @@ import {
   paliersPourEnregistrer,
   placementDe,
   placementPourEnregistrer,
-  prochainTileId,
   toutesLesCategories,
   tuilesParModele,
   tuilesPortant,
@@ -43,7 +41,8 @@ import {
   type TypePlateau,
   type ValeursTuile,
 } from "@/lib/tuiles";
-import { type2Connus, type Plateau } from "@/lib/plateaux";
+import { duCatalogue, etiquettePourPlanete, type Portee } from "@/lib/conception";
+import { nomDePlanete, type Icone, type Planete } from "@/lib/planetes";
 
 /**
  * Creation / modification d'une tuile du catalogue.
@@ -67,11 +66,14 @@ const ONGLETS: { cle: Onglet; libelle: string }[] = [
 export default function TuileDialog({
   tuile,
   tuiles,
-  templates,
   modeles,
-  ressources,
+  ressources: toutesRessources,
   ages,
-  technologies,
+  technologies: toutesTechnos,
+  portee,
+  planetes,
+  icones,
+  planeteProposee,
   saving,
   erreur,
   categorieOccupee,
@@ -80,19 +82,25 @@ export default function TuileDialog({
   onSubmit,
 }: {
   tuile: Tuile | null;
-  tuiles: Tuile[];
   /**
-   * Les modeles de plateau — **lus pour la seule saisie du type 2** : une
-   * etiquette tapee sur un modele doit se proposer ici, sinon le champ libre
-   * refabrique les jumelles qu'il est cense eviter.
+   * Les tuiles que l'utilisateur ÉDITE (tout le catalogue pour l'admin, les
+   * siennes pour un joueur) : elles donnent les catégories connues. Les listes
+   * des onglets n'en gardent que ce qui joue sur la planète de la tuile.
    */
-  templates: Plateau[];
+  tuiles: Tuile[];
+  /** Les modèles 3D proposables — déjà filtrés par la page pour un joueur. */
   modeles: Modele3D[];
   ressources: Ressource[];
   /** Les ages declares — onglet Ages. C'est eux que propose la liste, jamais un nombre libre. */
   ages: Age[];
   /** Les technos declarees — onglet Technologie, pour la regle « technologie requise ». */
   technologies: Technologie[];
+  /** Qui édite : l'admin choisit la planète, un joueur écrit sur la sienne. */
+  portee: Portee;
+  planetes: Planete[];
+  icones: Icone[];
+  /** La planète proposée à une tuile neuve (admin). */
+  planeteProposee: string;
   saving: boolean;
   erreur: string | null;
   /** La categorie que la page est en train de reecrire dans tout le catalogue, ou null. */
@@ -109,15 +117,29 @@ export default function TuileDialog({
   const enEdition = tuile !== null;
   const [onglet, setOnglet] = useState<Onglet>("identite");
 
-  const [tileId, setTileId] = useState<string>(
-    String(tuile?.tileId ?? prochainTileId(tuiles) ?? TILE_ID_MIN),
-  );
+  // ⚠️ LE NUMÉRO NE SE SAISIT PLUS (15/09) : le serveur l'attribue à la
+  // création et ne le change plus. Il reste AFFICHÉ, c'est lui qu'on lit dans
+  // les règles et les journaux.
+  const tileId = tuile?.tileId ?? null;
   const [nom, setNom] = useState(tuile?.nom ?? "");
+  // ⚠️ LA PLANÈTE (15/09) remplace l'étiquette libre « type 2 » : l'admin la
+  // choisit, un joueur écrit sur la sienne. L'étiquette en est recopiée.
+  const [planete, setPlanete] = useState(
+    portee.admin ? (tuile?.planete ?? planeteProposee) : (portee.planete?.id ?? ""),
+  );
+  const [iconeId, setIconeId] = useState(tuile?.icone ?? "");
+  // Ce qui joue sur cette planète — les seules choses qu'une tuile peut citer.
+  const catalogue = useMemo(() => duCatalogue(tuiles, planetes, planete), [tuiles, planetes, planete]);
+  const ressources = useMemo(
+    () => duCatalogue(toutesRessources, planetes, planete),
+    [toutesRessources, planetes, planete],
+  );
+  const technologies = useMemo(
+    () => duCatalogue(toutesTechnos, planetes, planete),
+    [toutesTechnos, planetes, planete],
+  );
   const [modele, setModele] = useState(tuile?.modele ?? "");
   const [type, setType] = useState<TypePlateau>(tuile?.typeOfPlateau ?? "ground");
-  // ⚠️ La seconde etiquette, libre et STRICTE : vide, la tuile ne se peint que
-  //    sur les plateaux sans etiquette. Voir `lib/plateaux.ts`.
-  const [type2, setType2] = useState(tuile?.typeOfPlateau2 ?? "");
   // ⚠️ PLUSIEURS CATEGORIES DEPUIS LE 2026-08-30, toutes egales : l'etat est une
   //    LISTE, le champ en base reste UNE ligne separee par des virgules.
   const [categories, setCategories] = useState<string[]>(() => categoriesDe(tuile));
@@ -176,13 +198,6 @@ export default function TuileDialog({
    */
   const usages = useMemo(() => tuilesParModele(tuiles), [tuiles]);
 
-  /**
-   * Les etiquettes de type 2 deja ecrites, tuiles ET modeles confondus : le
-   * champ est libre, la liste est la pour qu'on reprenne la sienne au lieu d'en
-   * retaper une variante.
-   */
-  const type2Proposes = useMemo(() => type2Connus(tuiles, templates), [tuiles, templates]);
-
   /** Les AUTRES tuiles qui visent le modele choisi — la tuile en cours exclue. */
   const autresTuilesDuModele = useMemo(
     () => (usages.get(modele) ?? []).filter((t) => t.id !== tuile?.id),
@@ -200,10 +215,6 @@ export default function TuileDialog({
     if (devine) setType(devine);
   }, [modeleChoisi, typeForce]);
 
-  const idNumerique = Number(tileId);
-  const idHorsBornes =
-    !Number.isInteger(idNumerique) || idNumerique < TILE_ID_MIN || idNumerique > TILE_ID_MAX;
-  const conflit = tuiles.find((t) => t.tileId === idNumerique && t.id !== tuile?.id) ?? null;
 
   // Le selecteur de couleur exige toujours un #rrggbb : quand le catalogue ne dit
   // rien, il montre la couleur automatique, celle que l'editeur utiliserait.
@@ -214,8 +225,7 @@ export default function TuileDialog({
   // courant ne se tape pas a la main 132 fois.
   const cheminAttendu = cheminIconeAttendu(code);
 
-  const couleurEffective =
-    couleur || couleurAuto(Number.isFinite(idNumerique) ? idNumerique : 0);
+  const couleurEffective = couleur || couleurAuto(tileId ?? 0);
 
   // Un age enregistre que l'onglet Ages ne declare plus : la tuile le garde, la
   // liste le montre en clair. Voir le commentaire du selecteur.
@@ -269,7 +279,7 @@ export default function TuileDialog({
   const [aConfirmer, setAConfirmer] = useState<"renommer" | "supprimer" | null>(null);
 
   const occupee = categorieOccupee !== null;
-  const portee = gestion === null ? 0 : tuilesPortant(tuiles, gestion);
+  const porteeCategorie = gestion === null ? 0 : tuilesPortant(tuiles, gestion);
 
   // Le nouveau nom, nettoye comme a la creation : la virgule separe deux
   // categories, elle ne peut pas vivre a l'interieur d'une.
@@ -308,22 +318,23 @@ export default function TuileDialog({
     saving ||
     nom.trim() === "" ||
     modele === "" ||
-    idHorsBornes ||
-    conflit !== null ||
+    (!portee.admin && planete === "") ||
     erreursCout.length > 0;
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (bloque) return;
     onSubmit({
-      tileId: idNumerique,
       nom: nom.trim(),
       code: code.trim(),
       age: Math.max(0, Number(age) || 0),
       chemin_icone: cheminIcone.trim(),
       modele,
       typeOfPlateau: type,
-      typeOfPlateau2: type2.trim(),
+      typeOfPlateau2: etiquettePourPlanete(planetes.find((p) => p.id === planete)),
+      planete,
+      // ⚠️ Un joueur choisit une ICÔNE, le serveur en recopie le chemin.
+      ...(portee.admin ? {} : { icone: iconeId }),
       categorie: categoriesVersTexte(categories),
       description: description.trim(),
       couleur: couleur.trim(),
@@ -370,10 +381,16 @@ export default function TuileDialog({
             <div className="space-y-4">
               <Aide titre="A quoi servent ces champs">
                 <Terme nom="tileId">
-                  L'octet ecrit dans le plateau du joueur. C'est par ce nombre que le jeu et les
-                  regles de placement designent la tuile. Il ne se recycle <strong>jamais</strong> :
+                  Le numero ecrit dans chaque case du plateau (deux octets depuis le 15/09 : jusqu'a
+                  65 535). C'est par lui que le jeu et les regles de placement designent la tuile.
+                  Le serveur l'attribue a la creation et il ne se recycle <strong>jamais</strong> :
                   reattribuer l'id d'une tuile supprimee ferait pointer en silence toutes les regles
                   qui la citaient vers la nouvelle.
+                </Terme>
+                <Terme nom="planete">
+                  Ou la tuile se joue. Le serveur ne la propose que sur cette planete (et, pour
+                  « Game », sur toutes les planetes du jeu). Les listes des autres onglets ne
+                  montrent que ce qui joue sur la meme planete.
                 </Terme>
                 <Terme nom="modele 3D">
                   Le prefab a instancier, choisi parmi ceux declares dans l'onglet 3DmodelTuile.
@@ -483,21 +500,13 @@ export default function TuileDialog({
                 </div>
 
                 <div>
-                  <label className="label" htmlFor="tuile-id">
-                    tileId
-                  </label>
-                  <input
-                    id="tuile-id"
-                    type="number"
-                    min={TILE_ID_MIN}
-                    max={TILE_ID_MAX}
-                    step={1}
-                    className="input"
-                    value={tileId}
-                    onChange={(e) => setTileId(e.target.value)}
-                  />
+                  <p className="label">Numéro (tileId)</p>
+                  <p className="py-2 font-mono text-sm text-slate-200">
+                    {tileId ?? <span className="text-slate-500">attribué à l'enregistrement</span>}
+                  </p>
                   <p className="mt-1 text-xs text-slate-500">
-                    L'octet ecrit dans les plateaux. Un id ne se recycle jamais.
+                    Ce qu'écrit une case du plateau. Le serveur le donne (le plus grand + 1) et il ne
+                    change plus ; un numéro ne se recycle jamais.
                   </p>
                 </div>
 
@@ -628,38 +637,20 @@ export default function TuileDialog({
                 </div>
 
                 {/*
-                  ⚠️ TYPE DE PLATEAU 2 (13/09) — la seconde etiquette, LIBRE.
-                  Elle ne dit pas sur quel decor la tuile se joue, elle dit a
-                  quels plateaux elle est RESERVEE : le pinceau de l'editeur ne
-                  propose que les tuiles dont les DEUX types collent au plateau.
-
-                  ⚠️⚠️ **Vide compte comme une valeur** : laisse vide, la tuile
-                  ne se peint que sur les modeles sans etiquette — c'est-a-dire
-                  partout ou l'on peignait avant. Remplie, elle disparait de tous
-                  les autres plateaux. C'est voulu.
+                  ⚠️ LA PLANÈTE (15/09) remplace le « type de plateau 2 » libre
+                  du 13/09 : c'est elle qui décide où la tuile joue (serveur) et
+                  sur quels modèles elle se peint (éditeur). L'étiquette texte en
+                  est recopiée pour le jeu d'avant les planètes.
                 */}
-                <div>
-                  <label className="label" htmlFor="tuile-type2">
-                    Type de plateau 2 <span className="text-slate-400">(le monde)</span>
-                  </label>
-                  <input
-                    id="tuile-type2"
-                    className="input"
-                    list="tuile-type2-connus"
-                    placeholder="aucun — peignable sur les plateaux sans etiquette"
-                    value={type2}
-                    onChange={(e) => setType2(e.target.value)}
-                  />
-                  <datalist id="tuile-type2-connus">
-                    {type2Proposes.map((t) => (
-                      <option key={t} value={t} />
-                    ))}
-                  </datalist>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Reserve la tuile aux plateaux portant la meme etiquette. Vide = les plateaux
-                    sans etiquette.
-                  </p>
-                </div>
+                {portee.admin ? (
+                  <ChoixPlanete id="tuile-planete" planetes={planetes} valeur={planete} onChange={setPlanete} />
+                ) : (
+                  <div>
+                    <p className="label">Planète</p>
+                    <p className="py-2 text-sm text-slate-200">{nomDePlanete(planetes, planete)}</p>
+                    <p className="mt-1 text-xs text-slate-500">Tes tuiles ne jouent que chez toi.</p>
+                  </div>
+                )}
               </div>
 
               {/*
@@ -798,10 +789,10 @@ export default function TuileDialog({
 
                     {gestion !== null && aConfirmer === null && (
                       <p className="mt-2 text-xs text-slate-500">
-                        {portee === 0
+                        {porteeCategorie === 0
                           ? `\u00ab ${gestion} \u00bb n'est portee par aucune tuile enregistree.`
-                          : `\u00ab ${gestion} \u00bb est portee par ${portee} tuile${
-                              portee > 1 ? "s" : ""
+                          : `\u00ab ${gestion} \u00bb est portee par ${porteeCategorie} tuile${
+                              porteeCategorie > 1 ? "s" : ""
                             }. Ces deux boutons les reecrivent TOUTES, tout de suite \u2014 pas seulement celle-ci.`}
                       </p>
                     )}
@@ -824,11 +815,11 @@ export default function TuileDialog({
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <span className="text-amber-300">
                           {aConfirmer === "renommer"
-                            ? `Renommer \u00ab ${gestion} \u00bb en \u00ab ${nouveauNom} \u00bb sur ${portee} tuile${
-                                portee > 1 ? "s" : ""
+                            ? `Renommer \u00ab ${gestion} \u00bb en \u00ab ${nouveauNom} \u00bb sur ${porteeCategorie} tuile${
+                                porteeCategorie > 1 ? "s" : ""
                               } ?`
-                            : `Retirer \u00ab ${gestion} \u00bb de ${portee} tuile${
-                                portee > 1 ? "s" : ""
+                            : `Retirer \u00ab ${gestion} \u00bb de ${porteeCategorie} tuile${
+                                porteeCategorie > 1 ? "s" : ""
                               } ? Rien ne dira plus qu'elles etaient rangees la.`}
                         </span>
                         <button
@@ -886,6 +877,19 @@ export default function TuileDialog({
               </div>
 
               {/* La vignette EST un champ : ce qui est ecrit ici part en base. */}
+              {!portee.admin ? (
+                <ChoixIconeJoueur
+                  id="tuile-icone"
+                  icones={icones}
+                  planete={portee.planete}
+                  usage="tuile"
+                  valeur={iconeId}
+                  onChange={(i) => {
+                    setIconeId(i?.id ?? "");
+                    setCheminIcone(i?.chemin ?? "");
+                  }}
+                />
+              ) : (
               <div>
                 <label className="label" htmlFor="tuile-icone">
                   Vignette
@@ -918,6 +922,7 @@ export default function TuileDialog({
                   )}
                 </p>
               </div>
+              )}
 
               <div>
                 <label className="label" htmlFor="tuile-destruction">
@@ -936,7 +941,7 @@ export default function TuileDialog({
                   }
                 >
                   <option value="0">case vide</option>
-                  {tuiles
+                  {catalogue
                     .filter((t) => t.id !== tuile?.id)
                     .map((t) => (
                       <option key={t.id} value={t.tileId}>
@@ -1018,7 +1023,7 @@ export default function TuileDialog({
           {onglet === "placement" && (
             <TuilePlacement
               regles={placement}
-              tuiles={tuiles}
+              tuiles={catalogue}
               technologies={technologies}
               tuileCourante={tuile?.id ?? null}
               onChange={setPlacement}
@@ -1029,7 +1034,7 @@ export default function TuileDialog({
             <TuileCouts
               paliers={paliers}
               ressources={ressources}
-              tuiles={tuiles}
+              tuiles={catalogue}
               onChange={setPaliers}
             />
           )}
@@ -1038,24 +1043,13 @@ export default function TuileDialog({
             <TuileStockage
               logistique={logistique}
               ressources={ressources}
-              tuiles={tuiles}
+              tuiles={catalogue}
               tuileCourante={tuile?.id ?? null}
               onChange={setLogistique}
             />
           )}
         </div>
 
-        {conflit && (
-          <p className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
-            Le tileId {idNumerique} est deja pris par {conflit.nom}. Deux tuiles avec le meme id se
-            masquent l'une l'autre dans le jeu.
-          </p>
-        )}
-        {!conflit && idHorsBornes && (
-          <p className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
-            tileId invalide : il faut un entier entre {TILE_ID_MIN} et {TILE_ID_MAX}.
-          </p>
-        )}
         {/* Dit ICI et pas seulement dans l'onglet Cout : le bouton se grise
             quel que soit l'onglet ouvert, et un bouton gris muet ne se
             diagnostique pas. */}

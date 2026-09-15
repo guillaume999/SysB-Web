@@ -1,8 +1,19 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { BandeauJoueur } from "@/components/Conception";
 import TuileDialog from "@/components/TuileDialog";
 import { Vignette } from "@/components/Vignette";
+import {
+  SANS_PLANETE,
+  dansLaPortee,
+  duCatalogue,
+  etatQuota,
+  filtrerParPlanete,
+  planeteParDefaut,
+} from "@/lib/conception";
 import { messageErreur, pb } from "@/lib/pb";
+import { autoriseeSur, loadIcones, usageDuModele3D, type Icone } from "@/lib/planetes";
+import { usePortee } from "@/lib/portee";
 import {
   cheminJeu,
   loadModeles3D,
@@ -33,7 +44,6 @@ import {
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
-import { loadTemplates, type Plateau } from "@/lib/plateaux";
 
 /**
  * Une colonne au choix : ce qu'elle affiche, et sur quoi elle se trie.
@@ -290,13 +300,32 @@ function ecrirePref(cle: string, valeur: string) {
  * face a deux colonnes fixes de plus.
  */
 export default function Tuiles() {
-  const [tuiles, setTuiles] = useState<Tuile[]>([]);
-  const [modeles, setModeles] = useState<Modele3D[]>([]);
+  const { portee, planetes, chargement: chargementPortee } = usePortee();
+  const [toutesTuiles, setToutesTuiles] = useState<Tuile[]>([]);
+  const [tousModeles, setTousModeles] = useState<Modele3D[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [ages, setAges] = useState<Age[]>([]);
   const [technologies, setTechnologies] = useState<Technologie[]>([]);
-  // Les modèles ne servent qu'à proposer les « type 2 » connus dans la fenêtre.
-  const [templates, setTemplates] = useState<Plateau[]>([]);
+  const [icones, setIcones] = useState<Icone[]>([]);
+  // ⚠️ Admin seulement : la planète qu'il regarde. "" = toutes.
+  const [filtrePlanete, setFiltrePlanete] = useState("");
+
+  // ⚠️ LA PORTÉE (15/09) : un joueur ne voit et n'édite que les tuiles de SA
+  // planète, et ne choisit que parmi les modèles 3D qu'on lui a ouverts.
+  const tuilesDeLaPortee = useMemo(() => dansLaPortee(portee, toutesTuiles), [portee, toutesTuiles]);
+  const tuiles = useMemo(
+    () => (portee.admin ? filtrerParPlanete(tuilesDeLaPortee, filtrePlanete) : tuilesDeLaPortee),
+    [portee, tuilesDeLaPortee, filtrePlanete],
+  );
+  const modeles = useMemo(
+    () =>
+      portee.admin
+        ? tousModeles
+        : tousModeles.filter((m) => usageDuModele3D(m) === "tuile" && autoriseeSur(m, portee.planete)),
+    [portee, tousModeles],
+  );
+  const quota = portee.admin ? null : etatQuota(portee.limites, "tuiles", tuilesDeLaPortee.length);
+  const sansPlanete = portee.admin ? toutesTuiles.filter((t) => !(t.planete ?? "")).length : 0;
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -352,9 +381,27 @@ export default function Tuiles() {
     [parId],
   );
 
+  // ⚠️ Les noms de ressources se lisent DANS LE CATALOGUE DE LA PLANÈTE de la
+  // tuile : deux planètes peuvent avoir chacune leur « bois » (15/09).
+  const ressourcesDe = useMemo(() => {
+    const cache = new Map<string, Ressource[]>();
+    return (planete: string) => {
+      let l = cache.get(planete);
+      if (!l) {
+        l = duCatalogue(ressources, planetes, planete);
+        cache.set(planete, l);
+      }
+      return l;
+    };
+  }, [ressources, planetes]);
+
   const contexte = useCallback(
-    (tuile: Tuile): ContexteColonne => ({ tuile, modele: modeleDe(tuile), ressources }),
-    [modeleDe, ressources],
+    (tuile: Tuile): ContexteColonne => ({
+      tuile,
+      modele: modeleDe(tuile),
+      ressources: ressourcesDe(tuile.planete ?? ""),
+    }),
+    [modeleDe, ressourcesDe],
   );
 
   /**
@@ -511,20 +558,20 @@ export default function Tuiles() {
       // Les technos aussi, et pour la meme raison : leur collection peut etre
       // vide, ou refusee ; le catalogue doit rester ouvrable. La regle
       // « technologie requise » dit alors « aucune technologie declaree ».
-      const [t, m, r, a, tech, tpl] = await Promise.all([
+      const [t, m, r, a, tech, ico] = await Promise.all([
         loadTuiles(),
         loadModeles3D(),
         loadRessources(),
         loadAges().catch(() => [] as Age[]),
         loadTechnologies().catch(() => [] as Technologie[]),
-        loadTemplates().catch(() => [] as Plateau[]),
+        loadIcones().catch(() => [] as Icone[]),
       ]);
-      setTuiles(t);
-      setModeles(m);
+      setToutesTuiles(t);
+      setTousModeles(m);
       setRessources(r);
       setAges(a);
       setTechnologies(tech);
-      setTemplates(tpl);
+      setIcones(ico);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
@@ -542,6 +589,8 @@ export default function Tuiles() {
     setSaving(true);
     setErreurDialog(null);
     try {
+      // ⚠️ Le NUMÉRO (`tileId`) n'est pas envoyé : le serveur l'attribue à la
+      // création (max + 1) et ne le change plus ensuite (15/09).
       if (dialog.tuile) await pb.collection(COLLECTION_TUILES).update(dialog.tuile.id, valeurs);
       else await pb.collection(COLLECTION_TUILES).create(valeurs);
       setDialog(null);
@@ -574,7 +623,8 @@ export default function Tuiles() {
     setErreurDialog(null);
     try {
       const aEcrire: { id: string; ligne: string }[] = [];
-      for (const t of tuiles) {
+      // ⚠️ Un joueur ne renomme que dans SES tuiles : c'est tout ce qu'il voit.
+      for (const t of tuilesDeLaPortee) {
         const ligne = categorieRenommeeDans(t, ancienne, nouvelle);
         if (ligne !== null) aEcrire.push({ id: t.id, ligne });
       }
@@ -620,10 +670,17 @@ export default function Tuiles() {
             )}
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">
-            Une tuile, c'est un modele declare dans{" "}
-            <Link to="/3dmodeltuile" className="text-accent hover:underline">
-              3DmodelTuile
-            </Link>{" "}
+            Une tuile, c'est un modele 3D{" "}
+            {portee.admin ? (
+              <>
+                declare dans{" "}
+                <Link to="/3dmodeltuile" className="text-accent hover:underline">
+                  3DmodelTuile
+                </Link>
+              </>
+            ) : (
+              "qu'on t'a ouvert"
+            )}{" "}
             plus son identite de jeu : nom, categorie, couleur, comportement a la destruction. Le
             meme modele peut servir a autant de tuiles que necessaire. La fenetre d'edition porte
             aussi ses <strong>regles de pose</strong>, ses <strong>paliers de cout</strong> et son{" "}
@@ -647,13 +704,35 @@ export default function Tuiles() {
               ))}
             </select>
           </label>
+          {portee.admin && planetes.length > 0 && (
+            <select
+              className="input h-9 w-auto py-1 text-xs"
+              value={filtrePlanete}
+              onChange={(e) => setFiltrePlanete(e.target.value)}
+              title="Planète"
+            >
+              <option value="">toutes les planètes</option>
+              <option value={SANS_PLANETE}>sans planète</option>
+              {planetes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nom}
+                </option>
+              ))}
+            </select>
+          )}
           <button className="btn-ghost" onClick={() => void charger()}>
             Recharger
           </button>
           <button
             className="btn-primary"
-            disabled={modeles.length === 0}
-            title={modeles.length === 0 ? "Declare d'abord un modele 3D" : undefined}
+            disabled={modeles.length === 0 || !!quota?.refus || (!portee.admin && !portee.planete)}
+            title={
+              modeles.length === 0
+                ? portee.admin
+                  ? "Declare d'abord un modele 3D"
+                  : "Aucun modele 3D ne t'est ouvert"
+                : (quota?.refus ?? undefined)
+            }
             onClick={() => {
               setErreurDialog(null);
               setDialog({ tuile: null });
@@ -664,13 +743,33 @@ export default function Tuiles() {
         </div>
       </header>
 
+      <BandeauJoueur
+        portee={portee}
+        collection="tuiles"
+        deja={tuilesDeLaPortee.length}
+        chargement={chargementPortee}
+      />
+      {!portee.admin && !chargement && modeles.length === 0 && (
+        <p className="mb-4 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
+          Aucun modèle 3D n'est ouvert à ta planète : une tuile en a besoin. C'est l'administrateur
+          qui les partage.
+        </p>
+      )}
+      {sansPlanete > 0 && (
+        <p className="mb-4 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
+          {sansPlanete} tuile{sansPlanete > 1 ? "s ne sont rangées" : " n'est rangée"} sur aucune
+          planète : le serveur les fait jouer sur les planètes du jeu, jamais chez un joueur.
+          Ouvre-les pour choisir leur planète (filtre « sans planète »).
+        </p>
+      )}
+
       {erreur && (
         <p className="mb-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
           {erreur}
         </p>
       )}
 
-      {!chargement && ressources.length === 0 && (
+      {!chargement && dansLaPortee(portee, ressources).length === 0 && (
         <p className="mb-4 rounded border border-amber-900/50 bg-amber-950/20 p-2 text-xs text-amber-300">
           Aucune ressource declaree :{" "}
           <Link to="/ressources" className="underline">
@@ -773,11 +872,19 @@ export default function Tuiles() {
         <div className="card p-5 text-sm text-slate-400">
           <p className="font-medium text-slate-200">Aucune tuile au catalogue.</p>
           <p className="mt-2 max-w-2xl">
-            Une tuile a besoin d'un modele 3D existant. Declare-les dans{" "}
-            <Link to="/3dmodeltuile" className="text-accent hover:underline">
-              3DmodelTuile
-            </Link>
-            , puis reviens ici pour leur donner un cout, des conditions de pose et une production.
+            Une tuile a besoin d'un modele 3D existant.{" "}
+            {portee.admin ? (
+              <>
+                Declare-les dans{" "}
+                <Link to="/3dmodeltuile" className="text-accent hover:underline">
+                  3DmodelTuile
+                </Link>
+                , puis reviens ici
+              </>
+            ) : (
+              "Choisis-en un parmi ceux qu'on t'a ouverts"
+            )}{" "}
+            pour leur donner un cout, des conditions de pose et une production.
           </p>
         </div>
       ) : (
@@ -965,12 +1072,15 @@ export default function Tuiles() {
       {dialog && (
         <TuileDialog
           tuile={dialog.tuile}
-          tuiles={tuiles}
-          templates={templates}
+          tuiles={portee.admin ? toutesTuiles : tuilesDeLaPortee}
           modeles={modeles}
           ressources={ressources}
           ages={ages}
           technologies={technologies}
+          portee={portee}
+          planetes={planetes}
+          icones={icones}
+          planeteProposee={planeteParDefaut(planetes, "tuiles", filtrePlanete)}
           saving={saving}
           erreur={erreurDialog}
           categorieOccupee={categorieOccupee}

@@ -1,8 +1,11 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Aide, { Terme } from "@/components/Aide";
+import { BandeauJoueur } from "@/components/Conception";
 import PanneauPlanete, { type Modele3DPartage } from "@/components/PanneauPlanete";
 import { useAuth } from "@/lib/auth";
+import { dansLaPortee } from "@/lib/conception";
+import { usePortee } from "@/lib/portee";
 import { type Joueur, loadJoueurs } from "@/lib/joueurs";
 import { messageErreur, pb } from "@/lib/pb";
 import { loadModeles3D, TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
@@ -45,6 +48,15 @@ import {
  * se dessine, un plateau de joueur s'inspecte. Les mélanger dans une seule page
  * mettait sur le même plan ce qu'on fabrique et ce qu'on observe.
  */
+/** Ce que lit un joueur sur SES modèles. */
+const TEXTES_JOUEUR = {
+  titre: "Mes modèles de plateau",
+  chapeau:
+    "Le terrain de départ de ta planète : un modèle ground et un modèle space, créés avec elle. Tu les peins avec tes propres tuiles ; le jeu en fait ta partie à ta première venue.",
+  vide: "Ta planète n'a pas encore de modèle : le serveur les crée avec elle. Recharge dans un moment.",
+  bouton: "",
+} as const;
+
 const TEXTES = {
   [COLLECTION_TEMPLATES]: {
     titre: "Modèles de plateau",
@@ -61,9 +73,13 @@ const TEXTES = {
 } as const;
 
 export default function ListePlateaux({ source }: { source: SourcePlateau }) {
-  // ⚠️ Écran réservé à l'admin (la route n'existe que pour lui, voir App.tsx).
+  // ⚠️ Les plateaux des joueurs : admin seul (la route n'existe que pour lui).
+  //    Les MODÈLES : l'admin les voit tous ; un joueur, depuis le 15/09, voit et
+  //    peint les deux de SA planète — sans en créer ni en supprimer.
   const { user } = useAuth();
-  const textes = TEXTES[source];
+  const { portee, chargement: chargementPortee } = usePortee();
+  const admin = portee.admin;
+  const textes = admin ? TEXTES[source] : TEXTES_JOUEUR;
   const estModele = source === COLLECTION_TEMPLATES;
   const [planeteOuverte, setPlaneteOuverte] = useState<string | null>(null);
 
@@ -116,6 +132,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
    */
   const rangee = useMemo(() => {
     if (!estModele) return liste;
+    if (!admin) return dansLaPortee(portee, liste);
     const nomP = (p: Plateau) => nomDePlanete(planetes, p.planete);
     return [...liste].sort(
       (a, b) =>
@@ -123,7 +140,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
         nomP(a).localeCompare(nomP(b), "fr", { sensitivity: "base" }) ||
         a.typeOfPlateau.localeCompare(b.typeOfPlateau),
     );
-  }, [liste, planetes, estModele]);
+  }, [liste, planetes, estModele, admin, portee]);
 
   const libelleAppartient = (valeur: string | undefined) => {
     const a = appartenance(valeur);
@@ -166,13 +183,35 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
           <button className="btn-ghost" onClick={() => void charger()}>
             Recharger
           </button>
-          <button className="btn-primary" onClick={() => setCreation(true)}>
-            {textes.bouton}
-          </button>
+          {admin && (
+            <button className="btn-primary" onClick={() => setCreation(true)}>
+              {textes.bouton}
+            </button>
+          )}
         </div>
       </header>
 
-      {estModele ? (
+      <BandeauJoueur portee={portee} chargement={chargementPortee} />
+
+      {!admin ? (
+        <Aide titre="Comment marchent tes modèles">
+          <Terme nom="deux modèles">
+            Un <code>ground</code> et un <code>space</code>, créés avec ta planète. Tu ne peux ni en
+            ajouter ni en supprimer.
+          </Terme>
+          <Terme nom="peindre">
+            Ouvre un modèle et peins avec TES tuiles (onglet Tuiles). Les tuiles du jeu ne sont pas
+            proposées chez toi.
+          </Terme>
+          <Terme nom="taille">
+            Tu peux changer la taille dans la limite que l'administrateur t'a fixée.
+          </Terme>
+          <Terme nom="la copie">
+            À ta première venue sur ta planète, le jeu fabrique ta partie depuis ce modèle.
+            Retoucher le modèle ensuite ne change pas une partie déjà commencée.
+          </Terme>
+        </Aide>
+      ) : estModele ? (
         <Aide titre="Comment marchent les modèles">
           <Terme nom="un par type">
             Un modèle par type de plateau — `ground`, `space`, `TPTplateau`. Le joueur n'y touche
@@ -234,7 +273,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
 
       {chargement ? (
         <p className="mt-6 text-sm text-slate-500">Chargement…</p>
-      ) : liste.length === 0 ? (
+      ) : rangee.length === 0 ? (
         <p className="card mt-4 p-4 text-sm text-slate-500">{textes.vide}</p>
       ) : (
         <div className="card mt-4 overflow-x-auto">
@@ -243,7 +282,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
                 <th className="px-3 py-2 font-medium">nom</th>
                 {estModele && <th className="px-3 py-2 font-medium">planète</th>}
-                {estModele && <th className="px-3 py-2 font-medium">appartient</th>}
+                {estModele && admin && <th className="px-3 py-2 font-medium">appartient</th>}
                 {!estModele && <th className="px-3 py-2 font-medium">joueur</th>}
                 <th className="w-20 px-3 py-2 font-medium">type</th>
                 <th className="w-24 px-3 py-2 font-medium">taille</th>
@@ -281,7 +320,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                         )}
                       </td>
                     )}
-                    {estModele && <td className="px-3 py-2">{libelleAppartient(p.appartient)}</td>}
+                    {estModele && admin && <td className="px-3 py-2">{libelleAppartient(p.appartient)}</td>}
                     {!estModele && (
                       <td className="px-3 py-2 text-xs text-slate-400">{libelleProprietaire(p)}</td>
                     )}
@@ -321,7 +360,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                           <Link to={lien(p)} className="text-xs text-accent hover:underline">
                             Ouvrir
                           </Link>
-                          {estModele && saPlanete && (
+                          {estModele && admin && saPlanete && (
                             <button
                               className="ml-3 text-xs text-slate-400 hover:text-white"
                               onClick={() => setPlaneteOuverte(planeteOuverte === p.id ? null : p.id)}
@@ -329,12 +368,14 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                               Planète
                             </button>
                           )}
-                          <button
-                            className="ml-3 text-xs text-slate-500 hover:text-red-400"
-                            onClick={() => setASupprimer(p.id)}
-                          >
-                            Supprimer
-                          </button>
+                          {admin && (
+                            <button
+                              className="ml-3 text-xs text-slate-500 hover:text-red-400"
+                              onClick={() => setASupprimer(p.id)}
+                            >
+                              Supprimer
+                            </button>
+                          )}
                         </>
                       )}
                     </td>
@@ -360,7 +401,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
         </div>
       )}
 
-      {creation && (
+      {creation && admin && (
         <DialogCreation
           source={source}
           uid={String(user?.id ?? "")}

@@ -7,8 +7,8 @@
  * Une case porte UNE tuile, point. Mais deux encodages cohabitent parce qu'ils
  * ne portent pas la même chose :
  *
- *  - `tilesBase64` : un `byte[]` encodé, un `tileId` par case, index
- *    `z * largeur + x`. Il dit CE QU'IL Y A. 10 000 cases = 13 Ko.
+ *  - `tilesBase64` : un `tileId` par case sur 1 ou 2 octets (voir `Cases`),
+ *    index `z * largeur + x`. Il dit CE QU'IL Y A. 10 000 cases = 13 Ko.
  *  - `etats` : un tableau json avec une entrée pour les SEULES cases ayant
  *    quelque chose à retenir. Il dit OÙ EN EST chaque bâtiment.
  *
@@ -19,8 +19,10 @@
  * les distances, elles, restent hexagonales (`distanceHex`).
  */
 
+import { duCatalogue } from "@/lib/conception";
 import { pb } from "@/lib/pb";
 import type { TypePlateau } from "@/lib/modeles3d";
+import type { Planete } from "@/lib/planetes";
 
 export const COLLECTION_TEMPLATES = "templates";
 export const COLLECTION_PLATEAUX = "plateaux";
@@ -149,11 +151,8 @@ export type Plateau = {
   nom: string;
   typeOfPlateau: TypePlateau;
   /**
-   * La seconde etiquette, libre — voir « Type de plateau 2 » plus bas.
-   *
-   * ⚠️ **Optionnel, et ca compte** : aucun record d'avant le 13/09 ne le porte.
-   * Absent = pas d'etiquette, donc le plateau ne peint que les tuiles qui n'en
-   * ont pas non plus. Lire par `type2Normalise()`, jamais a cru.
+   * Le NOM de la planète, recopié pour le jeu d'avant les planètes. Il ne
+   * décide plus rien sur le site depuis le 15/09 : c'est `planete` qui compte.
    */
   typeOfPlateau2?: string;
   largeur: number;
@@ -194,75 +193,26 @@ export interface ValeursPlateau {
   ownerId?: string;
 }
 
-// --- Type de plateau 2 : reserver un catalogue a un modele -------------------
+// --- La palette : ce qui se peint sur un plateau ------------------------------
 //
-// Pose le 2026-09-13. `typeOfPlateau` (ground / space / TPTplateau) dit sur quel
-// DECOR une tuile se joue : trois valeurs en dur, deduites du dossier du prefab.
-// Il ne sait pas separer deux plateaux du MEME decor — deux modeles `ground`
-// partagent forcement toutes les tuiles `ground`.
+// ⚠️ DEPUIS LE 15/09, C'EST LA PLANÈTE QUI DÉCIDE, plus l'étiquette libre
+// « type 2 » du 13/09 (elle en était déjà le brouillon : le 14/09, la planète
+// est devenue un objet, et l'étiquette n'en est plus que le nom recopié).
 //
-// `typeOfPlateau2` est la seconde etiquette qui les separe. Elle est **libre** :
-// on la tape sur la tuile, et le modele de plateau reprend celle qu'il veut. Le
-// pinceau de l'editeur ne propose alors que les tuiles qui portent la meme.
-//
-// ⚠️⚠️ **LA COMPARAISON EST STRICTE, LE VIDE COMPRIS** — demande de
-// l'utilisateur le 13/09, en connaissance de ce qu'elle coute : donner un type 2
-// a un modele VIDE SA PALETTE tant qu'aucune tuile ne porte la meme etiquette,
-// et une tuile etiquetee disparait de tous les autres plateaux. C'est ce qui
-// fait du type 2 une reserve et non une decoration.
-//
-// ⚠️ Les espaces et la casse ne comptent pas : « Jupiter », « jupiter » et
-// « Jupiter  » sont la meme etiquette. Sans ca, un champ libre fabrique des
-// jumelles qui ne se voient qu'en peignant — c'est exactement ce qui est arrive
-// aux categories de tuiles avant les cases a cocher du 30/08.
-//
-// ⚠️ **Rien de tout ceci ne part au jeu** : le moteur ne lit pas ce champ, il
-// n'y a que l'editeur du site qui filtre. Une tuile posee avant l'etiquetage
-// reste en place et continue de tourner.
-
-/** Une etiquette telle qu'on la compare : sans les espaces des deux bouts. */
-export function type2Normalise(v: unknown): string {
-  return typeof v === "string" ? v.trim() : "";
-}
-
-/** Deux etiquettes sont-elles la meme ? Vide compris — voir le bloc ci-dessus. */
-export function memeType2(a: unknown, b: unknown): boolean {
-  return (
-    type2Normalise(a).toLocaleLowerCase("fr") === type2Normalise(b).toLocaleLowerCase("fr")
-  );
-}
-
-/**
- * Les etiquettes deja ecrites quelque part, pour la saisie assistee.
- *
- * Prend plusieurs sources (les tuiles, les modeles) parce qu'un type 2 nait
- * indifferemment de l'un ou de l'autre : celui qu'on vient de taper sur un
- * modele doit se proposer sur la tuile, et l'inverse. Les jumelles de casse sont
- * fondues, la premiere orthographe vue l'emporte.
- */
-export function type2Connus(...sources: { typeOfPlateau2?: string }[][]): string[] {
-  const vues = new Map<string, string>();
-  for (const source of sources) {
-    for (const o of source ?? []) {
-      const v = type2Normalise(o?.typeOfPlateau2);
-      const cle = v.toLocaleLowerCase("fr");
-      if (v !== "" && !vues.has(cle)) vues.set(cle, v);
-    }
-  }
-  return [...vues.values()].sort((a, b) => a.localeCompare(b, "fr"));
-}
+// La palette d'un plateau = les tuiles qui JOUENT sur sa planète (la même règle
+// que le serveur, `duCatalogue` dans `lib/conception.ts`) et du même type de
+// décor. Peindre autre chose, c'est poser une case que le serveur met de côté
+// (« figée ») — et, chez un joueur, une grille qu'il refuse d'enregistrer.
 
 /**
  * La palette du pinceau : les tuiles qu'on a le droit de peindre sur ce plateau.
- *
- * Les DEUX types doivent coller. Le tri par `tileId` est celui du catalogue, le
- * meme que partout ailleurs dans le site.
+ * Le tri par `tileId` est celui du catalogue, le même que partout ailleurs.
  */
 export function palettePourPlateau<
-  T extends { tileId: number; typeOfPlateau: TypePlateau; typeOfPlateau2?: string },
->(tuiles: T[], type: TypePlateau, type2: unknown): T[] {
-  return tuiles
-    .filter((t) => t.typeOfPlateau === type && memeType2(t.typeOfPlateau2, type2))
+  T extends { tileId: number; typeOfPlateau: TypePlateau; planete?: string },
+>(tuiles: T[], type: TypePlateau, planeteId: string, planetes: Planete[]): T[] {
+  return duCatalogue(tuiles, planetes, planeteId)
+    .filter((t) => t.typeOfPlateau === type)
     .sort((a, b) => a.tileId - b.tileId);
 }
 
@@ -273,29 +223,66 @@ export function index(largeur: number, x: number, z: number): number {
 }
 
 /**
- * Décode en tableau d'octets. Un contenu illisible ou de mauvaise taille rend
- * une grille vide **de la bonne taille** plutôt qu'une exception : un plateau
- * qui refuse de s'ouvrir est pire qu'un plateau qu'on voit vide et qu'on peut
- * réparer.
+ * Le contenu des cases : un `tileId` par case, jusqu'à 65 535.
+ *
+ * ⚠️⚠️ UN OU DEUX OCTETS PAR CASE (15/09) — la même règle que le serveur
+ * (`moteur.LireGrille`) et qu'Unity (`PlateauData`) :
+ *   largeur × hauteur octets      → 1 octet par case (le format d'avant) ;
+ *   2 × largeur × hauteur octets  → 2 octets par case, POIDS FORT D'ABORD.
+ * Le format se lit à la LONGUEUR : un plateau d'avant se relit tel quel.
+ */
+export type Cases = Uint16Array;
+
+/**
+ * Décode. Un contenu illisible ou d'une longueur qui ne correspond à aucun
+ * format rend une grille **de la bonne taille** (lue octet par octet, comme
+ * avant le 15/09) plutôt qu'une exception : un plateau qui refuse de s'ouvrir
+ * est pire qu'un plateau qu'on voit abîmé et qu'on peut réparer.
  */
 export function decoderTiles(plateau: {
   tilesBase64?: string;
   largeur: number;
   hauteur: number;
-}): Uint8Array {
+}): Cases {
   const taille = plateau.largeur * plateau.hauteur;
-  if (!plateau.tilesBase64) return new Uint8Array(taille);
+  const cases = new Uint16Array(taille);
+  if (!plateau.tilesBase64) return cases;
+  let binaire: string;
   try {
-    const binaire = atob(plateau.tilesBase64);
-    const octets = new Uint8Array(taille);
-    for (let i = 0; i < Math.min(binaire.length, taille); i++) octets[i] = binaire.charCodeAt(i);
-    return octets;
+    binaire = atob(plateau.tilesBase64);
   } catch {
-    return new Uint8Array(taille);
+    return cases;
   }
+  if (taille > 0 && binaire.length === 2 * taille) {
+    for (let i = 0; i < taille; i++)
+      cases[i] = (binaire.charCodeAt(2 * i) << 8) | binaire.charCodeAt(2 * i + 1);
+    return cases;
+  }
+  for (let i = 0; i < Math.min(binaire.length, taille); i++) cases[i] = binaire.charCodeAt(i);
+  return cases;
 }
 
-export function encoderTiles(octets: Uint8Array): string {
+/** Le format qu'une grille demande : 1 octet tant que tous les ids tiennent, 2 sinon. */
+export function octetsParCase(cases: ArrayLike<number>): 1 | 2 {
+  for (let i = 0; i < cases.length; i++) if (cases[i] > 255) return 2;
+  return 1;
+}
+
+/**
+ * Encode. ⚠️ En 1 octet tant que c'est possible : c'est ce qui laisse un jeu
+ * d'avant le 15/09 lire une grille qui ne porte que des tuiles d'avant — et ça
+ * divise la taille par deux. Dès qu'une case porte 256 ou plus : 2 octets.
+ */
+export function encoderTiles(cases: ArrayLike<number>): string {
+  const deux = octetsParCase(cases) === 2;
+  const octets = new Uint8Array(deux ? 2 * cases.length : cases.length);
+  for (let i = 0; i < cases.length; i++) {
+    const c = cases[i];
+    if (deux) {
+      octets[2 * i] = c >> 8;
+      octets[2 * i + 1] = c & 0xff;
+    } else octets[i] = c;
+  }
   let binaire = "";
   // Par paquets : String.fromCharCode(...tableau) dépasse la pile d'appels
   // au-delà de quelques dizaines de milliers d'éléments.
@@ -314,11 +301,11 @@ export function encoderTiles(octets: Uint8Array): string {
  * Les cases sortant du nouveau cadre sont perdues, et leurs états avec.
  */
 export function redimensionner(
-  octets: Uint8Array,
+  octets: Cases,
   ancienne: { largeur: number; hauteur: number },
   nouvelle: { largeur: number; hauteur: number },
-): Uint8Array {
-  const sortie = new Uint8Array(nouvelle.largeur * nouvelle.hauteur);
+): Cases {
+  const sortie = new Uint16Array(nouvelle.largeur * nouvelle.hauteur);
   const largeurCommune = Math.min(ancienne.largeur, nouvelle.largeur);
   const hauteurCommune = Math.min(ancienne.hauteur, nouvelle.hauteur);
   for (let z = 0; z < hauteurCommune; z++) {
@@ -392,7 +379,7 @@ export function etatVide(x: number, z: number): EtatCase {
  */
 export function nettoyerEtats(
   etats: EtatCase[],
-  octets: Uint8Array,
+  octets: Cases,
   largeur: number,
   hauteur: number,
 ): EtatCase[] {

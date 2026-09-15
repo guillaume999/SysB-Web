@@ -25,8 +25,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { user, estAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { contenu, communaute, documents, compte } = ecransVisibles(estAdmin);
-  const tous = [...contenu, ...communaute, ...documents, ...compte];
+  const { contenu, communaute, guilde, documents, compte } = ecransVisibles(estAdmin);
+  const tous = [...contenu, ...communaute, ...guilde, ...documents, ...compte];
 
   return (
     <div className="flex min-h-screen">
@@ -41,22 +41,26 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2">
-          <div className="space-y-0.5">
-            {contenu.map((page) => (
-              <NavLink key={page.to} to={page.to} className={lienClasses}>
-                <IconeGenerique />
-                {page.label}
-              </NavLink>
-            ))}
-          </div>
+          {estAdmin ? (
+            <div className="space-y-0.5">
+              {contenu.map((page) => (
+                <NavLink key={page.to} to={page.to} className={lienClasses}>
+                  <IconeGenerique />
+                  {page.label}
+                </NavLink>
+              ))}
+            </div>
+          ) : (
+            // Le joueur conçoit SA planète (15/09) : le titre le dit.
+            <Groupe titre="Ma planète" liens={contenu} filet={false} />
+          )}
 
           <Groupe titre="Communauté" liens={communaute} filet={contenu.length > 0} />
+          <Groupe titre="Guilde" liens={guilde} filet />
 
           {/*
-            Depuis le 15/09 le joueur a deux groupes (Communauté, Documentation) :
-            les titres séparent toujours quelque chose. Seul le filet au-dessus
-            de « Communauté » disparaît quand il n'y a pas d'écran de contenu
-            au-dessus.
+            Depuis le 15/09 le joueur a trois groupes (Ma planète, Communauté,
+            Documentation) : les titres séparent toujours quelque chose.
           */}
           <Groupe titre="Documentation" liens={documents} filet />
           <Groupe titre="Compte" liens={compte} filet />
@@ -133,7 +137,14 @@ function Groupe({ titre, liens, filet }: { titre: string; liens: Lien[]; filet: 
       <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-600">{titre}</p>
       <div className="space-y-0.5">
         {liens.map((page) => (
-          <NavLink key={page.to} to={page.to} className={lienClasses}>
+          <NavLink
+            key={page.to}
+            to={page.to}
+            className={lienClasses}
+            // ⚠️ « Ma guilde » (/guilde) ne s'allume pas sur son salon
+            // (/guilde/salon), qui a sa propre entrée dans le même groupe.
+            end={liens.some((l) => l.to !== page.to && l.to.startsWith(page.to + "/"))}
+          >
             <IconeGenerique />
             {page.label}
           </NavLink>

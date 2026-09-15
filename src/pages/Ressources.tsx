@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import { BandeauJoueur, ChoixIconeJoueur, ChoixPlanete } from "@/components/Conception";
 import { Vignette } from "@/components/Vignette";
+import {
+  SANS_PLANETE,
+  dansLaPortee,
+  etatQuota,
+  filtrerParPlanete,
+  planeteParDefaut,
+  type Portee,
+} from "@/lib/conception";
 import { messageErreur, pb } from "@/lib/pb";
+import { loadIcones, nomDePlanete, type Icone, type Planete } from "@/lib/planetes";
+import { usePortee } from "@/lib/portee";
 import { libelleAge, loadAges, numerosDeclares, type Age } from "@/lib/ages";
 import { loadTuiles, type Tuile } from "@/lib/tuiles";
 import {
@@ -34,8 +45,12 @@ import {
  * sur chaque carte, sinon il deviendrait impossible à régler.
  */
 export default function Ressources() {
-  const [ressources, setRessources] = useState<Ressource[]>([]);
-  const [tuiles, setTuiles] = useState<Tuile[]>([]);
+  const { portee, planetes, chargement: chargementPortee } = usePortee();
+  const [toutes, setToutes] = useState<Ressource[]>([]);
+  const [toutesTuiles, setToutesTuiles] = useState<Tuile[]>([]);
+  const [icones, setIcones] = useState<Icone[]>([]);
+  // ⚠️ Admin seulement : la planète qu'il regarde. "" = toutes.
+  const [filtrePlanete, setFiltrePlanete] = useState("");
   const [ages, setAges] = useState<Age[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -53,14 +68,16 @@ export default function Ressources() {
       // lisible et modifiable même si le catalogue ou les âges ne répondent pas.
       // Sans catalogue, tout tombe dans « hors arbre » — et le bandeau le dit,
       // pour qu'on ne lise pas une panne réseau comme une base vide.
-      const [r, t, a] = await Promise.all([
+      const [r, t, a, i] = await Promise.all([
         loadRessources(),
         loadTuiles().catch(() => [] as Tuile[]),
         loadAges().catch(() => [] as Age[]),
+        loadIcones().catch(() => [] as Icone[]),
       ]);
-      setRessources(r);
-      setTuiles(t);
+      setToutes(r);
+      setToutesTuiles(t);
       setAges(a);
+      setIcones(i);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement des ressources impossible."));
     } finally {
@@ -71,6 +88,16 @@ export default function Ressources() {
   useEffect(() => {
     void charger();
   }, [charger]);
+
+  // ⚠️ LA PORTÉE (15/09) : un joueur ne voit que SA planète, ressources ET
+  // tuiles (c'est avec ses tuiles qu'on range ses ressources par âge).
+  const ressources = useMemo(() => {
+    const vues = dansLaPortee(portee, toutes);
+    return portee.admin && filtrePlanete ? filtrerParPlanete(vues, filtrePlanete) : vues;
+  }, [portee, toutes, filtrePlanete]);
+  const tuiles = useMemo(() => dansLaPortee(portee, toutesTuiles), [portee, toutesTuiles]);
+  const quota = portee.admin ? null : etatQuota(portee.limites, "ressources", ressources.length);
+  const peutCreer = portee.admin || (!!portee.planete && !quota?.refus);
 
   const groupes = useMemo(
     () => rangerParAge(ressources, tuiles, numerosDeclares(ages)),
@@ -148,10 +175,35 @@ export default function Ressources() {
             sur les bâtiments qui la produisent ou la consomment.
           </p>
         </div>
-        <button className="btn-primary" onClick={() => ouvrir(null)}>
-          + Nouvelle ressource
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {portee.admin && planetes.length > 0 && (
+            <select
+              className="input h-9 w-auto py-1 text-xs"
+              value={filtrePlanete}
+              onChange={(e) => setFiltrePlanete(e.target.value)}
+              title="Planète"
+            >
+              <option value="">toutes les planètes</option>
+              <option value={SANS_PLANETE}>sans planète</option>
+              {planetes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nom}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            className="btn-primary"
+            onClick={() => ouvrir(null)}
+            disabled={!peutCreer}
+            title={quota?.refus ?? undefined}
+          >
+            + Nouvelle ressource
+          </button>
+        </div>
       </header>
+
+      <BandeauJoueur portee={portee} collection="ressources" deja={ressources.length} chargement={chargementPortee} />
 
       <Aide titre="Comment cet écran range les ressources">
         <Terme nom="âge d'apparition">
@@ -189,7 +241,7 @@ export default function Ressources() {
         </p>
       )}
 
-      {!chargement && ressources.length > 0 && tuiles.length === 0 && (
+      {!chargement && ressources.length > 0 && toutesTuiles.length === 0 && (
         <p className="mt-4 rounded border border-amber-900/60 bg-amber-950/30 p-3 text-sm text-amber-200/90">
           <span className="font-medium">Le catalogue des tuiles n'a pas répondu.</span> Sans lui,
           aucun âge ne peut être déduit et tout se retrouve « hors arbre ». Recharge la page — ce
@@ -229,7 +281,11 @@ export default function Ressources() {
       {dialog && (
         <RessourceDialog
           ressource={dialog.ressource}
-          ressources={ressources}
+          ressources={toutes}
+          portee={portee}
+          planetes={planetes}
+          icones={icones}
+          planeteProposee={planeteParDefaut(planetes, "ressources", filtrePlanete)}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}
@@ -576,13 +632,22 @@ function resumeCitations(c: { cout: number; stockage: number; appro: number }): 
 function RessourceDialog({
   ressource,
   ressources,
+  portee,
+  planetes,
+  icones,
+  planeteProposee,
   saving,
   erreur,
   onCancel,
   onSubmit,
 }: {
   ressource: Ressource | null;
+  /** TOUTES les ressources : le doublon se juge sur la planète choisie. */
   ressources: Ressource[];
+  portee: Portee;
+  planetes: Planete[];
+  icones: Icone[];
+  planeteProposee: string;
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
@@ -596,6 +661,11 @@ function RessourceDialog({
     String(ressource?.ordre ?? (ressources.length + 1) * 10),
   );
   const [icone, setIcone] = useState(ressource?.chemin_icone ?? "");
+  const [iconeId, setIconeId] = useState(ressource?.icone ?? "");
+  // ⚠️ Un joueur écrit SUR SA PLANÈTE, sans choix ; l'admin la choisit.
+  const [planete, setPlanete] = useState(
+    portee.admin ? (ressource?.planete ?? planeteProposee) : (portee.planete?.id ?? ""),
+  );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
@@ -604,9 +674,15 @@ function RessourceDialog({
   }, [onCancel]);
 
   const codeNet = code.trim().toLowerCase();
-  const doublon = ressources.find((r) => r.code === codeNet && r.id !== ressource?.id) ?? null;
+  // ⚠️ Un code est unique PAR PLANÈTE (index `planete, code`) : deux planètes
+  // peuvent avoir chacune leur « bois ».
+  const doublon =
+    ressources.find(
+      (r) => r.code === codeNet && r.id !== ressource?.id && (r.planete ?? "") === planete,
+    ) ?? null;
   const codeInvalide = codeNet !== "" && !/^[a-z0-9_]+$/.test(codeNet);
-  const bloque = saving || codeNet === "" || nom.trim() === "" || doublon !== null || codeInvalide;
+  const bloque =
+    saving || codeNet === "" || nom.trim() === "" || doublon !== null || codeInvalide || (!portee.admin && !planete);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
@@ -620,6 +696,8 @@ function RessourceDialog({
             genre,
             ordre: Number(ordre) || 0,
             chemin_icone: icone.trim(),
+            planete,
+            ...(portee.admin ? {} : { icone: iconeId }),
           });
         }}
         className="card w-full max-w-lg p-5 shadow-2xl"
@@ -752,26 +830,50 @@ function RessourceDialog({
           </div>
         </div>
 
-        <div className="mt-4">
-          <label className="label" htmlFor="res-icone">
-            Chemin de la vignette
-          </label>
-          <input
-            id="res-icone"
-            className="input font-mono text-xs"
-            value={icone}
-            onChange={(e) => setIcone(e.target.value)}
-            placeholder="Icones/ble"
-          />
-          <p className="mt-1 text-xs text-slate-500">
-            Chemin sous <code className="text-slate-400">Assets/Resources/</code>, sans extension.
-            Laisse vide tant que les icones ne sont pas faites.
-          </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {portee.admin ? (
+            <ChoixPlanete id="res-planete" planetes={planetes} valeur={planete} onChange={setPlanete} />
+          ) : (
+            <div>
+              <p className="label">Planète</p>
+              <p className="text-sm text-slate-200">{nomDePlanete(planetes, planete)}</p>
+            </div>
+          )}
+          {portee.admin ? (
+            <div>
+              <label className="label" htmlFor="res-icone">
+                Chemin de la vignette
+              </label>
+              <input
+                id="res-icone"
+                className="input font-mono text-xs"
+                value={icone}
+                onChange={(e) => setIcone(e.target.value)}
+                placeholder="Icones/ble"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Chemin sous <code className="text-slate-400">Assets/Resources/</code>, sans extension.
+                Laisse vide tant que les icones ne sont pas faites.
+              </p>
+            </div>
+          ) : (
+            <ChoixIconeJoueur
+              id="res-icone"
+              icones={icones}
+              planete={portee.planete}
+              usage="ressource"
+              valeur={iconeId}
+              onChange={(i) => {
+                setIconeId(i?.id ?? "");
+                setIcone(i?.chemin ?? "");
+              }}
+            />
+          )}
         </div>
 
         {doublon && (
           <p className="mt-4 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
-            Le code {codeNet} existe deja ({doublon.nom}).
+            Le code {codeNet} existe deja sur cette planète ({doublon.nom}).
           </p>
         )}
         {!doublon && codeInvalide && (

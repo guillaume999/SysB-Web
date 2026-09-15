@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type Cases,
   HAUTEUR_CASE,
   LARGEUR_CASE,
   PAS_VERTICAL,
@@ -65,7 +66,8 @@ export default function GrillePlateau({
 }: {
   largeur: number;
   hauteur: number;
-  octets: Uint8Array;
+  /** Un `tileId` par case (jusqu'à 65 535 — voir `Cases`). */
+  octets: Cases;
   etats: Map<string, EtatCase>;
   tuiles: Tuile[];
   /** Case mise en évidence, ou null. */

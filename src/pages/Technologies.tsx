@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import { BandeauJoueur, ChoixIconeJoueur, ChoixPlanete } from "@/components/Conception";
 import { Vignette } from "@/components/Vignette";
 import ChoixTuiles from "@/components/ChoixTuiles";
+import {
+  SANS_PLANETE,
+  dansLaPortee,
+  duCatalogue,
+  etatQuota,
+  filtrerParPlanete,
+  planeteParDefaut,
+  type Portee,
+} from "@/lib/conception";
 import { messageErreur, pb } from "@/lib/pb";
+import { loadIcones, nomDePlanete, type Icone, type Planete } from "@/lib/planetes";
+import { usePortee } from "@/lib/portee";
 import { loadRessources, parAlphabet, type Ressource } from "@/lib/ressources";
 import {
   categoriesDe,
@@ -60,9 +72,12 @@ import {
  * paliers ; une table triable de 132 lignes ne dirait rien de sa forme.
  */
 export default function Technologies() {
-  const [technologies, setTechnologies] = useState<Technologie[]>([]);
-  const [tuiles, setTuiles] = useState<Tuile[]>([]);
-  const [ressources, setRessources] = useState<Ressource[]>([]);
+  const { portee, planetes, chargement: chargementPortee } = usePortee();
+  const [toutes, setToutes] = useState<Technologie[]>([]);
+  const [toutesTuiles, setToutesTuiles] = useState<Tuile[]>([]);
+  const [toutesRessources, setToutesRessources] = useState<Ressource[]>([]);
+  const [icones, setIcones] = useState<Icone[]>([]);
+  const [filtrePlanete, setFiltrePlanete] = useState("");
   const [ages, setAges] = useState<Age[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -79,16 +94,18 @@ export default function Technologies() {
       // Les tuiles et les ressources alimentent les listes du formulaire : on ne
       // saisit jamais un tileId ni un code de ressource a la main. Chargement
       // tolerant — une techno reste lisible meme si le catalogue ne repond pas.
-      const [t, tu, r, a] = await Promise.all([
+      const [t, tu, r, a, i] = await Promise.all([
         loadTechnologies(),
         loadTuiles().catch(() => [] as Tuile[]),
         loadRessources().catch(() => [] as Ressource[]),
         loadAges().catch(() => [] as Age[]),
+        loadIcones().catch(() => [] as Icone[]),
       ]);
-      setTechnologies(t);
-      setTuiles(tu);
-      setRessources(r);
+      setToutes(t);
+      setToutesTuiles(tu);
+      setToutesRessources(r);
       setAges(a);
+      setIcones(i);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement des technologies impossible."));
     } finally {
@@ -99,6 +116,15 @@ export default function Technologies() {
   useEffect(() => {
     void charger();
   }, [charger]);
+
+  // ⚠️ LA PORTÉE (15/09) : un joueur ne voit que SA planète.
+  const technologies = useMemo(() => {
+    const vues = dansLaPortee(portee, toutes);
+    return portee.admin ? filtrerParPlanete(vues, filtrePlanete) : vues;
+  }, [portee, toutes, filtrePlanete]);
+  const tuiles = useMemo(() => dansLaPortee(portee, toutesTuiles), [portee, toutesTuiles]);
+  const quota = portee.admin ? null : etatQuota(portee.limites, "technologies", technologies.length);
+  const peutCreer = portee.admin || (!!portee.planete && !quota?.refus);
 
   /**
    * L'ordre de l'ecran, decide le 2026-08-27 au soir : **par age, puis par
@@ -197,16 +223,43 @@ export default function Technologies() {
             catalogue citera : on le fixe une fois et on n'y revient plus.
           </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setErreurDialog(null);
-            setDialog({ technologie: null });
-          }}
-        >
-          + Nouvelle technologie
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {portee.admin && planetes.length > 0 && (
+            <select
+              className="input h-9 w-auto py-1 text-xs"
+              value={filtrePlanete}
+              onChange={(e) => setFiltrePlanete(e.target.value)}
+              title="Planète"
+            >
+              <option value="">toutes les planètes</option>
+              <option value={SANS_PLANETE}>sans planète</option>
+              {planetes.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nom}
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            className="btn-primary"
+            disabled={!peutCreer}
+            title={quota?.refus ?? undefined}
+            onClick={() => {
+              setErreurDialog(null);
+              setDialog({ technologie: null });
+            }}
+          >
+            + Nouvelle technologie
+          </button>
+        </div>
       </header>
+
+      <BandeauJoueur
+        portee={portee}
+        collection="technologies"
+        deja={technologies.length}
+        chargement={chargementPortee}
+      />
 
       {/*
         Le bandeau « le jeu n'en applique aucune » a vecu du 27/08 au 28/08,
@@ -287,9 +340,13 @@ export default function Technologies() {
       {dialog && (
         <TechnologieDialog
           technologie={dialog.technologie}
-          technologies={technologies}
-          tuiles={tuiles}
-          ressources={ressources}
+          technologies={toutes}
+          tuiles={toutesTuiles}
+          ressources={toutesRessources}
+          portee={portee}
+          planetes={planetes}
+          icones={icones}
+          planeteProposee={planeteParDefaut(planetes, "technologies", filtrePlanete)}
           ages={ages}
           saving={saving}
           erreur={erreurDialog}
@@ -335,9 +392,13 @@ function resumeTechno(t: Technologie, tuiles: Tuile[], toutes: Technologie[]): s
 /** Formulaire : identite en haut, puis les quatre sections de la regle. */
 function TechnologieDialog({
   technologie,
-  technologies,
-  tuiles,
-  ressources,
+  technologies: toutesTechnos,
+  tuiles: toutesTuiles,
+  ressources: toutesRessources,
+  portee,
+  planetes,
+  icones,
+  planeteProposee,
   ages,
   saving,
   erreur,
@@ -345,9 +406,18 @@ function TechnologieDialog({
   onSubmit,
 }: {
   technologie: Technologie | null;
+  /**
+   * TOUT le catalogue : la fiche n'en garde que ce qui joue sur la planète de
+   * la techno (`duCatalogue`) — proposer autre chose, c'est fabriquer une
+   * techno que le serveur ignorera.
+   */
   technologies: Technologie[];
   tuiles: Tuile[];
   ressources: Ressource[];
+  portee: Portee;
+  planetes: Planete[];
+  icones: Icone[];
+  planeteProposee: string;
   /** Les ages declares : ils nomment la bande ou la techno ira se ranger. */
   ages: Age[];
   saving: boolean;
@@ -356,13 +426,33 @@ function TechnologieDialog({
   onSubmit: (valeurs: ValeursTechnologie) => void;
 }) {
   const enEdition = technologie !== null;
+  // ⚠️ Un joueur écrit SUR SA PLANÈTE, sans choix ; l'admin la choisit.
+  const [planete, setPlanete] = useState(
+    portee.admin ? (technologie?.planete ?? planeteProposee) : (portee.planete?.id ?? ""),
+  );
+  const technologies = useMemo(
+    () => duCatalogue(toutesTechnos, planetes, planete),
+    [toutesTechnos, planetes, planete],
+  );
+  const tuiles = useMemo(() => duCatalogue(toutesTuiles, planetes, planete), [toutesTuiles, planetes, planete]);
+  const ressources = useMemo(
+    () => duCatalogue(toutesRessources, planetes, planete),
+    [toutesRessources, planetes, planete],
+  );
+  const [iconeId, setIconeId] = useState(technologie?.icone ?? "");
   const [code, setCode] = useState(technologie?.code ?? "");
   const [nom, setNom] = useState(technologie?.nom ?? "");
   // Une techno neuve part sur la vignette generique : c'est ce qu'il y a a
   // montrer aujourd'hui, et un carre vide par defaut ferait croire a un bug.
   // Une techno deja en base garde ce qu'elle porte, meme rien.
+  // ⚠️ Un JOUEUR n'a pas la générique d'office : sa vignette vient d'une icône
+  // qu'on lui a ouverte, et le serveur refuse un chemin sans icône.
   const [cheminIcone, setCheminIcone] = useState(
-    technologie ? cheminIconeTechno(technologie) : CHEMIN_ICONE_TECHNO_DEFAUT,
+    technologie
+      ? cheminIconeTechno(technologie)
+      : portee.admin
+        ? CHEMIN_ICONE_TECHNO_DEFAUT
+        : "",
   );
   /**
    * ⚠️ L'age NE SE SAISIT PLUS : il est lu sur le batiment ou la techno existe
@@ -429,12 +519,17 @@ function TechnologieDialog({
   }, [onCancel]);
 
   const codeNet = code.trim().toLowerCase();
-  const doublon = technologies.find((t) => t.code === codeNet && t.id !== technologie?.id) ?? null;
+  // ⚠️ Un code est unique PAR PLANÈTE (index `planete, code`).
+  const doublon =
+    toutesTechnos.find(
+      (t) => t.code === codeNet && t.id !== technologie?.id && (t.planete ?? "") === planete,
+    ) ?? null;
   const codeInvalide = codeNet !== "" && !/^[a-z0-9_]+$/.test(codeNet);
   // La convention, pas la valeur : un raccourci a proposer le jour ou cette
   // techno aura son propre dessin dans `public/icones_technos/`.
   const cheminIconeAttendu = cheminIconeTechnoAttendu(codeNet);
-  const bloque = saving || codeNet === "" || nom.trim() === "" || doublon !== null || codeInvalide;
+  const bloque =
+    saving || codeNet === "" || nom.trim() === "" || doublon !== null || codeInvalide || (!portee.admin && !planete);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:p-8">
@@ -461,6 +556,8 @@ function TechnologieDialog({
             // orange, jamais bloquantes — meme regle que les tuiles.
             cout,
             effets,
+            planete,
+            ...(portee.admin ? {} : { icone: iconeId }),
           }, tuileHote));
         }}
         className="card w-full max-w-lg p-5 shadow-2xl"
@@ -644,7 +741,38 @@ function TechnologieDialog({
           />
         </div>
 
+        <div className="mt-4">
+          {portee.admin ? (
+            <ChoixPlanete
+              id="tech-planete"
+              planetes={planetes}
+              valeur={planete}
+              onChange={setPlanete}
+              aide="Là où la techno se cherche. Les listes ci-dessous ne proposent que ce qui joue sur cette planète."
+            />
+          ) : (
+            <p className="text-sm text-slate-400">
+              Planète <strong className="text-slate-200">{nomDePlanete(planetes, planete)}</strong>
+            </p>
+          )}
+        </div>
+
         {/* La vignette EST un champ : ce qui est ecrit ici part en base. */}
+        {!portee.admin ? (
+          <div className="mt-4">
+            <ChoixIconeJoueur
+              id="tech-icone"
+              icones={icones}
+              planete={portee.planete}
+              usage="techno"
+              valeur={iconeId}
+              onChange={(i) => {
+                setIconeId(i?.id ?? "");
+                setCheminIcone(i?.chemin ?? "");
+              }}
+            />
+          </div>
+        ) : (
         <div className="mt-4">
           <label className="label" htmlFor="tech-icone">
             Vignette
@@ -691,6 +819,7 @@ function TechnologieDialog({
             )}
           </p>
         </div>
+        )}
 
         {/* ─── La regle : quatre sections, dans l'ordre ou on y pense ─────────
             d'abord ce qu'il faut pour la chercher, puis ce qu'elle coute, puis

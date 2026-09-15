@@ -44,7 +44,25 @@ export const ECRANS_CONTENU: Lien[] = [
   { to: "/modeles", label: "Modèles" },
   { to: "/plateaux", label: "Plateaux joueurs" },
   { to: "/joueurs", label: "Joueurs" },
+  { to: "/limites", label: "Limites" },
+  { to: "/guildes", label: "Guildes" },
 ];
+
+/**
+ * **Les écrans de CONCEPTION d'un joueur (15/09)** — ceux de l'admin, bornés à
+ * SA planète : ses modèles de plateau, ses tuiles, ses ressources, ses technos.
+ *
+ * ⚠️ Cherchés dans `ECRANS_CONTENU`, pas réécrits : un libellé changé là-bas
+ * change ici aussi. L'ordre est celui de la fabrication : on crée ses
+ * ressources, ses tuiles, ses technos, puis on peint ses modèles.
+ *
+ * ⚠️ Ce sont les MÊMES routes que l'admin : c'est la page qui borne ce qu'elle
+ * montre (`lib/conception.ts`), et le serveur qui refuse le reste.
+ */
+const ADRESSES_CONCEPTION = ["/ressources", "/tuiles", "/technologies", "/modeles"];
+export const ECRANS_CONCEPTION: Lien[] = ADRESSES_CONCEPTION.map(
+  (to) => ECRANS_CONTENU.find((e) => e.to === to)!,
+);
 
 /**
  * **Les écrans ouverts à TOUT COMPTE CONNECTÉ** — c'est par eux que le joueur
@@ -70,6 +88,16 @@ export const ECRANS_PUBLICS: Lien[] = [
 ];
 
 /**
+ * **Les écrans de GUILDE (15/09)** — pour tout compte connecté, admin compris ;
+ * jamais pour le visiteur. Le salon n'est lisible que par les membres : c'est
+ * le SERVEUR qui refuse les autres (403), la page ne fait que le dire.
+ */
+export const ECRANS_GUILDE: Lien[] = [
+  { to: "/guilde", label: "Ma guilde" },
+  { to: "/guilde/salon", label: "Salon de guilde" },
+];
+
+/**
  * **L'écran du COMPTE CONNECTÉ (15/09)** — sa fiche, son email, son mot de
  * passe. Pour tout compte connecté, admin compris ; jamais pour le visiteur
  * (il n'a pas de compte à montrer).
@@ -90,19 +118,21 @@ export function roleEstAdmin(role: Role | "" | undefined | null): boolean {
 /**
  * Les groupes de la barre latérale, pour le compte en cours.
  *
- * Deux cas : l'admin a tout, le joueur a la communauté, les documents et son
- * compte.
- * (Le visiteur anonyme n'a pas de barre latérale : voir `PublicLayout`.)
+ * Deux cas : l'admin a tout ; le joueur a SA conception, la communauté, sa
+ * guilde, les documents et son compte. (Le visiteur anonyme n'a pas de barre latérale :
+ * voir `PublicLayout`.)
  */
 export function ecransVisibles(admin: boolean): {
   contenu: Lien[];
   communaute: Lien[];
+  guilde: Lien[];
   documents: Lien[];
   compte: Lien[];
 } {
   return {
-    contenu: admin ? ECRANS_CONTENU : [],
+    contenu: admin ? ECRANS_CONTENU : ECRANS_CONCEPTION,
     communaute: ECRANS_PUBLICS,
+    guilde: ECRANS_GUILDE,
     documents: ECRANS_DOCUMENT,
     compte: ECRANS_COMPTE,
   };

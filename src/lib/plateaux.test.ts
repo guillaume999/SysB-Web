@@ -11,14 +11,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decoderTiles,
+  encoderTiles,
   etatVide,
   etatsDe,
-  memeType2,
+  octetsParCase,
   palettePourPlateau,
-  type2Connus,
+  redimensionner,
   type Plateau,
 } from "@/lib/plateaux";
 import type { TypePlateau } from "@/lib/modeles3d";
+import type { Planete } from "@/lib/planetes";
 
 const plateau = (etats: unknown): Plateau => ({ etats } as unknown as Plateau);
 
@@ -77,71 +80,84 @@ describe("etatsDe", () => {
 });
 
 // ============================================================
-//  TYPE DE PLATEAU 2 — la réserve, posée le 2026-09-13.
+//  LA PALETTE PAR PLANÈTE — 15/09 (remplace le « type 2 » libre du 13/09).
 //
-//  ⚠️ CE QUI SE PERD EN SILENCE ICI, c'est une palette. La règle est STRICTE,
-//  le vide compris : c'est le choix de l'utilisateur ce jour-là, et il a un
-//  effet de bord qui se voit tout de suite (donner une étiquette à un modèle
-//  vide sa palette) et un autre qui ne se voit pas (étiqueter une tuile la
-//  retire de TOUS les autres plateaux). Un jour quelqu'un voudra « vide =
-//  passe-partout » : ces tests lui diront ce qu'il défait.
+//  ⚠️ L'ESSAI QUI COMPTE est celui du JOUEUR : sa palette ne contient QUE ses
+//  tuiles. Une palette qui laisserait passer le jeu serait verte sur la Terre,
+//  et le serveur refuserait ensuite d'enregistrer son modèle.
 // ============================================================
 
-const tuile = (tileId: number, typeOfPlateau: TypePlateau, typeOfPlateau2?: string) => ({
+const pl = (id: string, nom: string, proprietaire = ""): Planete => ({ id, nom, proprietaire, created: "", updated: "" });
+const planetes = [pl("pGame", "Game"), pl("pTerre", "Terre"), pl("pJupiter", "Jupiter"), pl("pSeb", "Seb", "u1")];
+const tuile = (tileId: number, typeOfPlateau: TypePlateau, planete?: string) => ({
   tileId,
   typeOfPlateau,
-  ...(typeOfPlateau2 === undefined ? {} : { typeOfPlateau2 }),
+  ...(planete === undefined ? {} : { planete }),
 });
 
 describe("palettePourPlateau", () => {
   const catalogue = [
-    tuile(3, "ground"),
-    tuile(1, "ground", "Jupiter"),
-    tuile(2, "ground", "Mars"),
-    tuile(4, "space", "Jupiter"),
+    tuile(3, "ground", "pTerre"),
+    tuile(1, "ground", "pGame"),
+    tuile(2, "ground", "pJupiter"),
+    tuile(300, "ground", "pSeb"),
+    tuile(4, "space", "pTerre"),
+    tuile(5, "ground"),
   ];
 
-  it("garde les tuiles SANS étiquette sur un plateau sans étiquette — l'état d'avant le 13/09", () => {
-    expect(palettePourPlateau(catalogue, "ground", "").map((t) => t.tileId)).toEqual([3]);
+  it("chez un joueur : ses tuiles, et rien du jeu", () => {
+    expect(palettePourPlateau(catalogue, "ground", "pSeb", planetes).map((t) => t.tileId)).toEqual([300]);
   });
 
-  it("un plateau étiqueté ne voit QUE son étiquette : la tuile nue en est exclue", () => {
-    expect(palettePourPlateau(catalogue, "ground", "Jupiter").map((t) => t.tileId)).toEqual([1]);
+  it("sur la Terre : la Terre, Game et le non rangé — pas Jupiter, pas le joueur", () => {
+    expect(palettePourPlateau(catalogue, "ground", "pTerre", planetes).map((t) => t.tileId)).toEqual([1, 3, 5]);
   });
 
-  it("le type 1 décide toujours : l'étiquette ne fait pas passer une tuile `space` sur du `ground`", () => {
-    expect(palettePourPlateau(catalogue, "ground", "Jupiter").every((t) => t.tileId !== 4)).toBe(
-      true,
-    );
+  it("le type de décor décide toujours", () => {
+    expect(palettePourPlateau(catalogue, "space", "pTerre", planetes).map((t) => t.tileId)).toEqual([4]);
   });
 
-  it("les espaces et la casse ne comptent pas — sinon un champ libre fabrique des jumelles", () => {
-    expect(palettePourPlateau(catalogue, "ground", "  jupiter ").map((t) => t.tileId)).toEqual([1]);
-  });
-
-  it("une étiquette que personne ne porte rend une palette VIDE, pas le catalogue entier", () => {
-    expect(palettePourPlateau(catalogue, "ground", "Saturne")).toEqual([]);
-  });
-
-  it("un champ jamais rempli en base (`undefined`) vaut l'absence d'étiquette", () => {
-    expect(memeType2(undefined, "")).toBe(true);
-    expect(memeType2(undefined, "Jupiter")).toBe(false);
-  });
-
-  it("rend la palette dans l'ordre du catalogue, par tileId", () => {
-    const deux = [tuile(9, "ground", "Mars"), tuile(2, "ground", "Mars")];
-    expect(palettePourPlateau(deux, "ground", "Mars").map((t) => t.tileId)).toEqual([2, 9]);
+  it("sans planètes en base : tout le type (l'état d'avant)", () => {
+    expect(palettePourPlateau(catalogue, "ground", "pSeb", []).map((t) => t.tileId)).toEqual([1, 2, 3, 5, 300]);
   });
 });
 
-describe("type2Connus", () => {
-  it("fond les jumelles de casse, écarte les vides, et range par alphabet français", () => {
-    const tuiles = [tuile(1, "ground", "Jupiter"), tuile(2, "ground", "jupiter "), tuile(3, "ground", "")];
-    const modeles = [{ typeOfPlateau2: "Élysée" }, { typeOfPlateau2: "Mars" }];
-    expect(type2Connus(tuiles, modeles)).toEqual(["Élysée", "Jupiter", "Mars"]);
+// ============================================================
+//  LA GRILLE SUR 1 OU 2 OCTETS — 15/09. Mêmes cas que `moteur.LireGrille`.
+// ============================================================
+
+describe("la grille", () => {
+  const b64 = (octets: number[]) => btoa(String.fromCharCode(...octets));
+
+  it("relit une grille d'avant (1 octet par case) telle quelle", () => {
+    const cases = decoderTiles({ largeur: 3, hauteur: 2, tilesBase64: b64([0, 1, 255, 7, 0, 12]) });
+    expect([...cases]).toEqual([0, 1, 255, 7, 0, 12]);
   });
 
-  it("survit à une source vide — la liste des modèles peut n'être pas encore chargée", () => {
-    expect(type2Connus([], [])).toEqual([]);
+  it("lit 2 octets par case, poids fort d'abord", () => {
+    const cases = decoderTiles({ largeur: 2, hauteur: 2, tilesBase64: b64([0x01, 0x2c, 0xff, 0xff, 0, 1, 0, 0]) });
+    expect([...cases]).toEqual([300, 65535, 1, 0]);
+  });
+
+  it("écrit 1 octet tant que tout tient, 2 sinon — et relit ce qu'il écrit", () => {
+    expect(atob(encoderTiles([0, 1, 255])).length).toBe(3);
+    const grande = [0, 300, 65535, 7, 256, 0];
+    const texte = encoderTiles(grande);
+    expect(atob(texte).length).toBe(12);
+    expect([...decoderTiles({ largeur: 3, hauteur: 2, tilesBase64: texte })]).toEqual(grande);
+    expect(octetsParCase(grande)).toBe(2);
+    expect(octetsParCase([1, 2])).toBe(1);
+  });
+
+  it("une longueur de travers rend une grille de la bonne taille, sans planter", () => {
+    expect([...decoderTiles({ largeur: 2, hauteur: 2, tilesBase64: b64([1, 2, 3]) })]).toEqual([1, 2, 3, 0]);
+    expect([...decoderTiles({ largeur: 2, hauteur: 1, tilesBase64: "§§" })]).toEqual([0, 0]);
+    expect([...decoderTiles({ largeur: 2, hauteur: 1, tilesBase64: "" })]).toEqual([0, 0]);
+  });
+
+  it("redimensionne sans tronquer un id au-delà de 255", () => {
+    const r = redimensionner(Uint16Array.from([300, 1, 2, 3]), { largeur: 2, hauteur: 2 }, { largeur: 1, hauteur: 2 });
+    expect([...r]).toEqual([300, 2]);
   });
 });
+

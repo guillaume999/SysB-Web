@@ -189,6 +189,10 @@ export type Technologie = {
   debloque_technos: string[];
   cout: CoutTechno;
   effets: EffetTechno[];
+  /** La planète qui la porte (14/09) : « Game » pour le jeu, sinon la planète du joueur. */
+  planete?: string;
+  /** Relation → `icones`. */
+  icone?: string;
   created: string;
   updated: string;
 };
@@ -208,6 +212,10 @@ export interface ValeursTechnologie {
   debloque_technos: string[];
   cout: CoutTechno;
   effets: EffetTechno[];
+  /** La planète qui la porte. Un joueur n'écrit que la sienne. */
+  planete: string;
+  /** Relation → `icones`, posée par le choix d'icône d'un joueur. */
+  icone?: string;
 }
 
 // --- Le coût ----------------------------------------------------------------

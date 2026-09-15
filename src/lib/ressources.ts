@@ -113,6 +113,10 @@ export type Ressource = {
   ordre: number;
   /** Chemin de la vignette sous `Assets/Resources/`, ex. `Icones/ble`. Vide pour l'instant. */
   chemin_icone: string;
+  /** La planète qui la porte (14/09) : « Game » pour le contenu commun, sinon la planète. */
+  planete?: string;
+  /** Relation → `icones`. */
+  icone?: string;
   created: string;
   updated: string;
 };
@@ -123,6 +127,10 @@ export interface ValeursRessource {
   genre: GenreRessource;
   ordre: number;
   chemin_icone: string;
+  /** La planète qui la porte. Un joueur n'écrit que la sienne. */
+  planete: string;
+  /** Relation → `icones`, posée par le choix d'icône d'un joueur. */
+  icone?: string;
 }
 
 export function loadRessources(): Promise<Ressource[]> {

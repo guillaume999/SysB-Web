@@ -2,8 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import Aide, { Terme } from "@/components/Aide";
 import AmorcageEditeur from "@/components/AmorcageEditeur";
+import { ChoixPlanete } from "@/components/Conception";
 import GrillePlateau, { couleurTuile } from "@/components/GrillePlateau";
+import { duCatalogue, etiquettePourPlanete, refusTaille } from "@/lib/conception";
 import { messageErreur, pb } from "@/lib/pb";
+import { nomDePlanete } from "@/lib/planetes";
+import { usePortee } from "@/lib/portee";
 import { TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
 import {
   COLLECTION_TEMPLATES,
@@ -24,8 +28,8 @@ import {
   nettoyerEtats,
   palettePourPlateau,
   redimensionner,
-  type2Connus,
   type Amorcage,
+  type Cases,
   type EtatCase,
   type Plateau,
   type SourcePlateau,
@@ -56,6 +60,7 @@ const SEUIL_LOURD = 8000;
  */
 export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   const { id } = useParams<{ id: string }>();
+  const { portee, planetes } = usePortee();
   const collection = source;
   const estModele = collection === COLLECTION_TEMPLATES;
   const retour = estModele ? "/modeles" : "/plateaux";
@@ -69,9 +74,8 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   // Le cadre
   const [nom, setNom] = useState("");
   const [type, setType] = useState<TypePlateau>("ground");
-  // ⚠️ La seconde etiquette (13/09) : elle RESERVE ce plateau aux tuiles qui
-  //    portent la meme. Vide = les tuiles sans etiquette, l'etat d'avant.
-  const [type2, setType2] = useState("");
+  // ⚠️ LA PLANÈTE (15/09) décide de la palette — plus l'étiquette libre du 13/09.
+  const [planete, setPlanete] = useState("");
   const [largeur, setLargeur] = useState(0);
   const [hauteur, setHauteur] = useState(0);
   const [actif, setActif] = useState(false);
@@ -82,7 +86,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   const [amorcage, setAmorcage] = useState<Amorcage>(amorcageVide());
 
   // Le contenu
-  const [octets, setOctets] = useState<Uint8Array>(new Uint8Array(0));
+  const [octets, setOctets] = useState<Cases>(new Uint16Array(0));
   const [etats, setEtats] = useState<EtatCase[]>([]);
 
   const [pinceau, setPinceau] = useState<number>(TILE_VIDE);
@@ -109,7 +113,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
       setRessources(r);
       setNom(p.nom ?? "");
       setType(p.typeOfPlateau);
-      setType2(p.typeOfPlateau2 ?? "");
+      setPlanete(p.planete ?? "");
       setLargeur(p.largeur);
       setHauteur(p.hauteur);
       setActif(Boolean(p.actif));
@@ -132,33 +136,34 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   // Les tuiles proposées suivent le type du plateau : peindre une tuile `space`
   // sur un plateau `ground` donnerait un prefab qui n'a rien à faire là.
   //
-  // ⚠️ **Et le type 2 depuis le 13/09**, strictement, vide compris : donner une
-  // étiquette à ce plateau vide sa palette tant qu'aucune tuile ne porte la
-  // même. La règle vit dans `palettePourPlateau()` — elle y est testée.
+  // ⚠️ **Et sa planète depuis le 15/09** : seules les tuiles qui JOUENT sur
+  // cette planète (la règle du serveur). Chez un joueur : les siennes.
   const palette = useMemo(
-    () => palettePourPlateau(tuiles, type, type2),
-    [tuiles, type, type2],
+    () => palettePourPlateau(tuiles, type, planete, planetes),
+    [tuiles, type, planete, planetes],
   );
 
-  /** Les étiquettes déjà écrites sur une tuile, pour ne pas en retaper une variante. */
-  const type2Proposes = useMemo(() => type2Connus(tuiles), [tuiles]);
-
-  /**
-   * Combien de tuiles ce plateau aurait SANS le type 2. Sert au seul message de
-   * palette vide, mais il compte : « aucune tuile ground » et « aucune tuile
-   * ground étiquetée Jupiter » ne se réparent pas au même endroit, et sans ce
-   * compte le second se lit comme le premier.
-   */
+  /** Combien de tuiles du même décor existent, toutes planètes confondues : sert au message de palette vide. */
   const duType1 = useMemo(
     () => tuiles.filter((t) => t.typeOfPlateau === type).length,
     [tuiles, type],
   );
+
+  /**
+   * ⚠️ UN JOUEUR N'ÉDITE QUE SES MODÈLES (15/09) : un autre modèle s'ouvre en
+   * lecture, sans « Enregistrer » — le serveur le refuserait de toute façon.
+   */
+  const lectureSeule =
+    !portee.admin && (!estModele || !portee.planete || (plateau?.planete ?? "") !== portee.planete.id);
 
   const etatsIndex = useMemo(() => indexerEtats(etats), [etats]);
 
   /** Redimensionne en conservant les coordonnées, pas l'ordre des octets. */
   const appliquerTaille = (l: number, h: number) => {
     if (!(l >= 1 && h >= 1 && l <= 200 && h <= 200)) return;
+    // ⚠️ Un joueur reste dans sa limite (onglet Limites) — la taille d'origine
+    // passe toujours, comme au serveur.
+    if (!portee.admin && plateau && refusTaille(plateau, { largeur: l, hauteur: h }, portee.limites)) return;
     const nouveaux = redimensionner(octets, { largeur, hauteur }, { largeur: l, hauteur: h });
     setOctets(nouveaux);
     setEtats((e) => nettoyerEtats(e, nouveaux, l, h));
@@ -176,12 +181,12 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
    */
   const peindre = (x: number, z: number) => {
     const cibles = casesDansRayon(x, z, rayonPinceau, largeur, hauteur);
-    let copie: Uint8Array | null = null;
+    let copie: Cases | null = null;
     const changees = new Set<string>();
     for (const c of cibles) {
       const i = index(largeur, c.x, c.z);
       if (octets[i] === pinceau) continue;
-      if (!copie) copie = new Uint8Array(octets);
+      if (!copie) copie = new Uint16Array(octets);
       copie[i] = pinceau;
       changees.add(cleCase(c.x, c.z));
     }
@@ -239,12 +244,18 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
    * declare en PLACES et un `indicateur` se calcule : les proposer ici
    * laisserait saisir une dotation que le jeu ne saurait pas depenser.
    */
+  // ⚠️ Et seulement celles qui JOUENT sur la planète du plateau (15/09) : une
+  // dotation en « bois » du jeu serait ignorée sur la planète d'un joueur.
+  const ressourcesDuPlateau = useMemo(
+    () => duCatalogue(ressources, planetes, planete),
+    [ressources, planetes, planete],
+  );
   const ressourcesStockables = useMemo(
     () =>
-      ressources
+      ressourcesDuPlateau
         .filter((r) => r.genre === "stock")
         .sort((a, b) => (a.ordre ?? 0) - (b.ordre ?? 0) || a.code.localeCompare(b.code)),
-    [ressources],
+    [ressourcesDuPlateau],
   );
 
   const retirerEtat = (x: number, z: number) => {
@@ -261,13 +272,18 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
       const propres = nettoyerEtats(etats, octets, largeur, hauteur);
       const corps: Record<string, unknown> = {
         nom: nom.trim(),
-        typeOfPlateau: type,
-        typeOfPlateau2: type2.trim(),
         largeur,
         hauteur,
         tilesBase64: encoderTiles(octets),
         etats: propres,
       };
+      // ⚠️ Un JOUEUR n'envoie ni le type ni la planète : la règle d'API refuse
+      // qu'il les touche, même inchangés.
+      if (portee.admin) {
+        corps.typeOfPlateau = type;
+        corps.planete = planete;
+        corps.typeOfPlateau2 = etiquettePourPlanete(planetes.find((p) => p.id === planete));
+      }
       if (estModele) {
         corps.actif = actif;
         // Les lignes vides sont ecartees a l'envoi : le jeu les ignorerait de
@@ -328,9 +344,11 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
           <button className="btn-ghost" onClick={() => void charger()} disabled={saving}>
             Recharger
           </button>
-          <button className="btn-primary" onClick={() => void enregistrer()} disabled={saving || !modifie}>
-            {saving ? "Enregistrement…" : "Enregistrer"}
-          </button>
+          {!lectureSeule && (
+            <button className="btn-primary" onClick={() => void enregistrer()} disabled={saving || !modifie}>
+              {saving ? "Enregistrement…" : "Enregistrer"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -363,7 +381,9 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             </label>
             <select
               id="ed-type"
-              className="input"
+              className="input disabled:opacity-60"
+              disabled={!portee.admin}
+              title={portee.admin ? undefined : "Le type d'un modèle ne se change pas."}
               value={type}
               onChange={(e) => {
                 setType(e.target.value as TypePlateau);
@@ -377,33 +397,24 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
               ))}
             </select>
           </div>
-          {/*
-            ⚠️ TYPE 2 (13/09) : l'étiquette qui RÉSERVE ce plateau. Le pinceau ne
-            propose plus que les tuiles portant exactement la même — vide
-            compris, donc un plateau sans étiquette ne voit que les tuiles sans
-            étiquette. C'est la demande, et c'est ce qui rend la réserve étanche.
-          */}
-          <div>
-            <label className="label" htmlFor="ed-type2">
-              Type de plateau 2
-            </label>
-            <input
-              id="ed-type2"
-              className="input"
-              list="ed-type2-connus"
-              placeholder="aucun"
-              value={type2}
-              onChange={(e) => {
-                setType2(e.target.value);
+          {/* ⚠️ LA PLANÈTE (15/09) : elle décide de la palette. */}
+          {portee.admin ? (
+            <ChoixPlanete
+              id="ed-planete"
+              planetes={planetes}
+              valeur={planete}
+              onChange={(v) => {
+                setPlanete(v);
                 setModifie(true);
               }}
+              aide="Le pinceau ne propose que ce qui joue sur cette planète."
             />
-            <datalist id="ed-type2-connus">
-              {type2Proposes.map((t) => (
-                <option key={t} value={t} />
-              ))}
-            </datalist>
-          </div>
+          ) : (
+            <div>
+              <p className="label">Planète</p>
+              <p className="py-2 text-sm text-slate-200">{nomDePlanete(planetes, planete)}</p>
+            </div>
+          )}
           <div>
             <label className="label" htmlFor="ed-l">
               Largeur
@@ -412,7 +423,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
               id="ed-l"
               type="number"
               min={1}
-              max={200}
+              max={portee.admin ? 200 : Math.max(plateau.largeur, portee.limites.largeur_max)}
               className="input"
               value={largeur}
               onChange={(e) => appliquerTaille(Number(e.target.value), hauteur)}
@@ -426,7 +437,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
               id="ed-h"
               type="number"
               min={1}
-              max={200}
+              max={portee.admin ? 200 : Math.max(plateau.hauteur, portee.limites.hauteur_max)}
               className="input"
               value={hauteur}
               onChange={(e) => appliquerTaille(largeur, Number(e.target.value))}
@@ -435,6 +446,13 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-500">
+          {!portee.admin && (
+            <span className="text-slate-400">
+              Ta taille max : {portee.limites.largeur_max} × {portee.limites.hauteur_max}
+              {(plateau.largeur > portee.limites.largeur_max || plateau.hauteur > portee.limites.hauteur_max) &&
+                " (ta taille actuelle reste permise)"}
+            </span>
+          )}
           <span>
             {occupees} case{occupees > 1 ? "s" : ""} occupée{occupees > 1 ? "s" : ""} sur {cases} ·{" "}
             {etats.length} état{etats.length > 1 ? "s" : ""}
@@ -465,7 +483,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             </p>
             <AmorcageEditeur
               amorcage={amorcage}
-              ressources={ressources}
+              ressources={ressourcesDuPlateau}
               onChange={(a) => {
                 setAmorcage(a);
                 setModifie(true);
@@ -518,8 +536,14 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             elles, restent hexagonales — un rayon de 2 couvre 18 cases, pas 24.
           </Terme>
           <Terme nom="palette">
-            Seules les tuiles du même type de plateau sont proposées. Une tuile `space` sur un
-            plateau `ground` instancierait un prefab qui n'a rien à faire là.
+            Seules les tuiles du même type de plateau, et qui jouent sur sa planète, sont
+            proposées. Une tuile `space` sur un plateau `ground` instancierait un prefab qui n'a
+            rien à faire là ; une tuile d'une autre planète serait mise de côté par le serveur.
+          </Terme>
+          <Terme nom="deux octets">
+            Une case retient un numéro de tuile jusqu'à 65 535. Tant que toutes les tuiles peintes
+            ont un numéro inférieur à 256, la grille s'enregistre sur un octet par case (le format
+            d'avant) ; au-delà, sur deux.
           </Terme>
           <p className="text-slate-500">
             Rien n'est écrit en base avant « Enregistrer ». La grille se repeint des dizaines de
@@ -564,20 +588,22 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                   </Link>{" "}
                   de ce type.
                 </>
-              ) : type2.trim() !== "" ? (
+              ) : !portee.admin ? (
                 <>
-                  Aucune des {duType1} tuiles <code>{type}</code> ne porte le type 2{" "}
-                  <code>{type2.trim()}</code> : la palette est vide. Donne cette étiquette aux{" "}
+                  Aucune de tes tuiles n'est de type <code>{type}</code> : crée-en dans l'onglet{" "}
                   <Link to="/tuiles" className="underline">
-                    tuiles
-                  </Link>{" "}
-                  que tu veux réserver à ce plateau, ou efface-la ci-dessus.
+                    Tuiles
+                  </Link>
+                  , puis reviens peindre.
                 </>
               ) : (
                 <>
-                  Les {duType1} tuiles <code>{type}</code> du catalogue portent toutes un type 2, et
-                  ce plateau n'en a pas : la palette est vide. Donne-lui l'étiquette voulue
-                  ci-dessus.
+                  Aucune des {duType1} tuiles <code>{type}</code> ne joue sur «{" "}
+                  {nomDePlanete(planetes, planete)} » : la palette est vide. Range des{" "}
+                  <Link to="/tuiles" className="underline">
+                    tuiles
+                  </Link>{" "}
+                  sur cette planète, ou choisis-en une autre ci-dessus.
                 </>
               )}
             </p>
@@ -703,7 +729,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                       {Object.entries(etatSelection?.stock ?? {}).map(([code, q]) => (
                         <div key={code} className="flex items-center gap-2">
                           <span className="flex-1 truncate text-slate-300">
-                            {libelleRessource(ressources, code)}
+                            {libelleRessource(ressourcesDuPlateau, code)}
                           </span>
                           <input
                             type="number"

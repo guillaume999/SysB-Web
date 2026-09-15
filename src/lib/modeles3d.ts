@@ -58,6 +58,8 @@ export type Modele3D = Partageable & {
   section2: string;
   section3: string;
   section4: string;
+  /** `tuile` · `planete` — vide se lit « tuile » (voir `usageDuModele3D`). */
+  usage?: string;
   created: string;
   updated: string;
 };
