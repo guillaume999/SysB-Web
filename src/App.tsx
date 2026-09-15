@@ -6,8 +6,6 @@ import Home from "@/pages/Home";
 import Joueurs from "@/pages/Joueurs";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
-import MaPlanete from "@/pages/MaPlanete";
-import Planetes from "@/pages/Planetes";
 import ListePlateaux from "@/pages/ListePlateaux";
 import PlateauEditeur from "@/pages/PlateauEditeur";
 import Ressources from "@/pages/Ressources";
@@ -56,12 +54,6 @@ export default function App() {
   return (
     <Layout>
       <Routes>
-        {/*
-          ⚠️ « Ma planète » est ouvert à TOUT COMPTE CONNECTÉ, admin compris :
-          l'administrateur a lui aussi une planète à lui, distincte de celles du
-          jeu. C'est donc une route DEHORS des deux blocs conditionnels.
-        */}
-        <Route path="/ma-planete" element={<MaPlanete />} />
         <Route
           path="/conception"
           element={
@@ -94,7 +86,6 @@ export default function App() {
             <Route path="/technologies" element={<Technologies />} />
             <Route path="/modeles" element={<ListePlateaux source="templates" />} />
             <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />
-            <Route path="/planetes" element={<Planetes />} />
             <Route path="/plateaux" element={<ListePlateaux source="plateaux" />} />
             <Route path="/plateaux/:id" element={<PlateauEditeur source="plateaux" />} />
             <Route path="/joueurs" element={<Joueurs />} />

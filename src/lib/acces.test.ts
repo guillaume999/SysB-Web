@@ -51,7 +51,7 @@ describe("ce que voit un joueur", () => {
   });
 
   it("contient la Conception, et elle seule", () => {
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception", "/ma-planete"]);
+    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
   });
 
   it("entre par /conception, pas par le tableau de bord", () => {
@@ -84,7 +84,7 @@ describe("ce que voit un concepteur", () => {
   });
 
   it("garde la Conception, comme tout le monde", () => {
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception", "/ma-planete"]);
+    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
   });
 
   it("entre par ses modèles", () => {
@@ -102,13 +102,14 @@ describe("ce que voit un concepteur", () => {
 describe("ce que voit un admin", () => {
   const vu = ecransVisibles(true);
 
-  // ⚠️ NEUF depuis le 14/09 : « Planètes » est arrivé avec le chantier du même
-  //    nom. Le compte est volontairement écrit en dur — c'est lui qui fait
-  //    rougir l'essai quand un écran est ajouté sans être décidé.
-  it("garde les neuf écrans de contenu ET la Conception", () => {
-    expect(vu.contenu).toHaveLength(9);
+  // ⚠️ HUIT depuis le 15/09 : « Planètes » est fondu dans « Modèles ». Le
+  //    compte est volontairement écrit en dur — c'est lui qui fait rougir
+  //    l'essai quand un écran est ajouté ou retiré sans être décidé.
+  it("garde les huit écrans de contenu ET la Conception", () => {
+    expect(vu.contenu).toHaveLength(8);
+    expect(vu.contenu.map((l) => l.to)).not.toContain("/planetes");
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception", "/ma-planete"]);
+    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
   });
 
   it("entre par le tableau de bord", () => {

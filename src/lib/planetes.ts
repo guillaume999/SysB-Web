@@ -171,6 +171,16 @@ export function triAdmin(planetes: Planete[]): Planete[] {
   );
 }
 
+/**
+ * Le rang d'un modèle dans l'onglet Modèles : ceux du **jeu** d'abord, puis
+ * ceux des **joueurs**, puis ceux que **personne** n'a rangés — ces derniers en
+ * bas, là où on les remarque.
+ */
+export function rangAppartenance(valeur: string | undefined | null): number {
+  const a = appartenance(valeur);
+  return a.famille === "game" ? 0 : a.famille === "joueur" ? 1 : 2;
+}
+
 /** Le nom d'une planète d'après son id — pour les écrans, jamais pour décider. */
 export function nomDePlanete(planetes: Planete[], id: string | undefined): string {
   if (!id) return "aucune planète";
@@ -199,46 +209,44 @@ export function loadIcones(): Promise<Icone[]> {
 }
 
 /* ------------------------------------------------------------------ */
-/* La planète du joueur — créée par le SERVEUR, jamais par le client    */
+/* À qui appartient un modèle — `templates.appartient` (15/09)          */
 /* ------------------------------------------------------------------ */
 
-/** Ce que rend `POST /api/sysb/ma-planete`. */
-export type MaPlaneteCreee = {
-  ok: boolean;
-  cree: boolean;
-  verdict: string;
-  planete?: { id: string; nom: string; proprietaire: string };
-  modeles?: { id: string; typeOfPlateau: string }[];
-};
-
 /**
- * Crée la planète du joueur connecté, **et ses deux modèles de plateau**.
+ * La valeur d'`appartient` pour un modèle **du jeu**.
  *
- * ⚠️⚠️ **PAS UN `pb.collection("planetes").create()`** : la collection est en
- * création **admin**, exprès. Et surtout, une planète sans ses deux modèles est
- * une planète qu'on ne peut pas ouvrir — les trois records partent ensemble,
- * dans une transaction, ou pas du tout. C'est pour ça qu'il y a une route.
- *
- * ⚠️ **Une seule planète par joueur**, et c'est le serveur qui le tient :
- * l'index unique de `planetes` ne porte que le nom. Un deuxième appel répond
- * **409** en nommant celle qu'il a déjà.
+ * ⚠️⚠️ `appartient` est un texte à deux familles : `"game"`, ou l'**id** du
+ * joueur. **Vide ne veut PAS dire « game »** : c'est un modèle que personne
+ * n'a rangé, et l'écran le signale. C'est aussi pourquoi le pseudo « game »
+ * est interdit (`pseudoReserve`) — le serveur Go le refuse de son côté.
  */
-export async function creerMaPlanete(
-  nom: string,
-  modele3d: string,
-  icone: string,
-): Promise<MaPlaneteCreee> {
-  return pb.send("/api/sysb/ma-planete", {
-    method: "POST",
-    body: { nom, modele3d, icone },
-  });
+export const APPARTIENT_GAME = "game";
+
+export type Appartenance =
+  | { famille: "game" }
+  | { famille: "joueur"; id: string }
+  | { famille: "personne" };
+
+export function appartenance(valeur: string | undefined | null): Appartenance {
+  const v = (valeur ?? "").trim();
+  if (v === "") return { famille: "personne" };
+  if (v === APPARTIENT_GAME) return { famille: "game" };
+  return { famille: "joueur", id: v };
 }
 
 /**
- * La planète d'un joueur, ou `null`. ⚠️ **`proprietaire` est la seule marque** —
- * ne pas la chercher par son nom.
+ * Ce qu'`appartient` doit valoir pour un modèle rattaché à cette planète :
+ * `"game"` pour une planète sans propriétaire, l'id du propriétaire sinon.
  */
-export function maPlanete(planetes: Planete[], userId: string | undefined): Planete | null {
-  if (!userId) return null;
-  return planetes.find((p) => p.proprietaire === userId) ?? null;
+export function appartientPourPlanete(planete: Planete | null | undefined): string {
+  const proprio = (planete?.proprietaire ?? "").trim();
+  return proprio === "" ? APPARTIENT_GAME : proprio;
 }
+
+/** « game » (casse et espaces ignorés) est réservé — voir `APPARTIENT_GAME`. */
+export function pseudoReserve(pseudo: string | undefined | null): boolean {
+  return (pseudo ?? "").trim().toLowerCase() === APPARTIENT_GAME;
+}
+
+/** Même phrase que le serveur Go (`routes.VerdictPseudoReserve`). */
+export const VERDICT_PSEUDO_RESERVE = "« game » est réservé au jeu : choisis un autre pseudo.";

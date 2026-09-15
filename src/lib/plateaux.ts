@@ -171,6 +171,16 @@ export type Plateau = {
    * qui l'autorise, pas le site. Voir `lib/partage.ts`.
    */
   partages?: string[];
+  /**
+   * La planete ou ce plateau se joue — relation → `planetes` (14/09). C'est
+   * elle que lit `assurer` ; `typeOfPlateau2` n'en est que l'etiquette.
+   */
+  planete?: string;
+  /**
+   * `templates` seulement — **a qui est ce modele** (15/09) : `"game"` ou l'id
+   * du joueur. ⚠️ Vide ≠ game. Lire par `appartenance()` (`lib/planetes.ts`).
+   */
+  appartient?: string;
   /** `templates` seulement : comment une partie demarre sur ce modele. */
   amorcage?: Amorcage | null;
   /** `plateaux` seulement. */

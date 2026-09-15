@@ -17,8 +17,12 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  APPARTIENT_GAME,
+  appartenance,
+  appartientPourPlanete,
   autoriseeSur,
-  maPlanete,
+  pseudoReserve,
+  rangAppartenance,
   avecPlanete,
   estGame,
   estPlaneteGame,
@@ -166,21 +170,29 @@ describe("le nom d'une planète", () => {
   });
 });
 
-describe("retrouver SA planète", () => {
-  it("⚠️ se fait par le propriétaire, jamais par le nom", () => {
-    const toutes = [GAME, TERRE, ARAGONIA, CHEZ_SEB];
-    expect(maPlanete(toutes, "u_guillaume")?.nom).toBe("Aragonia");
-    expect(maPlanete(toutes, "u_seb")?.nom).toBe("Sebtopia");
+describe("à qui appartient un modèle", () => {
+  it("⚠️ vide n'est PAS « game » : c'est un modèle que personne n'a rangé", () => {
+    expect(appartenance("")).toEqual({ famille: "personne" });
+    expect(appartenance(undefined)).toEqual({ famille: "personne" });
+    expect(appartenance("game")).toEqual({ famille: "game" });
+    expect(appartenance(" u_seb ")).toEqual({ famille: "joueur", id: "u_seb" });
   });
 
-  it("rend null quand il n'en a pas — l'écran propose alors de la créer", () => {
-    expect(maPlanete([GAME, TERRE], "u_guillaume")).toBeNull();
+  it("se déduit de la planète : sans propriétaire = game", () => {
+    expect(appartientPourPlanete(TERRE)).toBe(APPARTIENT_GAME);
+    expect(appartientPourPlanete(ARAGONIA)).toBe("u_guillaume");
   });
 
-  it("⚠️ et ne confond pas « pas connecté » avec « planète game »", () => {
-    // Sans identifiant, la recherche ne doit PAS tomber sur la première planète
-    // sans propriétaire : on rendrait la Terre à un visiteur anonyme.
-    expect(maPlanete([GAME, TERRE], undefined)).toBeNull();
-    expect(maPlanete([GAME, TERRE], "")).toBeNull();
+  it("range le jeu, puis les joueurs, puis les modèles sans propriétaire", () => {
+    expect(["", "u1", "game"].sort((a, b) => rangAppartenance(a) - rangAppartenance(b))).toEqual([
+      "game",
+      "u1",
+      "",
+    ]);
+  });
+
+  it("⚠️ réserve le pseudo « game », casse et espaces ignorés", () => {
+    for (const p of ["game", "Game", " GAME "]) expect(pseudoReserve(p)).toBe(true);
+    for (const p of ["", "gamer", "Samp", "le game"]) expect(pseudoReserve(p)).toBe(false);
   });
 });

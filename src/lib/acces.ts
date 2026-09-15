@@ -41,7 +41,6 @@ export const ECRANS_CONTENU: Lien[] = [
   { to: "/tuiles", label: "Tuiles" },
   { to: "/technologies", label: "Technologie" },
   { to: "/modeles", label: "Modèles" },
-  { to: "/planetes", label: "Planètes" },
   { to: "/plateaux", label: "Plateaux joueurs" },
   { to: "/joueurs", label: "Joueurs" },
 ];
@@ -50,21 +49,11 @@ export const ECRANS_CONTENU: Lien[] = [
  * **Les écrans ouverts à TOUT COMPTE CONNECTÉ** — c'est par eux que le joueur
  * entre sur le site.
  *
- * ⚠️ **Le nom ment un peu depuis le 14/09**, et c'est assumé : « Ma planète »
- * ÉCRIT, lui — il crée une planète et ses deux modèles. Ce qui réunit ces
- * écrans n'est plus « ils ne touchent à rien », c'est **« ils sont à tout le
- * monde »**. Renommer la constante toucherait la barre latérale, le menu
- * mobile, le routeur et deux essais, pour un gain de vocabulaire ; ce
- * commentaire dit la vérité à moindre frais.
- *
- * ⚠️ **« Ma planète » n'écrit PAS dans `planetes` en direct** : la collection
- * est en création admin. Il passe par `POST /api/sysb/ma-planete`, qui crée la
- * planète **et ses deux modèles** d'un bloc. Voir `lib/planetes.ts`.
+ * ⚠️ Pas d'écran « Ma planète » (retiré le 15/09) : la planète d'un joueur est
+ * créée d'office par le serveur à l'inscription, et ses deux modèles lui sont
+ * partagés — il les retrouve dans l'onglet Modèles, comme concepteur.
  */
-export const ECRANS_DOCUMENT: Lien[] = [
-  { to: "/conception", label: "Conception" },
-  { to: "/ma-planete", label: "Ma planète" },
-];
+export const ECRANS_DOCUMENT: Lien[] = [{ to: "/conception", label: "Conception" }];
 
 /**
  * **Les écrans d'un CONCEPTEUR** — un joueur à qui l'admin a ouvert un modèle

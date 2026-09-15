@@ -1,11 +1,26 @@
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Aide, { Terme } from "@/components/Aide";
+import PanneauPlanete, { type Modele3DPartage } from "@/components/PanneauPlanete";
 import { useAuth } from "@/lib/auth";
 import { type Joueur, libelleRole, loadJoueurs } from "@/lib/joueurs";
 import { estConcepteur, modelesVisibles, usePartage } from "@/lib/partage";
 import { messageErreur, pb } from "@/lib/pb";
-import { TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
+import { loadModeles3D, TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
+import {
+  APPARTIENT_GAME,
+  COLLECTION_PLANETES,
+  appartenance,
+  appartientPourPlanete,
+  estGame,
+  loadIcones,
+  loadPlanetes,
+  nomDePlanete,
+  rangAppartenance,
+  triAdmin,
+  type Icone,
+  type Planete,
+} from "@/lib/planetes";
 import {
   COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
@@ -34,7 +49,7 @@ import {
 const TEXTES = {
   [COLLECTION_TEMPLATES]: {
     titre: "Modèles de plateau",
-    chapeau: "Le terrain de départ que tu dessines. Le jeu en fait une copie pour chaque joueur, à sa première venue sur un type.",
+    chapeau: "Le terrain de départ que tu dessines, rangé par planète. Le jeu en fait une copie pour chaque joueur, à sa première venue. Chaque joueur reçoit à l'inscription sa planète, à son pseudo, avec un modèle ground et un modèle space.",
     vide: "Aucun modèle. Tant qu'il n'y en a pas, le jeu refuse de fabriquer le plateau d'un joueur et le dit dans la console — c'est voulu.",
     bouton: "+ Nouveau modèle",
   },
@@ -56,6 +71,31 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
   //    pour l'admin. Lui montrer les boutons ne ferait que promettre un 403.
   const concepteur = estConcepteur(portee);
   const [partageOuvert, setPartageOuvert] = useState<string | null>(null);
+  const [planeteOuverte, setPlaneteOuverte] = useState<string | null>(null);
+
+  // ⚠️ Ce qui sert à lire les colonnes « planète » et « appartient », et au
+  //    panneau de la planète (admin). Rien de tout ça n'est indispensable à la
+  //    liste : un échec laisse les colonnes en identifiants, pas l'écran vide.
+  const [planetes, setPlanetes] = useState<Planete[]>([]);
+  const [joueurs, setJoueurs] = useState<Joueur[]>([]);
+  const [modeles3d, setModeles3d] = useState<Modele3DPartage[]>([]);
+  const [icones, setIcones] = useState<Icone[]>([]);
+
+  /** Planètes (tous), et pour l'admin : joueurs, modèles 3D, icônes. */
+  const chargerAutour = useCallback(async () => {
+    const [p, j, m, i] = await Promise.all([
+      loadPlanetes().catch(() => [] as Planete[]),
+      estAdmin ? loadJoueurs().catch(() => [] as Joueur[]) : Promise.resolve([] as Joueur[]),
+      estAdmin
+        ? (loadModeles3D() as Promise<Modele3DPartage[]>).catch(() => [] as Modele3DPartage[])
+        : Promise.resolve([] as Modele3DPartage[]),
+      estAdmin ? loadIcones().catch(() => [] as Icone[]) : Promise.resolve([] as Icone[]),
+    ]);
+    setPlanetes(p);
+    setJoueurs(j);
+    setModeles3d(m);
+    setIcones(i);
+  }, [estAdmin]);
 
   const [liste, setListe] = useState<Plateau[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -69,12 +109,43 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
     try {
       const chargee = await (estModele ? loadTemplates() : loadPlateauxJoueurs());
       setListe(estModele ? modelesVisibles(chargee, portee) : chargee);
+      if (estModele) await chargerAutour();
     } catch (e) {
       setErreur(messageErreur(e, "Chargement impossible."));
     } finally {
       setChargement(false);
     }
-  }, [estModele, portee]);
+  }, [estModele, portee, chargerAutour]);
+
+  /**
+   * ⚠️ L'ORDRE : le jeu d'abord, puis les joueurs, puis les modèles que
+   * personne n'a rangés ; dans chaque groupe par planète, puis par type — les
+   * deux modèles d'une planète se suivent.
+   */
+  const rangee = useMemo(() => {
+    if (!estModele) return liste;
+    const nomP = (p: Plateau) => nomDePlanete(planetes, p.planete);
+    return [...liste].sort(
+      (a, b) =>
+        rangAppartenance(a.appartient) - rangAppartenance(b.appartient) ||
+        nomP(a).localeCompare(nomP(b), "fr", { sensitivity: "base" }) ||
+        a.typeOfPlateau.localeCompare(b.typeOfPlateau),
+    );
+  }, [liste, planetes, estModele]);
+
+  const libelleAppartient = (valeur: string | undefined) => {
+    const a = appartenance(valeur);
+    if (a.famille === "game")
+      return (
+        <span className="rounded border border-edge px-1.5 py-0.5 text-[10px] uppercase text-accent">
+          game
+        </span>
+      );
+    if (a.famille === "personne") return <span className="text-xs text-amber-300">non rangé</span>;
+    if (a.id === user?.id) return <span className="text-xs text-slate-300">toi</span>;
+    const j = joueurs.find((x) => x.id === a.id);
+    return <span className="text-xs text-slate-300">{j ? j.pseudo?.trim() || j.email : a.id}</span>;
+  };
 
   useEffect(() => {
     void charger();
@@ -100,9 +171,9 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
           <p className="mt-1 max-w-2xl text-sm text-slate-500">{textes.chapeau}</p>
           {concepteur && estModele && (
             <p className="mt-1 max-w-2xl text-xs text-accent">
-              Un administrateur t'a ouvert {portee.modeles.length > 1 ? "ces modèles" : "ce modèle"}
-              . Les bâtiments, ressources et technologies qui s'y rattachent se modifient dans
-              leurs propres onglets.
+              Ce sont les modèles que tu peux dessiner : ceux de ta planète, et ceux qu'un
+              administrateur t'a partagés. Les bâtiments, ressources et technologies qui s'y
+              rattachent se modifient dans leurs propres onglets.
             </p>
           )}
         </div>
@@ -128,6 +199,16 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
             À sa première venue sur un type, le jeu fabrique au joueur une copie personnelle du
             modèle et l'ouvre. C'est cette copie qu'il joue ; retoucher le modèle ensuite ne change
             rien aux parties déjà commencées, seulement au départ des nouveaux joueurs.
+          </Terme>
+          <Terme nom="planète">
+            Où le modèle se joue. Une planète a deux modèles, <code>ground</code> et{" "}
+            <code>space</code>. Le bouton « Planète » (admin) règle son apparence et ce qui lui est
+            ouvert : quels modèles 3D et quelles icônes ses tuiles peuvent utiliser.
+          </Terme>
+          <Terme nom="appartient">
+            <strong>game</strong> = modèle du jeu (Terre, Jupiter…). Sinon, le joueur à qui est la
+            planète — elle est créée d'office à son inscription et porte son pseudo.{" "}
+            <strong>non rangé</strong> = champ vide : personne n'en est propriétaire, à corriger.
           </Terme>
           <Terme nom="actif">
             Un modèle non coché est un brouillon. Tu peux préparer le prochain terrain de départ
@@ -190,6 +271,8 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
             <thead>
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
                 <th className="px-3 py-2 font-medium">nom</th>
+                {estModele && <th className="px-3 py-2 font-medium">planète</th>}
+                {estModele && <th className="px-3 py-2 font-medium">appartient</th>}
                 {!estModele && <th className="px-3 py-2 font-medium">joueur</th>}
                 <th className="w-20 px-3 py-2 font-medium">type</th>
                 <th className="w-24 px-3 py-2 font-medium">taille</th>
@@ -200,10 +283,11 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
               </tr>
             </thead>
             <tbody>
-              {liste.map((p) => {
+              {rangee.map((p) => {
                 const cases = p.largeur * p.hauteur;
                 const occupees = compterOccupees(p);
                 const confirme = aSupprimer === p.id;
+                const saPlanete = planetes.find((x) => x.id === p.planete) ?? null;
                 return (
                   <Fragment key={p.id}>
                   <tr className="border-b border-edge/60 last:border-0 hover:bg-ink/40">
@@ -217,6 +301,16 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                         </span>
                       )}
                     </td>
+                    {estModele && (
+                      <td className="px-3 py-2 text-xs text-slate-300">
+                        {p.planete ? (
+                          nomDePlanete(planetes, p.planete)
+                        ) : (
+                          <span className="text-amber-300">aucune</span>
+                        )}
+                      </td>
+                    )}
+                    {estModele && <td className="px-3 py-2">{libelleAppartient(p.appartient)}</td>}
                     {!estModele && (
                       <td className="px-3 py-2 text-xs text-slate-400">{libelleProprietaire(p)}</td>
                     )}
@@ -256,12 +350,24 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                           <Link to={lien(p)} className="text-xs text-accent hover:underline">
                             Ouvrir
                           </Link>
+                          {estModele && estAdmin && saPlanete && (
+                            <button
+                              className="ml-3 text-xs text-slate-400 hover:text-white"
+                              onClick={() => {
+                                setPartageOuvert(null);
+                                setPlaneteOuverte(planeteOuverte === p.id ? null : p.id);
+                              }}
+                            >
+                              Planète
+                            </button>
+                          )}
                           {estModele && estAdmin && (
                             <button
                               className="ml-3 text-xs text-slate-400 hover:text-white"
-                              onClick={() =>
-                                setPartageOuvert(partageOuvert === p.id ? null : p.id)
-                              }
+                              onClick={() => {
+                                setPlaneteOuverte(null);
+                                setPartageOuvert(partageOuvert === p.id ? null : p.id);
+                              }}
                             >
                               Partager
                               {(p.partages ?? []).length > 0 && (
@@ -290,7 +396,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                   */}
                   {partageOuvert === p.id && (
                     <tr className="border-b border-edge/60 bg-ink/30">
-                      <td colSpan={8} className="px-3 py-3">
+                      <td colSpan={10} className="px-3 py-3">
                         <PanneauPartage
                           modele={p}
                           onFini={async () => {
@@ -299,6 +405,19 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                             await rechargerPortee();
                           }}
                           onAnnuler={() => setPartageOuvert(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  {planeteOuverte === p.id && saPlanete && (
+                    <tr className="border-b border-edge/60 bg-ink/30">
+                      <td colSpan={10} className="px-3 py-3">
+                        <PanneauPlanete
+                          planete={saPlanete}
+                          modeles={modeles3d}
+                          icones={icones}
+                          onChange={chargerAutour}
+                          onFermer={() => setPlaneteOuverte(null)}
                         />
                       </td>
                     </tr>
@@ -315,6 +434,8 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
         <DialogCreation
           source={source}
           uid={String(user?.id ?? "")}
+          planetes={planetes}
+          joueurs={joueurs}
           onCancel={() => setCreation(false)}
           onCree={() => {
             setCreation(false);
@@ -327,18 +448,37 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
 }
 
 /** Création : juste le cadre. Le contenu se dessine ensuite dans l'éditeur. */
+/** Valeur du sélecteur de planète qui veut dire « en créer une ». */
+const NOUVELLE_PLANETE = "__nouvelle__";
+
 function DialogCreation({
   source,
   uid,
+  planetes,
+  joueurs,
   onCancel,
   onCree,
 }: {
   source: SourcePlateau;
   uid: string;
+  planetes: Planete[];
+  joueurs: Joueur[];
   onCancel: () => void;
   onCree: () => void;
 }) {
   const estModele = source === COLLECTION_TEMPLATES;
+  // ⚠️ « Game » porte le contenu commun et ne se joue pas : aucun modèle ne
+  //    doit s'y rattacher, donc il n'est pas proposé.
+  const choixPlanetes = useMemo(() => triAdmin(planetes).filter((p) => !estGame(p)), [planetes]);
+  const [planeteId, setPlaneteId] = useState(choixPlanetes[0]?.id ?? NOUVELLE_PLANETE);
+  const [nomPlanete, setNomPlanete] = useState("");
+  const [appartientNeuf, setAppartientNeuf] = useState(APPARTIENT_GAME);
+  const planeteChoisie = choixPlanetes.find((p) => p.id === planeteId) ?? null;
+  const nouvelle = planeteId === NOUVELLE_PLANETE;
+  // ⚠️ `appartient` SE DÉDUIT de la planète existante : on ne le laisse saisir
+  //    que pour une planète neuve, sinon le modèle et sa planète diraient deux
+  //    propriétaires différents.
+  const appartient = nouvelle ? appartientNeuf : appartientPourPlanete(planeteChoisie);
   const [nom, setNom] = useState(estModele ? "Modèle Terre" : "Mon plateau");
   const [type, setType] = useState<TypePlateau>("ground");
   const [largeur, setLargeur] = useState("20");
@@ -349,7 +489,11 @@ function DialogCreation({
   const l = Number(largeur);
   const h = Number(hauteur);
   const cases = l * h;
-  const bloque = saving || nom.trim() === "" || !(l >= 1 && h >= 1 && l <= 200 && h <= 200);
+  const bloque =
+    saving ||
+    nom.trim() === "" ||
+    !(l >= 1 && h >= 1 && l <= 200 && h <= 200) ||
+    (estModele && nouvelle && nomPlanete.trim() === "");
 
   const creer = async () => {
     setSaving(true);
@@ -363,8 +507,24 @@ function DialogCreation({
         tilesBase64: encoderTiles(new Uint8Array(cases)),
         etats: [],
       };
-      if (estModele) corps.actif = false;
-      else corps.ownerId = uid;
+      if (estModele) {
+        corps.actif = false;
+        let planete = planeteChoisie;
+        if (nouvelle) {
+          planete = await pb.collection(COLLECTION_PLANETES).create<Planete>({
+            nom: nomPlanete.trim(),
+            proprietaire: appartient === APPARTIENT_GAME ? "" : appartient,
+          });
+        }
+        if (planete) {
+          corps.planete = planete.id;
+          // L'étiquette texte : le pinceau de l'éditeur filtre encore dessus.
+          corps.typeOfPlateau2 = planete.nom;
+        }
+        corps.appartient = appartient;
+        // ⚠️ Le modèle d'un joueur lui donne le crayon (règle d'API d'update).
+        if (appartient !== APPARTIENT_GAME) corps.partages = [appartient];
+      } else corps.ownerId = uid;
       await pb.collection(source).create(corps);
       onCree();
     } catch (e) {
@@ -397,6 +557,60 @@ function DialogCreation({
               autoFocus
             />
           </div>
+
+          {estModele && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="pl-planete">
+                  Planète
+                </label>
+                <select
+                  id="pl-planete"
+                  className="input"
+                  value={planeteId}
+                  onChange={(e) => setPlaneteId(e.target.value)}
+                >
+                  {choixPlanetes.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nom}
+                    </option>
+                  ))}
+                  <option value={NOUVELLE_PLANETE}>+ nouvelle planète…</option>
+                </select>
+                {nouvelle && (
+                  <input
+                    className="input mt-2"
+                    placeholder="Nom de la planète (unique)"
+                    value={nomPlanete}
+                    onChange={(e) => setNomPlanete(e.target.value)}
+                  />
+                )}
+              </div>
+              <div>
+                <label className="label" htmlFor="pl-appartient">
+                  Appartient
+                </label>
+                <select
+                  id="pl-appartient"
+                  className="input"
+                  value={appartient}
+                  disabled={!nouvelle}
+                  onChange={(e) => setAppartientNeuf(e.target.value)}
+                >
+                  <option value={APPARTIENT_GAME}>game (le jeu)</option>
+                  {joueurs.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.pseudo?.trim() || j.email}
+                    </option>
+                  ))}
+                  {appartient !== APPARTIENT_GAME && !joueurs.some((j) => j.id === appartient) && (
+                    <option value={appartient}>{appartient}</option>
+                  )}
+                </select>
+                {!nouvelle && <p className="mt-1 text-xs text-slate-500">Celui de la planète choisie.</p>}
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div>

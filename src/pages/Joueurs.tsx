@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { pseudoReserve, VERDICT_PSEUDO_RESERVE } from "@/lib/planetes";
 import Aide, { Terme } from "@/components/Aide";
 import { useAuth, type Role } from "@/lib/auth";
 import { messageErreur } from "@/lib/pb";
@@ -169,7 +170,10 @@ export default function Joueurs() {
           toi qui choisis le mot de passe et qui le transmets — il n'est plus lisible après.
         </Terme>
         <Terme nom="pseudo">
-          Le nom affiché en jeu. Se corrige sans conséquence : rien d'autre n'y fait référence.
+          Le nom affiché en jeu. À la création du compte, sa planète prend ce nom (le serveur la
+          crée d'office, avec un modèle <code>ground</code> et un <code>space</code>). Le
+          corriger ensuite ne renomme pas la planète. <strong>« game » est interdit</strong> :
+          c'est le propriétaire des modèles du jeu.
         </Terme>
         <Terme nom="email">
           L'identifiant de connexion. Le modifier repasse le compte en « non vérifié » et c'est le
@@ -464,6 +468,9 @@ function JoueurDialog({
     changeMotDePasse && motDePasse.length > 0 && motDePasse.length < LONGUEUR_MOT_DE_PASSE;
   const motDePasseDifferent = changeMotDePasse && confirmation !== motDePasse;
   const roleChange = !creation && role !== joueur?.role;
+  // ⚠️ « game » est la valeur d'`appartient` des modèles du jeu : le serveur le
+  //    refuse aussi, ceci n'évite que le 400.
+  const pseudoInterdit = pseudoReserve(pseudo);
   const rienAFaire =
     !creation &&
     pseudo.trim() === (joueur?.pseudo ?? "") &&
@@ -475,6 +482,7 @@ function JoueurDialog({
     saving ||
     emailNet === "" ||
     emailInvalide ||
+    pseudoInterdit ||
     motDePasseCourt ||
     motDePasseDifferent ||
     (changeMotDePasse && motDePasse === "") ||
@@ -522,7 +530,13 @@ function JoueurDialog({
               placeholder="Samp"
               autoFocus
             />
-            <p className="mt-1 text-xs text-slate-500">Le nom affiché en jeu.</p>
+            {pseudoInterdit ? (
+              <p className="mt-1 text-xs text-red-300">{VERDICT_PSEUDO_RESERVE}</p>
+            ) : (
+              <p className="mt-1 text-xs text-slate-500">
+                Le nom affiché en jeu, et celui de sa planète.
+              </p>
+            )}
           </div>
 
           <div>
