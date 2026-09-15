@@ -17,7 +17,7 @@
  */
 
 import { pb } from "@/lib/pb";
-import type { Partageable } from "@/lib/planetes";
+import { normaliserPartage, type Partageable } from "@/lib/planetes";
 
 export const COLLECTION_MODELES_3D = "tuile3dmodel";
 
@@ -181,7 +181,8 @@ export function libelle(modele: Modele3D): string {
 export function loadModeles3D(): Promise<Modele3D[]> {
   return pb
     .collection(COLLECTION_MODELES_3D)
-    .getFullList<Modele3D>({ sort: "chemin_prefab,nom_prefab" });
+    .getFullList<Modele3D>({ sort: "chemin_prefab,nom_prefab" })
+    .then((l) => l.map(normaliserPartage));
 }
 
 /**

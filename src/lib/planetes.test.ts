@@ -24,6 +24,8 @@ import {
   pseudoReserve,
   rangAppartenance,
   avecPlanete,
+  enListe,
+  normaliserPartage,
   estGame,
   estPlaneteGame,
   nomDePlanete,
@@ -201,5 +203,24 @@ describe("à qui appartient un modèle", () => {
   it("⚠️ réserve le pseudo « game », casse et espaces ignorés", () => {
     for (const p of ["game", "Game", " GAME "]) expect(pseudoReserve(p)).toBe(true);
     for (const p of ["", "gamer", "Samp", "le game"]) expect(pseudoReserve(p)).toBe(false);
+  });
+});
+
+// ⚠️ RELEVÉ EN PROD (15/09) : une relation `maxSelect: 0` est SIMPLE, rendue en texte.
+describe("une relation rendue en texte par PocketBase", () => {
+  it("devient une liste", () => {
+    expect(enListe("")).toEqual([]);
+    expect(enListe("abc")).toEqual(["abc"]);
+    expect(enListe(["a", ""])).toEqual(["a"]);
+    expect(enListe(undefined)).toEqual([]);
+  });
+
+  it("ne s'ouvre plus par sous-chaîne", () => {
+    const brut = { planetes_autorisees: "id_aragonia_bis" } as unknown as Partageable;
+    expect(autoriseeSur(normaliserPartage(brut), ARAGONIA)).toBe(false);
+    expect(avecPlanete(normaliserPartage(brut), ARAGONIA.id, true)).toEqual([
+      "id_aragonia_bis",
+      ARAGONIA.id,
+    ]);
   });
 });

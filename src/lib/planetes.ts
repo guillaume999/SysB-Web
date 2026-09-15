@@ -73,6 +73,33 @@ export interface Partageable {
   toutes_planetes?: boolean;
 }
 
+/**
+ * Ramène une relation à une LISTE, quoi que PocketBase ait rendu.
+ *
+ * ⚠️⚠️ RELEVÉ EN PROD LE 15/09 : une relation créée avec `maxSelect: 0` n'est
+ * PAS « sans plafond » — PocketBase la range en relation SIMPLE, et la rend
+ * comme un TEXTE (`""` ou `"id"`), pas comme un tableau. L'onglet Partage
+ * plantait sur `"".filter`, et pire : `"".includes(id)` cherche une
+ * sous-chaîne, et `[..."abc"]` éclate un id en lettres. D'où ce passage
+ * obligé à la lecture, même une fois le schéma réparé
+ * (`patch-partage-joueurs-2026-09-15.js`).
+ */
+export function enListe(v: unknown): string[] {
+  if (Array.isArray(v)) return v.filter((x): x is string => typeof x === "string" && x !== "");
+  if (typeof v === "string" && v !== "") return [v];
+  return [];
+}
+
+/** Les deux listes de partage d'un record, toujours en tableaux. */
+export function normaliserPartage<T extends Partageable>(x: T): T {
+  return {
+    ...x,
+    planetes_autorisees: enListe(x.planetes_autorisees),
+    joueurs_autorises: enListe(x.joueurs_autorises),
+    toutes_planetes: x.toutes_planetes === true,
+  };
+}
+
 /** Une icône déclarée — le pendant de `tuile3dmodel` pour les images 2D. */
 export type Icone = Partageable & {
   id: string;
@@ -220,7 +247,10 @@ export function loadPlanetes(): Promise<Planete[]> {
 }
 
 export function loadIcones(): Promise<Icone[]> {
-  return pb.collection(COLLECTION_ICONES).getFullList<Icone>({ sort: "chemin" });
+  return pb
+    .collection(COLLECTION_ICONES)
+    .getFullList<Icone>({ sort: "chemin" })
+    .then((l) => l.map(normaliserPartage));
 }
 
 /* ------------------------------------------------------------------ */
