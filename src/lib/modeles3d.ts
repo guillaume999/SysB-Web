@@ -17,6 +17,7 @@
  */
 
 import { pb } from "@/lib/pb";
+import type { Partageable } from "@/lib/planetes";
 
 export const COLLECTION_MODELES_3D = "tuile3dmodel";
 
@@ -44,7 +45,7 @@ export const RACINE_PREFABS = "Prefabs";
  * Déclaré en `type` et non en `interface` : le SDK PocketBase attend un
  * `RecordModel` indexable, auquel une interface n'est pas assignable.
  */
-export type Modele3D = {
+export type Modele3D = Partageable & {
   id: string;
   collectionId: string;
   collectionName: string;

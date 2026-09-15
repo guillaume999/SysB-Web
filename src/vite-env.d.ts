@@ -7,3 +7,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Les SVG de `public/icones*`, relevés au build — voir `vite.config.ts`. */
+declare module "virtual:icones-du-site" {
+  const fichiers: { dossier: string; nom: string }[];
+  export default fichiers;
+}

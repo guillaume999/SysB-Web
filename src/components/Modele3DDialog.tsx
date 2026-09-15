@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
+import PartageJoueurs, { type ValeurPartage } from "@/components/PartageJoueurs";
+import type { Joueur } from "@/lib/joueurs";
 import {
   CHAMPS_SECTION,
   DOSSIERS_CONNUS,
@@ -20,7 +22,12 @@ export interface SoumissionModele3D {
   section2: string;
   section3: string;
   section4: string;
+  /** Onglet Partage — voir `PartageJoueurs`. */
+  toutes_planetes: boolean;
+  joueurs_autorises: string[];
 }
+
+type Onglet = "modele" | "partage";
 
 /** Libellés des trois champs de section, dans l'ordre de `CHAMPS_SECTION`. */
 const LIBELLES_SECTION: Record<ChampSection, string> = {
@@ -38,10 +45,15 @@ const LIBELLES_SECTION: Record<ChampSection, string> = {
  * sont laissés **libres** (un prefab ajouté dans Unity ne doit pas attendre une
  * mise à jour du site pour être référençable), mais assistés par la liste des
  * prefabs connus et par des avertissements sur les erreurs de saisie classiques.
+ *
+ * Deux onglets depuis le 15/09 : **Modèle** (ce qui précède) et **Partage** (à
+ * quels joueurs il est ouvert). Un seul bouton enregistre les deux.
  */
 export default function Modele3DDialog({
   modele,
   modeles,
+  joueurs,
+  joueursChargement,
   saving,
   erreur,
   onCancel,
@@ -49,12 +61,19 @@ export default function Modele3DDialog({
 }: {
   modele: Modele3D | null;
   modeles: Modele3D[];
+  joueurs: Joueur[];
+  joueursChargement?: boolean;
   saving: boolean;
   erreur: string | null;
   onCancel: () => void;
   onSubmit: (valeurs: SoumissionModele3D) => void;
 }) {
   const enEdition = modele !== null;
+  const [onglet, setOnglet] = useState<Onglet>("modele");
+  const [partage, setPartage] = useState<ValeurPartage>({
+    toutes_planetes: modele?.toutes_planetes === true,
+    joueurs_autorises: modele?.joueurs_autorises ?? [],
+  });
 
   const [nomPrefab, setNomPrefab] = useState(modele?.nom_prefab ?? "");
   const [cheminPrefab, setCheminPrefab] = useState(modele?.chemin_prefab ?? "");
@@ -114,6 +133,8 @@ export default function Modele3DDialog({
       section2: sections.section2.trim(),
       section3: sections.section3.trim(),
       section4: sections.section4.trim(),
+      toutes_planetes: partage.toutes_planetes,
+      joueurs_autorises: partage.joueurs_autorises,
     });
   };
 
@@ -128,6 +149,51 @@ export default function Modele3DDialog({
           conditions se posent ensuite, sur les tuiles du catalogue.
         </p>
 
+        <div className="mt-4 flex gap-1 border-b border-edge" role="tablist">
+          {(
+            [
+              ["modele", "Modèle"],
+              ["partage", "Partage"],
+            ] as const
+          ).map(([id, libelle]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={onglet === id}
+              onClick={() => setOnglet(id)}
+              className={`-mb-px border-b-2 px-3 py-1.5 text-sm ${
+                onglet === id
+                  ? "border-accent text-white"
+                  : "border-transparent text-slate-400 hover:text-white"
+              }`}
+            >
+              {libelle}
+              {id === "partage" && (
+                <span className="ml-1.5 text-xs text-slate-500">
+                  {partage.toutes_planetes ? "tous" : partage.joueurs_autorises.length}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {onglet === "partage" && (
+          <div className="mt-5">
+            <PartageJoueurs
+              objet="ce modèle 3D"
+              valeur={partage}
+              onChange={setPartage}
+              joueurs={joueurs}
+              chargement={joueursChargement}
+              planetesAutorisees={modele?.planetes_autorisees?.length ?? 0}
+            />
+          </div>
+        )}
+
+        {/* `hidden` plutôt que démonté : rien de ce qui a été tapé ne se perd
+            en passant d'un onglet à l'autre. */}
+        <div hidden={onglet !== "modele"}>
         <Aide titre="A quoi servent ces champs">
           <Terme nom="nom_prefab">
             Le nom du fichier prefab dans Unity, sans extension. Doit correspondre exactement :
@@ -242,6 +308,7 @@ export default function Modele3DDialog({
               Toutes facultatives — quatre libellés de classement libres, à remplir dans l'ordre ou pas.
             </p>
           </div>
+        </div>
         </div>
 
         {doublon && (

@@ -62,11 +62,13 @@ describe("ce que voit un joueur", () => {
 describe("ce que voit un admin", () => {
   const vu = ecransVisibles(true);
 
-  // ⚠️ HUIT depuis le 15/09 : « Planètes » est fondu dans « Modèles ». Le
-  //    compte est volontairement écrit en dur — c'est lui qui fait rougir
-  //    l'essai quand un écran est ajouté ou retiré sans être décidé.
-  it("garde les huit écrans de contenu ET la Conception", () => {
-    expect(vu.contenu).toHaveLength(8);
+  // ⚠️ NEUF depuis le 15/09 au soir : « Planètes » est fondu dans « Modèles »,
+  //    et « Icônes » est arrivé. Le compte est volontairement écrit en dur —
+  //    c'est lui qui fait rougir l'essai quand un écran est ajouté ou retiré
+  //    sans être décidé.
+  it("garde les neuf écrans de contenu ET la Conception", () => {
+    expect(vu.contenu).toHaveLength(9);
+    expect(vu.contenu.map((l) => l.to)).toContain("/icones");
     expect(vu.contenu.map((l) => l.to)).not.toContain("/planetes");
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);

@@ -93,6 +93,13 @@ describe("la règle du partage", () => {
     expect(autoriseeSur(part, planete("PasEncoreNée", "u_futur"))).toBe(true);
   });
 
+  it("s'ouvre aux planètes d'un joueur nommé, et à elles seules (15/09)", () => {
+    const part: Partageable = { joueurs_autorises: [CHEZ_SEB.proprietaire] };
+    expect(autoriseeSur(part, CHEZ_SEB)).toBe(true);
+    expect(autoriseeSur(part, ARAGONIA)).toBe(false);
+    expect(autoriseeSur(part, TERRE)).toBe(true);
+  });
+
   it("refuse quand aucune planète n'est choisie", () => {
     expect(autoriseeSur({ toutes_planetes: true }, null)).toBe(false);
   });

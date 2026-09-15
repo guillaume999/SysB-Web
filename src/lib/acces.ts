@@ -27,8 +27,8 @@ export type Lien = { to: string; label: string };
 /**
  * Les écrans qui pilotent une collection. **Réservés aux admins.**
  *
- * L'ordre suit la chaîne de fabrication : on déclare un modèle 3D, on nomme
- * les ressources, on pose les âges, puis on en fait des tuiles jouables — et
+ * L'ordre suit la chaîne de fabrication : on déclare un modèle 3D et ses
+ * icônes, on nomme les ressources, on pose les âges, puis on en fait des tuiles jouables — et
  * les technologies rangent ces tuiles par palier.
  *
  * ⚠️ « Âges » est placé AVANT « Tuiles » parce qu'il en est la base : une
@@ -36,6 +36,7 @@ export type Lien = { to: string; label: string };
  */
 export const ECRANS_CONTENU: Lien[] = [
   { to: "/3dmodeltuile", label: "3DmodelTuile" },
+  { to: "/icones", label: "Icônes" },
   { to: "/ressources", label: "Ressources" },
   { to: "/ages", label: "Âges" },
   { to: "/tuiles", label: "Tuiles" },

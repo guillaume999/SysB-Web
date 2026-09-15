@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Modele3DDialog, { type SoumissionModele3D } from "@/components/Modele3DDialog";
+import { loadJoueurs, type Joueur } from "@/lib/joueurs";
+import { resumePartage } from "@/lib/partageJoueurs";
 import { messageErreur, pb } from "@/lib/pb";
 import {
   CHAMPS_SECTION,
@@ -40,6 +42,7 @@ const AUCUN_FILTRE: Filtres = { section: "", section2: "", section3: "", section
 export default function Modeles3D() {
   const [modeles, setModeles] = useState<Modele3D[]>([]);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
+  const [joueurs, setJoueurs] = useState<Joueur[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -57,9 +60,16 @@ export default function Modeles3D() {
     try {
       // Le catalogue n'est pas indispensable à cet écran : s'il échoue, on
       // affiche quand même les modèles plutôt que de tout bloquer.
-      const [m, t] = await Promise.all([loadModeles3D(), loadTuiles().catch(() => [] as Tuile[])]);
+      // Les joueurs non plus : sans eux, l'onglet Partage montre une liste vide
+      // mais la colonne et « tous les joueurs » restent justes.
+      const [m, t, j] = await Promise.all([
+        loadModeles3D(),
+        loadTuiles().catch(() => [] as Tuile[]),
+        loadJoueurs().catch(() => [] as Joueur[]),
+      ]);
       setModeles(m);
       setTuiles(t);
+      setJoueurs(j);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement des modèles impossible."));
     } finally {
@@ -130,8 +140,8 @@ export default function Modeles3D() {
     }
   };
 
-  /** nom (+ ses actions) + chemin + type + sections + tuiles */
-  const nbColonnes = 4 + CHAMPS_SECTION.length;
+  /** nom (+ ses actions) + chemin + type + sections + tuiles + partage */
+  const nbColonnes = 5 + CHAMPS_SECTION.length;
 
   return (
     <div>
@@ -240,6 +250,7 @@ export default function Modeles3D() {
                   </th>
                 ))}
                 <th className="w-32 px-3 py-2 font-medium">tuiles</th>
+                <th className="w-40 px-3 py-2 font-medium">partagé à</th>
               </tr>
             </thead>
             <tbody>
@@ -341,6 +352,9 @@ export default function Modeles3D() {
                       <td className="px-3 py-2 text-xs text-slate-500">
                         {usages.length === 0 ? "—" : usages.map((t) => t.nom).join(", ")}
                       </td>
+                      <td className="px-3 py-2 text-xs text-slate-400">
+                        {resumePartage(modele, joueurs)}
+                      </td>
                     </tr>
                   );
                 })}
@@ -353,6 +367,8 @@ export default function Modeles3D() {
         <Modele3DDialog
           modele={dialog.modele}
           modeles={modeles}
+          joueurs={joueurs}
+          joueursChargement={chargement}
           saving={saving}
           erreur={erreurDialog}
           onCancel={() => setDialog(null)}

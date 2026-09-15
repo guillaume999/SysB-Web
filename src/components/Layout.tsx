@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 /**
  * La barre latérale ne décide rien : elle affiche ce que `lib/acces.ts` donne
  * pour le rôle en cours. Un joueur connecté n'y voit que « Conception » — les
- * huit écrans de contenu ne sont pas seulement masqués ici, leur route n'existe
+ * neuf écrans de contenu ne sont pas seulement masqués ici, leur route n'existe
  * pas non plus (voir `App.tsx`).
  *
  * Il n'y a plus d'écran générique piloté par un schéma : chaque collection a le

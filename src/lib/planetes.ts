@@ -48,14 +48,28 @@ export type Planete = {
 };
 
 /**
- * Tout ce que l'administrateur peut ouvrir à une planète : un modèle 3D, une
- * icône. Les deux portent **exactement** les deux mêmes champs — c'est ce qui
- * permet à `autoriseeSur` de n'exister qu'en un exemplaire.
+ * Tout ce que l'administrateur peut ouvrir : un modèle 3D, une icône. Les deux
+ * portent **exactement** les mêmes champs — c'est ce qui permet à
+ * `autoriseeSur` de n'exister qu'en un exemplaire.
+ *
+ * Deux façons d'ouvrir, qui s'additionnent :
+ *  - **par planète** (`planetes_autorisees`) — le panneau Planète de l'onglet
+ *    Modèles, pensé pour la scène d'accueil ;
+ *  - **par joueur** (`joueurs_autorises`, 15/09) — l'onglet Partage des
+ *    fiches 3DmodelTuile et Icônes, pour les tuiles, technos et magasins des
+ *    planètes de joueurs. Ouvrir à un joueur ouvre **ses** planètes.
  */
 export interface Partageable {
   /** Les planètes à qui c'est ouvert, une par une. */
   planetes_autorisees?: string[];
-  /** Ouvert à **toutes** les planètes, y compris celles créées demain. */
+  /** Les joueurs (ids `users`) à qui c'est ouvert, un par un. */
+  joueurs_autorises?: string[];
+  /**
+   * Ouvert à **toutes** les planètes, y compris celles créées demain.
+   * ⚠️ L'onglet Partage l'affiche « tous les joueurs » : c'est le MÊME champ —
+   * chaque joueur a sa planète. Ne pas ajouter un second booléen qui dirait
+   * pareil et finirait par dire le contraire.
+   */
   toutes_planetes?: boolean;
 }
 
@@ -69,13 +83,13 @@ export type Icone = Partageable & {
 };
 
 /**
- * ⚠️ L'usage **se déduit du dossier** au relevé, il ne se saisit pas :
- * `Icones_Tuiles/` → tuile · `Icones/` → ressource · `Icones_Technos/` → techno
- * · `Icones_Planetes/` → planete. Les quatre dossiers sont disjoints, donc un
- * select SIMPLE suffit. Le jour où une même icône servira à deux familles,
- * c'est **ici** qu'il devra passer en multiple, et nulle part ailleurs.
+ * La catégorie d'une icône. Proposée d'après le dossier (`Icones_Tuiles/` →
+ * tuile, `Icones_Ressources/` → ressource, `Icones_Technos/` → techno,
+ * `Icones_Planetes/` → planete), **et réglable** dans l'onglet Icônes depuis
+ * le 15/09 — d'où `autre`. Un select SIMPLE : le jour où une même icône servira
+ * à deux familles, c'est **ici** qu'il devra passer en multiple.
  */
-export type UsageIcone = "tuile" | "ressource" | "techno" | "planete";
+export type UsageIcone = "tuile" | "ressource" | "techno" | "planete" | "autre";
 
 /** Idem pour les modèles 3D, qui n'ont que deux usages : une tuile, ou une planète. */
 export type UsageModele3D = "tuile" | "planete";
@@ -100,10 +114,12 @@ export function estGame(p: Planete): boolean {
 }
 
 /**
- * ⚠️⚠️ **LA RÈGLE DU PARTAGE — elle vit ICI et nulle part ailleurs.**
+ * ⚠️⚠️ **LA RÈGLE DU PARTAGE — elle vit ICI et nulle part ailleurs** (son
+ * double Go est `routes.AutoriseeSur`, à garder identique).
  *
  *     autorisé  =  toutes_planetes
  *               || la planète est dans planetes_autorisees
+ *               || son propriétaire est dans joueurs_autorises
  *               || la planète n'a PAS de propriétaire   (planète game)
  *
  * ⚠️ **Une liste vide veut dire « à personne », pas « à tout le monde ».**
@@ -124,7 +140,8 @@ export function autoriseeSur(part: Partageable, planete: Planete | null | undefi
   if (!planete) return false;
   if (part.toutes_planetes === true) return true;
   if ((part.planetes_autorisees ?? []).includes(planete.id)) return true;
-  return estPlaneteGame(planete);
+  if (estPlaneteGame(planete)) return true;
+  return (part.joueurs_autorises ?? []).includes(planete.proprietaire.trim());
 }
 
 /** Ce qu'une planète a le droit d'utiliser, dans une liste quelconque. */

@@ -268,6 +268,10 @@ function Partage({
         <ul className="max-h-80 divide-y divide-edge overflow-y-auto">
           {visibles.map(({ part, libelle }) => {
             const nomme = (part.planetes_autorisees ?? []).includes(planete.id);
+            // ⚠️ Ouvert AUTREMENT qu'en cochant ici — à toutes, ou au joueur
+            // propriétaire (onglet Partage, 15/09) : la case est cochée ET
+            // grisée, puisque la décocher ne changerait rien.
+            const parAilleurs = !nomme && autoriseeSur(part, planete);
             return (
               <li key={part.id} className="flex items-center justify-between gap-3 py-1.5">
                 <span className="truncate text-xs text-slate-300">{libelle}</span>
@@ -275,11 +279,14 @@ function Partage({
                   <label className="flex items-center gap-1.5 text-slate-400">
                     <input
                       type="checkbox"
-                      checked={game || nomme || part.toutes_planetes === true}
-                      disabled={game || enregistre || part.toutes_planetes === true}
+                      checked={nomme || parAilleurs}
+                      disabled={game || enregistre || parAilleurs}
                       onChange={(e) => void onBasculer(collection, part, e.target.checked)}
                     />
                     ouvert ici
+                    {parAilleurs && !game && part.toutes_planetes !== true && (
+                      <span className="text-slate-600">(par son joueur)</span>
+                    )}
                   </label>
                   <label className="flex items-center gap-1.5 text-slate-500">
                     <input
