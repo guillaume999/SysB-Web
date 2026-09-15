@@ -146,3 +146,29 @@ describe("les routes déclarées sous condition", () => {
     expect(rendu(true, "/conception")).toContain("conception");
   });
 });
+
+// ------------------------------------------------------------
+//  Le forum (2026-09-15)
+// ------------------------------------------------------------
+
+describe("les adresses du forum", () => {
+  // ⚠️ `/forum/sujet/:id` et `/forum/:salonId` se recouvrent : « sujet » est
+  // aussi un `:salonId` possible. React-router doit préférer le segment FIXE,
+  // quel que soit l'ordre de déclaration — sinon un sujet s'ouvrirait comme
+  // un salon nommé « sujet ».
+  const forum = [{ path: "/forum/:salonId" }, { path: "/forum/sujet/:id" }, { path: "/forum" }, { path: "*" }];
+  const choix = (chemin: string) => {
+    const t = matchRoutes(forum, chemin);
+    const d = t?.[t.length - 1];
+    return { path: d?.route.path, params: d?.params ?? {} };
+  };
+
+  it("ouvre un sujet par son segment fixe", () => {
+    expect(choix("/forum/sujet/abc")).toEqual({ path: "/forum/sujet/:id", params: { id: "abc" } });
+  });
+
+  it("ouvre un salon sinon", () => {
+    expect(choix("/forum/xyz")).toEqual({ path: "/forum/:salonId", params: { salonId: "xyz" } });
+    expect(choix("/forum").path).toBe("/forum");
+  });
+});

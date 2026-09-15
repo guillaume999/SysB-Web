@@ -58,6 +58,18 @@ export const ECRANS_CONTENU: Lien[] = [
 export const ECRANS_DOCUMENT: Lien[] = [{ to: "/conception", label: "Conception" }];
 
 /**
+ * **Les écrans PUBLICS (15/09)** — lisibles SANS connexion : un visiteur
+ * anonyme ne voit qu'eux, et un compte connecté les garde dans sa barre.
+ *
+ * ⚠️ Écrire y reste réglé par PocketBase : news → admin seul ; forum →
+ * compte connecté, selon les deux cases de chaque salon (`lib/forum.ts`).
+ */
+export const ECRANS_PUBLICS: Lien[] = [
+  { to: "/news", label: "News" },
+  { to: "/forum", label: "Forum" },
+];
+
+/**
  * Le rôle donne-t-il les écrans de contenu ?
  *
  * ⚠️ `role` n'est pas requis sur `users` : un compte créé par l'inscription du
@@ -69,13 +81,19 @@ export function roleEstAdmin(role: Role | "" | undefined | null): boolean {
 }
 
 /**
- * Les deux groupes de la barre latérale, pour le compte en cours.
+ * Les groupes de la barre latérale, pour le compte en cours.
  *
- * Deux cas : l'admin a tout, le joueur n'a que les documents.
+ * Deux cas : l'admin a tout, le joueur a la communauté et les documents.
+ * (Le visiteur anonyme n'a pas de barre latérale : voir `PublicLayout`.)
  */
-export function ecransVisibles(admin: boolean): { contenu: Lien[]; documents: Lien[] } {
+export function ecransVisibles(admin: boolean): {
+  contenu: Lien[];
+  communaute: Lien[];
+  documents: Lien[];
+} {
   return {
     contenu: admin ? ECRANS_CONTENU : [],
+    communaute: ECRANS_PUBLICS,
     documents: ECRANS_DOCUMENT,
   };
 }
@@ -87,8 +105,11 @@ export function ecransVisibles(admin: boolean): { contenu: Lien[]; documents: Li
  * de huit collections, dont `users`, qu'il n'a pas le droit de lister. Il y
  * verrait huit tuiles vides — et une adresse inconnue le renverrait en boucle
  * dessus.
+ *
+ * Depuis le 15/09 le joueur entre par les News (avant : la Conception), comme
+ * le visiteur anonyme — c'est la page qui change le plus souvent.
  */
 export function accueil(admin: boolean): string {
   if (admin) return "/";
-  return ECRANS_DOCUMENT[0].to;
+  return ECRANS_PUBLICS[0].to;
 }

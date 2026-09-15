@@ -13,13 +13,18 @@
 //  ⚠️ Décocher « tous » GARDE la liste nommée : on peut ouvrir à tout le monde
 //  le temps d'un essai, puis revenir à la liste d'avant sans la retaper.
 //
+//  ⚠️ « Cocher la liste » coche les joueurs AFFICHÉS (donc filtrés par la
+//  recherche) : c'est le cadeau d'une période, une photo des comptes du jour.
+//  Un joueur inscrit plus tard n'y est pas — c'est la différence avec « Tous
+//  les joueurs ».
+//
 //  ⚠️ CE PANNEAU NE PROTÈGE RIEN : le refus vit dans le serveur Go
 //  (`routes.AutoriseeSur`) et dans les règles d'API PocketBase.
 // ============================================================
 
 import { useMemo, useState } from "react";
 import type { Joueur } from "@/lib/joueurs";
-import { avecJoueur, chercherJoueurs, nomJoueur } from "@/lib/partageJoueurs";
+import { avecJoueur, avecJoueurs, chercherJoueurs, nomJoueur } from "@/lib/partageJoueurs";
 
 export type ValeurPartage = { toutes_planetes: boolean; joueurs_autorises: string[] };
 
@@ -46,6 +51,11 @@ export default function PartageJoueurs({
 
   const trouves = useMemo(() => chercherJoueurs(joueurs, recherche), [joueurs, recherche]);
   const inconnus = choisis.filter((id) => !joueurs.some((j) => j.id === id));
+
+  const idsAffiches = trouves.map((x) => x.id);
+  const nbAffichesCoches = idsAffiches.filter((id) => choisis.includes(id)).length;
+  const basculerAffiches = (ouvert: boolean) =>
+    onChange({ ...valeur, joueurs_autorises: avecJoueurs(choisis, idsAffiches, ouvert) });
 
   const basculer = (id: string, ouvert: boolean) =>
     onChange({ ...valeur, joueurs_autorises: avecJoueur(choisis, id, ouvert) });
@@ -119,7 +129,32 @@ export default function PartageJoueurs({
           onChange={(e) => setRecherche(e.target.value)}
           disabled={tous}
         />
-        <ul className="mt-2 max-h-64 divide-y divide-edge overflow-y-auto rounded border border-edge">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="text-slate-500">
+            {nbAffichesCoches} / {trouves.length} coché{nbAffichesCoches > 1 ? "s" : ""}
+            {recherche.trim() !== "" && " dans la recherche"}
+          </span>
+          <span className="flex gap-3">
+            <button
+              type="button"
+              className="text-accent hover:underline disabled:text-slate-600 disabled:no-underline"
+              disabled={tous || trouves.length === 0 || nbAffichesCoches === trouves.length}
+              onClick={() => basculerAffiches(true)}
+              title="Coche les joueurs affichés, tels qu'ils sont aujourd'hui — ceux qui s'inscriront plus tard ne sont pas inclus."
+            >
+              Cocher {recherche.trim() ? "ces" : "les"} {trouves.length} joueur{trouves.length > 1 ? "s" : ""}
+            </button>
+            <button
+              type="button"
+              className="text-slate-400 hover:text-white disabled:text-slate-600"
+              disabled={tous || nbAffichesCoches === 0}
+              onClick={() => basculerAffiches(false)}
+            >
+              Tout décocher
+            </button>
+          </span>
+        </div>
+        <ul className="mt-1 max-h-64 divide-y divide-edge overflow-y-auto rounded border border-edge">
           {chargement && <li className="px-3 py-2 text-xs text-slate-500">Chargement des joueurs…</li>}
           {!chargement && trouves.length === 0 && (
             <li className="px-3 py-2 text-xs text-slate-500">

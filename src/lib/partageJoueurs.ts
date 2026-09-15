@@ -43,6 +43,23 @@ export function avecJoueur(liste: string[], id: string, ouvert: boolean): string
 }
 
 /**
+ * Coche ou décoche d'un coup une série de joueurs (le bouton « cocher la
+ * liste »), sans doublon et sans réordonner ce qui était déjà choisi.
+ *
+ * ⚠️ C'est une PHOTO des comptes du moment — le cadeau d'une période : un
+ * joueur inscrit demain n'y sera pas. Pour « tout le monde, y compris
+ * demain », c'est l'autre bouton radio (`toutes_planetes`).
+ */
+export function avecJoueurs(liste: string[], ids: string[], ouvert: boolean): string[] {
+  if (!ouvert) {
+    const retirer = new Set(ids);
+    return liste.filter((x) => !retirer.has(x));
+  }
+  const deja = new Set(liste);
+  return [...liste, ...ids.filter((id) => !deja.has(id) && (deja.add(id), true))];
+}
+
+/**
  * Le résumé d'une ligne, en quelques mots — pour les tableaux.
  * ⚠️ Un id de joueur disparu (compte supprimé) est COMPTÉ mais pas nommé :
  * il ne sert plus, et le taire ferait croire que la liste est plus courte.

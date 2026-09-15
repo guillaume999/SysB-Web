@@ -1,6 +1,6 @@
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import IconeGenerique from "@/components/IconeGenerique";
-import { accueil, ecransVisibles } from "@/lib/acces";
+import { accueil, ecransVisibles, type Lien } from "@/lib/acces";
 import { useAuth } from "@/lib/auth";
 import { libelleRole } from "@/lib/joueurs";
 import { PB_URL } from "@/lib/pb";
@@ -24,7 +24,9 @@ const lienClasses = ({ isActive }: { isActive: boolean }) =>
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, estAdmin, signOut } = useAuth();
   const navigate = useNavigate();
-  const { contenu, documents } = ecransVisibles(estAdmin);
+  const { pathname } = useLocation();
+  const { contenu, communaute, documents } = ecransVisibles(estAdmin);
+  const tous = [...contenu, ...communaute, ...documents];
 
   return (
     <div className="flex min-h-screen">
@@ -48,27 +50,15 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </div>
 
+          <Groupe titre="Communauté" liens={communaute} filet={contenu.length > 0} />
+
           {/*
-            Le titre « Documentation » ne sert qu'à SÉPARER des écrans de
-            contenu : sans eux — le cas du joueur — il n'a plus rien à séparer,
-            et le filet au-dessus d'un seul lien ferait croire à une liste
-            tronquée.
+            Depuis le 15/09 le joueur a deux groupes (Communauté, Documentation) :
+            les titres séparent toujours quelque chose. Seul le filet au-dessus
+            de « Communauté » disparaît quand il n'y a pas d'écran de contenu
+            au-dessus.
           */}
-          <div className={contenu.length > 0 ? "mt-4 border-t border-edge pt-3" : ""}>
-            {contenu.length > 0 && (
-              <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-600">
-                Documentation
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {documents.map((page) => (
-                <NavLink key={page.to} to={page.to} className={lienClasses}>
-                  <IconeGenerique />
-                  {page.label}
-                </NavLink>
-              ))}
-            </div>
-          </div>
+          <Groupe titre="Documentation" liens={documents} filet />
         </nav>
 
         <div className="border-t border-edge p-3 text-xs">
@@ -93,47 +83,56 @@ export default function Layout({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1">
         {/*
           ⚠️ LA BARRE LATÉRALE EST CACHÉE SOUS md — c'est cette bande-là qui la
-          remplace sur téléphone. Un menu « Aller à… » d'une seule entrée ne mène
-          nulle part : pour le joueur on met à la place son nom et la sortie,
-          sinon il n'aurait AUCUN moyen de se déconnecter depuis un téléphone —
-          et c'est sur un téléphone qu'il lira ce document.
+          remplace sur téléphone. Depuis le 15/09 tout compte a plusieurs écrans
+          (News, Forum, Conception) : le menu est pour tous, et la Déconnexion
+          reste À CÔTÉ — sans elle, un joueur sur téléphone n'aurait aucun
+          moyen de sortir.
         */}
         <div className="flex items-center gap-3 border-b border-edge bg-panel p-3 md:hidden">
-          {contenu.length > 0 ? (
-            <select
-              className="input"
-              onChange={(e) => e.target.value && navigate(e.target.value)}
-              defaultValue=""
-            >
-              <option value="">Aller à…</option>
-              {[...contenu, ...documents].map((page) => (
-                <option key={page.to} value={page.to}>
-                  {page.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <>
-              <p className="min-w-0 flex-1 truncate text-sm text-slate-300">
-                <span className="font-semibold text-white">SysB</span>{" "}
-                <span className="text-slate-500">
-                  — {String(user?.pseudo || user?.email || "compte")}
-                </span>
-              </p>
-              <button
-                className="shrink-0 text-xs text-slate-400 hover:text-red-400"
-                onClick={() => {
-                  signOut();
-                  navigate("/");
-                }}
-              >
-                Déconnexion
-              </button>
-            </>
-          )}
+          <select
+            className="input min-w-0 flex-1"
+            onChange={(e) => e.target.value && navigate(e.target.value)}
+            value={tous.some((p) => p.to === pathname) ? pathname : ""}
+            aria-label="Aller à"
+          >
+            <option value="">Aller à…</option>
+            {tous.map((page) => (
+              <option key={page.to} value={page.to}>
+                {page.label}
+              </option>
+            ))}
+          </select>
+          <button
+            className="shrink-0 text-xs text-slate-400 hover:text-red-400"
+            title={String(user?.pseudo || user?.email || "compte")}
+            onClick={() => {
+              signOut();
+              navigate("/");
+            }}
+          >
+            Déconnexion
+          </button>
         </div>
         <div className="p-4 sm:p-6">{children}</div>
       </main>
+    </div>
+  );
+}
+
+/** Un groupe titré de la barre latérale, séparé du précédent par un filet. */
+function Groupe({ titre, liens, filet }: { titre: string; liens: Lien[]; filet: boolean }) {
+  if (liens.length === 0) return null;
+  return (
+    <div className={filet ? "mt-4 border-t border-edge pt-3" : ""}>
+      <p className="px-3 pb-1 text-[10px] font-medium uppercase tracking-wide text-slate-600">{titre}</p>
+      <div className="space-y-0.5">
+        {liens.map((page) => (
+          <NavLink key={page.to} to={page.to} className={lienClasses}>
+            <IconeGenerique />
+            {page.label}
+          </NavLink>
+        ))}
+      </div>
     </div>
   );
 }

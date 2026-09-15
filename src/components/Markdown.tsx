@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { Schema } from "@/components/Schemas";
+import { lienSur } from "@/lib/liens";
 
 /**
  * Un rendu Markdown minimal, écrit à la main.
@@ -123,6 +124,10 @@ function inline(texte: string, cle: string): ReactNode {
       );
 
     const lien = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(morceau);
+    // ⚠️ Depuis les News (15/09) ce rendu affiche un texte saisi sur le site,
+    // plus seulement le document du dépôt : un `javascript:` en lien serait
+    // exécuté au clic. Seuls http(s), mailto et les adresses du site passent.
+    if (lien && !lienSur(lien[2])) return <Fragment key={k}>{lien[1]}</Fragment>;
     if (lien)
       return (
         <a

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { avecJoueur, chercherJoueurs, nomJoueur, resumePartage } from "@/lib/partageJoueurs";
+import { avecJoueur, avecJoueurs, chercherJoueurs, nomJoueur, resumePartage } from "@/lib/partageJoueurs";
 
 const j = (id: string, pseudo: string, email = `${id}@x.fr`) => ({ id, pseudo, email });
 const JOUEURS = [j("u1", "Zoé"), j("u2", "aragon"), j("u3", "", "sans.pseudo@x.fr")];
@@ -21,6 +21,13 @@ describe("la liste des joueurs choisis", () => {
     expect(avecJoueur(["a", "b"], "a", true)).toEqual(["a", "b"]);
     expect(avecJoueur(["a", "b"], "c", true)).toEqual(["a", "b", "c"]);
     expect(avecJoueur(["a", "b"], "a", false)).toEqual(["b"]);
+  });
+});
+
+describe("cocher toute la liste d'un coup", () => {
+  it("ajoute sans doublon, garde l'ordre, et décoche seulement la liste", () => {
+    expect(avecJoueurs(["b"], ["a", "b", "c", "a"], true)).toEqual(["b", "a", "c"]);
+    expect(avecJoueurs(["a", "b", "z"], ["a", "b"], false)).toEqual(["z"]);
   });
 });
 

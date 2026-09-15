@@ -18,6 +18,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ECRANS_CONTENU,
+  ECRANS_PUBLICS,
   accueil,
   ecransVisibles,
   roleEstAdmin,
@@ -46,16 +47,28 @@ describe("ce que voit un joueur", () => {
     expect(vu.contenu).toEqual([]);
     for (const ecran of ECRANS_CONTENU) {
       expect(vu.documents.map((l) => l.to)).not.toContain(ecran.to);
+      expect(vu.communaute.map((l) => l.to)).not.toContain(ecran.to);
     }
   });
 
-  it("contient la Conception, et elle seule", () => {
+  it("contient la Conception, les News et le Forum", () => {
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
+    expect(vu.communaute.map((l) => l.to)).toEqual(["/news", "/forum"]);
   });
 
-  it("entre par /conception, pas par le tableau de bord", () => {
+  it("entre par les News, pas par le tableau de bord", () => {
     // Le tableau de bord liste `users`, que la règle d'API lui refuse.
-    expect(accueil(false)).toBe("/conception");
+    expect(accueil(false)).toBe("/news");
+  });
+});
+
+describe("les écrans publics", () => {
+  it("ne contiennent AUCUN écran de contenu ni la Conception", () => {
+    // ⚠️ Ce qui est ici est routé pour un visiteur ANONYME (App.tsx).
+    const publics = ECRANS_PUBLICS.map((l) => l.to);
+    for (const ecran of ECRANS_CONTENU) expect(publics).not.toContain(ecran.to);
+    expect(publics).not.toContain("/conception");
+    expect(publics).not.toContain("/");
   });
 });
 
@@ -72,6 +85,7 @@ describe("ce que voit un admin", () => {
     expect(vu.contenu.map((l) => l.to)).not.toContain("/planetes");
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
+    expect(vu.communaute.map((l) => l.to)).toEqual(["/news", "/forum"]);
   });
 
   it("entre par le tableau de bord", () => {

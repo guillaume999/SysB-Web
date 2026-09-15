@@ -3,8 +3,14 @@
 Le site du jeu Unity **SysB**, branché sur PocketBase. Il sert deux publics depuis
 la même adresse :
 
+- **tout le monde, sans compte**, lit les **News** (`/news`) et le **Forum**
+  (`/forum`) — la connexion est sur `/connexion` ;
+- **tout compte de jeu** écrit sur le forum (selon les deux cases de chaque salon :
+  ouvrir un sujet, répondre) ; les news et les salons, seul l'admin les écrit.
+  Collections `news`, `salons`, `sujets`, `messages` : patch
+  `serveur-go/patches/patch-news-forum-2026-09-15.js` ;
 - **tout compte de jeu** (collection `users`) ouvre l'onglet **Conception**, le
-  document de design en lecture seule — et rien d'autre ;
+  document de design en lecture seule ;
 - un compte dont le champ `role` vaut **`admin`** ouvre en plus les **huit écrans
   de contenu** (catalogue, plateaux, comptes).
 

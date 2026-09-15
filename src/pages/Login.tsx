@@ -19,7 +19,7 @@ export default function Login() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex items-center justify-center py-6 sm:py-12">
       <form onSubmit={submit} className="card w-full max-w-sm p-6">
         <h1 className="text-xl font-semibold text-white">SysB</h1>
         <p className="mt-1 text-sm text-slate-400">
@@ -27,8 +27,8 @@ export default function Login() {
           que dans l'application.
         </p>
         <p className="mt-2 text-xs text-slate-500">
-          Un compte joueur ouvre le document de conception ; un compte admin ouvre en plus le contenu
-          du jeu.
+          Connecté, un joueur écrit sur le forum et lit le document de conception ; un compte admin
+          ouvre en plus le contenu du jeu. Les news et le forum se lisent sans compte.
         </p>
 
         <div className="mt-6 space-y-4">

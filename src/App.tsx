@@ -1,13 +1,18 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import Layout from "@/components/Layout";
+import PublicLayout from "@/components/PublicLayout";
 import Ages from "@/pages/Ages";
+import Forum from "@/pages/Forum";
+import ForumSalon from "@/pages/ForumSalon";
+import ForumSujet from "@/pages/ForumSujet";
 import Home from "@/pages/Home";
 import Icones from "@/pages/Icones";
 import Joueurs from "@/pages/Joueurs";
 import Login from "@/pages/Login";
 import Modeles3D from "@/pages/Modeles3D";
 import ListePlateaux from "@/pages/ListePlateaux";
+import News from "@/pages/News";
 import PlateauEditeur from "@/pages/PlateauEditeur";
 import Ressources from "@/pages/Ressources";
 import Technologies from "@/pages/Technologies";
@@ -26,11 +31,22 @@ export default function App() {
 
   if (loading) return <Centered>Chargement de la session…</Centered>;
 
+  /**
+   * ⚠️ LE VISITEUR NON CONNECTÉ (15/09) : il lit les News et le Forum, et
+   * trouve la connexion sur /connexion. Toute autre adresse le renvoie sur les
+   * News — plus sur la connexion comme avant.
+   * Une fois connecté, /connexion n'existe plus : le joker l'envoie sur son
+   * accueil, ce qui fait la redirection d'après connexion.
+   */
   if (!user)
     return (
-      <Routes>
-        <Route path="*" element={<Login />} />
-      </Routes>
+      <PublicLayout>
+        <Routes>
+          {routesPubliques}
+          <Route path="/connexion" element={<Login />} />
+          <Route path="*" element={<Navigate to="/news" replace />} />
+        </Routes>
+      </PublicLayout>
     );
 
   /**
@@ -46,6 +62,7 @@ export default function App() {
   return (
     <Layout>
       <Routes>
+        {routesPubliques}
         <Route
           path="/conception"
           element={
@@ -75,6 +92,21 @@ export default function App() {
     </Layout>
   );
 }
+
+/**
+ * Les routes LISIBLES SANS CONNEXION — les mêmes pour le visiteur et le compte
+ * connecté (seuls les boutons d'écriture changent, dans les pages).
+ * ⚠️ Une adresse ajoutée ici est ouverte à TOUT INTERNET : n'y mettre qu'un
+ * écran dont les collections sont en lecture publique.
+ */
+const routesPubliques = (
+  <>
+    <Route path="/news" element={<News />} />
+    <Route path="/forum" element={<Forum />} />
+    <Route path="/forum/sujet/:id" element={<ForumSujet />} />
+    <Route path="/forum/:salonId" element={<ForumSalon />} />
+  </>
+);
 
 function Centered({ children }: { children: React.ReactNode }) {
   return <div className="flex min-h-screen items-center justify-center text-sm text-slate-400">{children}</div>;
