@@ -50,36 +50,11 @@ export const ECRANS_CONTENU: Lien[] = [
  * entre sur le site.
  *
  * ⚠️ Pas d'écran « Ma planète » (retiré le 15/09) : la planète d'un joueur est
- * créée d'office par le serveur à l'inscription, et ses deux modèles lui sont
- * partagés — il les retrouve dans l'onglet Modèles, comme concepteur.
+ * créée d'office par le serveur à l'inscription. Il ne l'édite pas sur le
+ * site : depuis le 15/09 au soir, seul l'admin crée et modifie (le partage de
+ * modèle et le rôle de concepteur ont été retirés).
  */
 export const ECRANS_DOCUMENT: Lien[] = [{ to: "/conception", label: "Conception" }];
-
-/**
- * **Les écrans d'un CONCEPTEUR** — un joueur à qui l'admin a ouvert un modèle
- * (13/09). Ce sont les mêmes écrans que ceux de l'admin, pas des copies : même
- * code, mêmes aides, mêmes garde-fous. Ce qui change est ce qu'ils MONTRENT,
- * et ça se décide dans `lib/partage.ts`, pas ici.
- *
- * ⚠️ Les adresses sont reprises de `ECRANS_CONTENU` au lieu d'être réécrites :
- * renommer « Technologie » en un seul endroit doit suffire. Une adresse qui
- * n'y figurerait pas est une faute de frappe — l'essai le vérifie.
- */
-const ADRESSES_CONCEPTEUR = ["/modeles", "/tuiles", "/ressources", "/technologies"];
-
-/**
- * ⚠️ **L'ordre n'est pas celui de l'admin, et c'est voulu** : un concepteur
- * entre par LE MODÈLE qu'on lui a ouvert — c'est l'objet du partage, et c'est
- * aussi `accueil()`. L'admin, lui, part du modèle 3D parce qu'il fabrique la
- * chaîne dans l'autre sens.
- *
- * ⚠️ On ne réécrit pas les libellés : chaque entrée est CHERCHÉE dans
- * `ECRANS_CONTENU`. Une adresse absente serait une faute de frappe — la liste
- * rendue serait alors plus courte, et l'essai le voit.
- */
-export const ECRANS_CONCEPTEUR: Lien[] = ADRESSES_CONCEPTEUR.map((to) =>
-  ECRANS_CONTENU.find((l) => l.to === to),
-).filter((l): l is Lien => l !== undefined);
 
 /**
  * Le rôle donne-t-il les écrans de contenu ?
@@ -95,16 +70,11 @@ export function roleEstAdmin(role: Role | "" | undefined | null): boolean {
 /**
  * Les deux groupes de la barre latérale, pour le compte en cours.
  *
- * Trois cas, et un seul ordre de lecture : **admin**, puis **concepteur**,
- * puis joueur ordinaire. Un admin n'est jamais traité en concepteur — il ne
- * passe par aucun partage.
+ * Deux cas : l'admin a tout, le joueur n'a que les documents.
  */
-export function ecransVisibles(
-  admin: boolean,
-  concepteur = false,
-): { contenu: Lien[]; documents: Lien[] } {
+export function ecransVisibles(admin: boolean): { contenu: Lien[]; documents: Lien[] } {
   return {
-    contenu: admin ? ECRANS_CONTENU : concepteur ? ECRANS_CONCEPTEUR : [],
+    contenu: admin ? ECRANS_CONTENU : [],
     documents: ECRANS_DOCUMENT,
   };
 }
@@ -117,11 +87,7 @@ export function ecransVisibles(
  * verrait huit tuiles vides — et une adresse inconnue le renverrait en boucle
  * dessus.
  */
-export function accueil(admin: boolean, concepteur = false): string {
+export function accueil(admin: boolean): string {
   if (admin) return "/";
-  // ⚠️ Un concepteur entre par SES MODÈLES, pas par le document : c'est ce
-  //    qu'on lui a ouvert, et le tableau de bord lui reste refusé (il compte
-  //    `users`).
-  if (concepteur) return ECRANS_CONCEPTEUR[0].to;
   return ECRANS_DOCUMENT[0].to;
 }

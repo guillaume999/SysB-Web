@@ -189,19 +189,6 @@ export type Technologie = {
   debloque_technos: string[];
   cout: CoutTechno;
   effets: EffetTechno[];
-  /**
-   * **Le modèle de plateau auquel ce record est rattaché** (13/09) — id d'un
-   * record `templates`.
-   *
-   * ⚠️⚠️ Il ne dit PAS où la tuile se joue : ça, c'est `typeOfPlateau`, et le
-   * moteur ne lit que celui-là. Celui-ci dit **qui a le droit d'écrire** —
-   * l'admin, et les joueurs listés dans `templates.partages` de ce modèle.
-   *
-   * ⚠️ **Optionnel, et ça compte** : aucun record d'avant le patch du 13/09 ne
-   * le porte. Absent = rattaché à rien, donc visible du seul admin — lire par
-   * `rattachementDe()`, jamais à cru.
-   */
-  rattachement?: string;
   created: string;
   updated: string;
 };

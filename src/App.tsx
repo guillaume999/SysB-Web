@@ -13,7 +13,6 @@ import Technologies from "@/pages/Technologies";
 import Tuiles from "@/pages/Tuiles";
 import { accueil } from "@/lib/acces";
 import { useAuth } from "@/lib/auth";
-import { estConcepteur, usePartage } from "@/lib/partage";
 
 /**
  * Le document de conception pèse ~115 Ko de texte inliné au build : chargé à la
@@ -23,8 +22,6 @@ const Conception = lazy(() => import("@/pages/Conception"));
 
 export default function App() {
   const { user, estAdmin, loading } = useAuth();
-  const { portee, chargement } = usePartage();
-  const concepteur = estConcepteur(portee);
 
   if (loading) return <Centered>Chargement de la session…</Centered>;
 
@@ -34,12 +31,6 @@ export default function App() {
         <Route path="*" element={<Login />} />
       </Routes>
     );
-
-  // ⚠️ ATTENDRE les modèles avant de router : sans ça, un concepteur qui ouvre
-  //    `/tuiles` directement se ferait renvoyer sur /conception par le joker,
-  //    une fraction de seconde avant que sa portée soit connue — et son lien
-  //    serait perdu.
-  if (chargement) return <Centered>Chargement des modèles…</Centered>;
 
   /**
    * ⚠️ LES ÉCRANS DE CONTENU N'EXISTENT PAS POUR UN JOUEUR — ils ne sont pas
@@ -62,20 +53,6 @@ export default function App() {
             </Suspense>
           }
         />
-        {/*
-          ⚠️ ADMIN ou CONCEPTEUR, jamais les deux : `porteeDe` laisse la liste
-          des modèles VIDE pour un admin, donc `estConcepteur` y est faux. Les
-          deux blocs ne peuvent pas déclarer la même route en même temps.
-        */}
-        {concepteur && (
-          <>
-            <Route path="/modeles" element={<ListePlateaux source="templates" />} />
-            <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />
-            <Route path="/tuiles" element={<Tuiles />} />
-            <Route path="/ressources" element={<Ressources />} />
-            <Route path="/technologies" element={<Technologies />} />
-          </>
-        )}
         {estAdmin && (
           <>
             <Route path="/" element={<Home />} />
@@ -91,7 +68,7 @@ export default function App() {
             <Route path="/joueurs" element={<Joueurs />} />
           </>
         )}
-        <Route path="*" element={<Navigate to={accueil(estAdmin, concepteur)} replace />} />
+        <Route path="*" element={<Navigate to={accueil(estAdmin)} replace />} />
       </Routes>
     </Layout>
   );

@@ -2,7 +2,6 @@ import { NavLink, useNavigate } from "react-router-dom";
 import IconeGenerique from "@/components/IconeGenerique";
 import { accueil, ecransVisibles } from "@/lib/acces";
 import { useAuth } from "@/lib/auth";
-import { estConcepteur, usePartage } from "@/lib/partage";
 import { libelleRole } from "@/lib/joueurs";
 import { PB_URL } from "@/lib/pb";
 import type { ReactNode } from "react";
@@ -24,18 +23,15 @@ const lienClasses = ({ isActive }: { isActive: boolean }) =>
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, estAdmin, signOut } = useAuth();
-  const { portee } = usePartage();
   const navigate = useNavigate();
-  const concepteur = estConcepteur(portee);
-  const { contenu, documents } = ecransVisibles(estAdmin, concepteur);
+  const { contenu, documents } = ecransVisibles(estAdmin);
 
   return (
     <div className="flex min-h-screen">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-edge bg-panel md:flex">
         <div className="border-b border-edge px-4 py-4">
-          <NavLink to={accueil(estAdmin, concepteur)} className="text-lg font-semibold text-white">
+          <NavLink to={accueil(estAdmin)} className="text-lg font-semibold text-white">
             SysB {estAdmin && <span className="text-slate-500">admin</span>}
-            {concepteur && <span className="text-slate-500">conception</span>}
           </NavLink>
           <p className="mt-1 truncate text-xs text-slate-500" title={PB_URL}>
             {PB_URL.replace(/^https?:\/\//, "")}
@@ -81,10 +77,6 @@ export default function Layout({ children }: { children: ReactNode }) {
           </p>
           <p className="text-slate-500">
             rôle {libelleRole(user?.role ?? "")}
-            {concepteur &&
-              ` · ${portee.modeles.length} modèle${portee.modeles.length > 1 ? "s" : ""} partagé${
-                portee.modeles.length > 1 ? "s" : ""
-              }`}
           </p>
           <button
             className="mt-2 text-slate-400 hover:text-red-400"

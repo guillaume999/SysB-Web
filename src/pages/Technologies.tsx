@@ -46,7 +46,6 @@ import {
   type Technologie,
   type ValeursTechnologie,
 } from "@/lib/technologies";
-import { rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
 
 /**
  * Le vocabulaire des technologies.
@@ -61,7 +60,6 @@ import { rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
  * paliers ; une table triable de 132 lignes ne dirait rien de sa forme.
  */
 export default function Technologies() {
-  const { portee, templates } = usePartage();
   const [technologies, setTechnologies] = useState<Technologie[]>([]);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
@@ -87,9 +85,7 @@ export default function Technologies() {
         loadRessources().catch(() => [] as Ressource[]),
         loadAges().catch(() => [] as Age[]),
       ]);
-      // ⚠️ Seule la liste éditée est filtrée — les tuiles et les ressources
-      //    alimentent les listes du formulaire.
-      setTechnologies(visiblesPour(t, portee));
+      setTechnologies(t);
       setTuiles(tu);
       setRessources(r);
       setAges(a);
@@ -98,7 +94,7 @@ export default function Technologies() {
     } finally {
       setChargement(false);
     }
-  }, [portee]);
+  }, []);
 
   useEffect(() => {
     void charger();
@@ -163,16 +159,7 @@ export default function Technologies() {
     try {
       if (dialog.technologie)
         await pb.collection(COLLECTION_TECHNOLOGIES).update(dialog.technologie.id, valeurs);
-      else
-        await pb.collection(COLLECTION_TECHNOLOGIES).create({
-          ...valeurs,
-          // Une techno vit DANS un bâtiment : elle se range là où il est rangé.
-          rattachement: rattachementParDefaut(
-            portee,
-            templates,
-            tuiles.find((x) => x.tileId === valeurs.batiment)?.typeOfPlateau,
-          ),
-        });
+      else await pb.collection(COLLECTION_TECHNOLOGIES).create(valeurs);
       setDialog(null);
       await charger();
     } catch (e) {

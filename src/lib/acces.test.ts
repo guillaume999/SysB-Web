@@ -17,7 +17,6 @@
 
 import { describe, expect, it } from "vitest";
 import {
-  ECRANS_CONCEPTEUR,
   ECRANS_CONTENU,
   accueil,
   ecransVisibles,
@@ -57,45 +56,6 @@ describe("ce que voit un joueur", () => {
   it("entre par /conception, pas par le tableau de bord", () => {
     // Le tableau de bord liste `users`, que la règle d'API lui refuse.
     expect(accueil(false)).toBe("/conception");
-  });
-});
-
-describe("ce que voit un concepteur", () => {
-  // ⚠️ Un joueur à qui l'admin a ouvert un modèle (13/09) : mêmes écrans que
-  // l'admin, mais quatre seulement.
-  const vu = ecransVisibles(false, true);
-
-  it("ouvre les quatre écrans de création, et pas un de plus", () => {
-    // ⚠️ Le modèle EN PREMIER : c'est ce qu'on lui a partagé, et c'est là
-    // qu'il atterrit.
-    expect(vu.contenu.map((l) => l.to)).toEqual([
-      "/modeles",
-      "/tuiles",
-      "/ressources",
-      "/technologies",
-    ]);
-  });
-
-  it("garde hors de vue ce qui n'est pas à lui", () => {
-    // ⚠️ L'ASSERTION QUI COMPTE : les comptes, les plateaux des joueurs, les
-    // modèles 3D et les âges restent à l'admin.
-    for (const interdit of ["/joueurs", "/plateaux", "/3dmodeltuile", "/ages"])
-      expect(vu.contenu.map((l) => l.to)).not.toContain(interdit);
-  });
-
-  it("garde la Conception, comme tout le monde", () => {
-    expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);
-  });
-
-  it("entre par ses modèles", () => {
-    expect(accueil(false, true)).toBe("/modeles");
-  });
-
-  it("ne réécrit aucune adresse : elles viennent des écrans de contenu", () => {
-    // Une faute de frappe dans `ADRESSES_CONCEPTEUR` donnerait une liste
-    // silencieusement plus courte.
-    expect(ECRANS_CONCEPTEUR).toHaveLength(4);
-    for (const lien of ECRANS_CONCEPTEUR) expect(ECRANS_CONTENU).toContainEqual(lien);
   });
 });
 

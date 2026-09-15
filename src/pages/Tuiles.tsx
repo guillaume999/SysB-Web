@@ -33,7 +33,7 @@ import {
   type Tuile,
   type ValeursTuile,
 } from "@/lib/tuiles";
-import { mondeImpose, rattachementParDefaut, usePartage, visiblesPour } from "@/lib/partage";
+import { loadTemplates, type Plateau } from "@/lib/plateaux";
 
 /**
  * Une colonne au choix : ce qu'elle affiche, et sur quoi elle se trie.
@@ -290,12 +290,13 @@ function ecrirePref(cle: string, valeur: string) {
  * face a deux colonnes fixes de plus.
  */
 export default function Tuiles() {
-  const { portee, templates } = usePartage();
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [modeles, setModeles] = useState<Modele3D[]>([]);
   const [ressources, setRessources] = useState<Ressource[]>([]);
   const [ages, setAges] = useState<Age[]>([]);
   const [technologies, setTechnologies] = useState<Technologie[]>([]);
+  // Les modèles ne servent qu'à proposer les « type 2 » connus dans la fenêtre.
+  const [templates, setTemplates] = useState<Plateau[]>([]);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -510,27 +511,26 @@ export default function Tuiles() {
       // Les technos aussi, et pour la meme raison : leur collection peut etre
       // vide, ou refusee ; le catalogue doit rester ouvrable. La regle
       // « technologie requise » dit alors « aucune technologie declaree ».
-      const [t, m, r, a, tech] = await Promise.all([
+      const [t, m, r, a, tech, tpl] = await Promise.all([
         loadTuiles(),
         loadModeles3D(),
         loadRessources(),
         loadAges().catch(() => [] as Age[]),
         loadTechnologies().catch(() => [] as Technologie[]),
+        loadTemplates().catch(() => [] as Plateau[]),
       ]);
-      // ⚠️ SEULE la liste que l'écran ÉDITE est filtrée. Les modèles 3D, les
-      //    ressources et les technos restent entiers : ils alimentent les listes
-      //    du formulaire, où un concepteur doit pouvoir citer ce qui existe.
-      setTuiles(visiblesPour(t, portee));
+      setTuiles(t);
       setModeles(m);
       setRessources(r);
       setAges(a);
       setTechnologies(tech);
+      setTemplates(tpl);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
       setChargement(false);
     }
-  }, [portee]);
+  }, []);
 
   useEffect(() => {
     void charger();
@@ -542,19 +542,8 @@ export default function Tuiles() {
     setSaving(true);
     setErreurDialog(null);
     try {
-      // ⚠️ LE MONDE S'IMPOSE ICI, ET NULLE PART AILLEURS (13/09). Un concepteur
-      //    ne choisit pas son `typeOfPlateau2` : il reçoit celui de son modèle,
-      //    à la création COMME à la modification — sinon il lui suffirait de
-      //    rouvrir une tuile pour la déplacer dans le monde du voisin. La
-      //    fenêtre, elle, ne fait que l'afficher.
-      const monde = mondeImpose(portee, templates, valeurs.typeOfPlateau);
-      const aEcrire = monde === null ? valeurs : { ...valeurs, typeOfPlateau2: monde };
-      if (dialog.tuile) await pb.collection(COLLECTION_TUILES).update(dialog.tuile.id, aEcrire);
-      else
-        await pb.collection(COLLECTION_TUILES).create({
-          ...aEcrire,
-          rattachement: rattachementParDefaut(portee, templates, valeurs.typeOfPlateau),
-        });
+      if (dialog.tuile) await pb.collection(COLLECTION_TUILES).update(dialog.tuile.id, valeurs);
+      else await pb.collection(COLLECTION_TUILES).create(valeurs);
       setDialog(null);
       await charger();
     } catch (e) {
@@ -978,7 +967,6 @@ export default function Tuiles() {
           tuile={dialog.tuile}
           tuiles={tuiles}
           templates={templates}
-          monde={mondeImpose(portee, templates, dialog.tuile?.typeOfPlateau ?? "ground")}
           modeles={modeles}
           ressources={ressources}
           ages={ages}

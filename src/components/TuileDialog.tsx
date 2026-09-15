@@ -68,7 +68,6 @@ export default function TuileDialog({
   tuile,
   tuiles,
   templates,
-  monde,
   modeles,
   ressources,
   ages,
@@ -88,15 +87,6 @@ export default function TuileDialog({
    * refabrique les jumelles qu'il est cense eviter.
    */
   templates: Plateau[];
-  /**
-   * Le MONDE imposé par le modèle partagé (`Jupiter`), ou `null` quand le
-   * compte le choisit — un admin.
-   *
-   * ⚠️ **La fenêtre ne fait que l'AFFICHER.** C'est la page qui écrit, et c'est
-   * elle qui l'applique (`mondeImpose`, dans `enregistrer`). Deux endroits qui
-   * décident du même champ, ce serait deux façons d'en changer un seul.
-   */
-  monde: string | null;
   modeles: Modele3D[];
   ressources: Ressource[];
   /** Les ages declares — onglet Ages. C'est eux que propose la liste, jamais un nombre libre. */
@@ -127,7 +117,7 @@ export default function TuileDialog({
   const [type, setType] = useState<TypePlateau>(tuile?.typeOfPlateau ?? "ground");
   // ⚠️ La seconde etiquette, libre et STRICTE : vide, la tuile ne se peint que
   //    sur les plateaux sans etiquette. Voir `lib/plateaux.ts`.
-  const [type2, setType2] = useState(monde ?? tuile?.typeOfPlateau2 ?? "");
+  const [type2, setType2] = useState(tuile?.typeOfPlateau2 ?? "");
   // ⚠️ PLUSIEURS CATEGORIES DEPUIS LE 2026-08-30, toutes egales : l'etat est une
   //    LISTE, le champ en base reste UNE ligne separee par des virgules.
   const [categories, setCategories] = useState<string[]>(() => categoriesDe(tuile));
@@ -652,44 +642,23 @@ export default function TuileDialog({
                   <label className="label" htmlFor="tuile-type2">
                     Type de plateau 2 <span className="text-slate-400">(le monde)</span>
                   </label>
-                  {monde === null ? (
-                    <>
-                      <input
-                        id="tuile-type2"
-                        className="input"
-                        list="tuile-type2-connus"
-                        placeholder="aucun — peignable sur les plateaux sans etiquette"
-                        value={type2}
-                        onChange={(e) => setType2(e.target.value)}
-                      />
-                      <datalist id="tuile-type2-connus">
-                        {type2Proposes.map((t) => (
-                          <option key={t} value={t} />
-                        ))}
-                      </datalist>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Reserve la tuile aux plateaux portant la meme etiquette. Vide = les plateaux
-                        sans etiquette.
-                      </p>
-                    </>
-                  ) : (
-                    /*
-                      ⚠️ IMPOSE PAR LE MODELE PARTAGE (13/09). Un concepteur ne
-                      choisit pas son monde : il le recoit. On l'AFFICHE quand
-                      meme, en clair — un champ qui disparait sans un mot laisse
-                      croire que la tuile n'appartient a rien.
-                    */
-                    <p
-                      id="tuile-type2"
-                      className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm"
-                    >
-                      <span className="font-medium">{monde || "aucun"}</span>
-                      <span className="ml-2 text-xs text-slate-500">
-                        herite du modele qui t'est partage — tu choisis la surface (sol / espace),
-                        pas le monde
-                      </span>
-                    </p>
-                  )}
+                  <input
+                    id="tuile-type2"
+                    className="input"
+                    list="tuile-type2-connus"
+                    placeholder="aucun — peignable sur les plateaux sans etiquette"
+                    value={type2}
+                    onChange={(e) => setType2(e.target.value)}
+                  />
+                  <datalist id="tuile-type2-connus">
+                    {type2Proposes.map((t) => (
+                      <option key={t} value={t} />
+                    ))}
+                  </datalist>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Reserve la tuile aux plateaux portant la meme etiquette. Vide = les plateaux
+                    sans etiquette.
+                  </p>
                 </div>
               </div>
 

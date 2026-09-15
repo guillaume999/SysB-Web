@@ -77,8 +77,6 @@ export type Icone = Partageable & {
  */
 export type UsageIcone = "tuile" | "ressource" | "techno" | "planete";
 
-export const USAGES_ICONE: UsageIcone[] = ["tuile", "ressource", "techno", "planete"];
-
 /** Idem pour les modèles 3D, qui n'ont que deux usages : une tuile, ou une planète. */
 export type UsageModele3D = "tuile" | "planete";
 

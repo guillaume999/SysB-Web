@@ -163,15 +163,6 @@ export type Plateau = {
   /** `templates` seulement. */
   actif?: boolean;
   /**
-   * `templates` seulement — **les joueurs à qui ce modèle est ouvert** (13/09).
-   * Ids de `users`. Vide = personne, le cas normal.
-   *
-   * ⚠️ Un compte qui y figure peut écrire CE modèle **et** tout ce qui s'y
-   * rattache (tuiles, ressources, technos) : c'est la règle d'API PocketBase
-   * qui l'autorise, pas le site. Voir `lib/partage.ts`.
-   */
-  partages?: string[];
-  /**
    * La planete ou ce plateau se joue — relation → `planetes` (14/09). C'est
    * elle que lit `assurer` ; `typeOfPlateau2` n'en est que l'etiquette.
    */

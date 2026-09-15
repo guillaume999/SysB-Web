@@ -3,8 +3,7 @@ import { Link } from "react-router-dom";
 import Aide, { Terme } from "@/components/Aide";
 import PanneauPlanete, { type Modele3DPartage } from "@/components/PanneauPlanete";
 import { useAuth } from "@/lib/auth";
-import { type Joueur, libelleRole, loadJoueurs } from "@/lib/joueurs";
-import { estConcepteur, modelesVisibles, usePartage } from "@/lib/partage";
+import { type Joueur, loadJoueurs } from "@/lib/joueurs";
 import { messageErreur, pb } from "@/lib/pb";
 import { loadModeles3D, TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
 import {
@@ -62,40 +61,33 @@ const TEXTES = {
 } as const;
 
 export default function ListePlateaux({ source }: { source: SourcePlateau }) {
-  const { user, estAdmin } = useAuth();
-  const { portee, recharger: rechargerPortee } = usePartage();
+  // ⚠️ Écran réservé à l'admin (la route n'existe que pour lui, voir App.tsx).
+  const { user } = useAuth();
   const textes = TEXTES[source];
   const estModele = source === COLLECTION_TEMPLATES;
-  // ⚠️ Un concepteur ne voit QUE les modèles qu'on lui a ouverts, et il ne peut
-  //    ni en créer ni en supprimer : les règles d'API gardent create et delete
-  //    pour l'admin. Lui montrer les boutons ne ferait que promettre un 403.
-  const concepteur = estConcepteur(portee);
-  const [partageOuvert, setPartageOuvert] = useState<string | null>(null);
   const [planeteOuverte, setPlaneteOuverte] = useState<string | null>(null);
 
   // ⚠️ Ce qui sert à lire les colonnes « planète » et « appartient », et au
-  //    panneau de la planète (admin). Rien de tout ça n'est indispensable à la
+  //    panneau de la planète. Rien de tout ça n'est indispensable à la
   //    liste : un échec laisse les colonnes en identifiants, pas l'écran vide.
   const [planetes, setPlanetes] = useState<Planete[]>([]);
   const [joueurs, setJoueurs] = useState<Joueur[]>([]);
   const [modeles3d, setModeles3d] = useState<Modele3DPartage[]>([]);
   const [icones, setIcones] = useState<Icone[]>([]);
 
-  /** Planètes (tous), et pour l'admin : joueurs, modèles 3D, icônes. */
+  /** Planètes, joueurs, modèles 3D, icônes. */
   const chargerAutour = useCallback(async () => {
     const [p, j, m, i] = await Promise.all([
       loadPlanetes().catch(() => [] as Planete[]),
-      estAdmin ? loadJoueurs().catch(() => [] as Joueur[]) : Promise.resolve([] as Joueur[]),
-      estAdmin
-        ? (loadModeles3D() as Promise<Modele3DPartage[]>).catch(() => [] as Modele3DPartage[])
-        : Promise.resolve([] as Modele3DPartage[]),
-      estAdmin ? loadIcones().catch(() => [] as Icone[]) : Promise.resolve([] as Icone[]),
+      loadJoueurs().catch(() => [] as Joueur[]),
+      (loadModeles3D() as Promise<Modele3DPartage[]>).catch(() => [] as Modele3DPartage[]),
+      loadIcones().catch(() => [] as Icone[]),
     ]);
     setPlanetes(p);
     setJoueurs(j);
     setModeles3d(m);
     setIcones(i);
-  }, [estAdmin]);
+  }, []);
 
   const [liste, setListe] = useState<Plateau[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -108,14 +100,14 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
     setErreur(null);
     try {
       const chargee = await (estModele ? loadTemplates() : loadPlateauxJoueurs());
-      setListe(estModele ? modelesVisibles(chargee, portee) : chargee);
+      setListe(chargee);
       if (estModele) await chargerAutour();
     } catch (e) {
       setErreur(messageErreur(e, "Chargement impossible."));
     } finally {
       setChargement(false);
     }
-  }, [estModele, portee, chargerAutour]);
+  }, [estModele, chargerAutour]);
 
   /**
    * ⚠️ L'ORDRE : le jeu d'abord, puis les joueurs, puis les modèles que
@@ -169,23 +161,14 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
         <div>
           <h1 className="text-xl font-semibold text-white">{textes.titre}</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500">{textes.chapeau}</p>
-          {concepteur && estModele && (
-            <p className="mt-1 max-w-2xl text-xs text-accent">
-              Ce sont les modèles que tu peux dessiner : ceux de ta planète, et ceux qu'un
-              administrateur t'a partagés. Les bâtiments, ressources et technologies qui s'y
-              rattachent se modifient dans leurs propres onglets.
-            </p>
-          )}
         </div>
         <div className="flex gap-2">
           <button className="btn-ghost" onClick={() => void charger()}>
             Recharger
           </button>
-          {estAdmin && (
-            <button className="btn-primary" onClick={() => setCreation(true)}>
-              {textes.bouton}
-            </button>
-          )}
+          <button className="btn-primary" onClick={() => setCreation(true)}>
+            {textes.bouton}
+          </button>
         </div>
       </header>
 
@@ -202,7 +185,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
           </Terme>
           <Terme nom="planète">
             Où le modèle se joue. Une planète a deux modèles, <code>ground</code> et{" "}
-            <code>space</code>. Le bouton « Planète » (admin) règle son apparence et ce qui lui est
+            <code>space</code>. Le bouton « Planète » règle son apparence et ce qui lui est
             ouvert : quels modèles 3D et quelles icônes ses tuiles peuvent utiliser.
           </Terme>
           <Terme nom="appartient">
@@ -217,18 +200,6 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
           <Terme nom="aucun modèle">
             Le jeu refuse alors de fabriquer un plateau et le dit clairement, au lieu d'en inventer
             un vide de 100×100 — injouable sur mobile.
-          </Terme>
-          <Terme nom="partager">
-            Ouvre ce modèle à un joueur : il peut alors le <strong>dessiner</strong>, et modifier
-            les bâtiments, ressources et technologies qui y sont <strong>rattachés</strong> — rien
-            d'autre. Il ne peut ni créer ni supprimer un modèle. Ce qui l'autorise vraiment, ce
-            sont les règles d'API PocketBase ; cet écran ne fait que le déclarer.
-          </Terme>
-          <Terme nom="rattachement">
-            Chaque bâtiment, ressource et techno appartient à UN modèle. Tout l'existant a été
-            rattaché au modèle Terre <code className="text-accent">ground</code> le 13/09, et un
-            nouvel enregistrement se range dans le modèle de son type de plateau. ⚠️ Ça ne dit pas
-            où la tuile se JOUE — ça, c'est son type — seulement qui a le droit de l'écrire.
           </Terme>
         </Aide>
       ) : (
@@ -350,65 +321,24 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                           <Link to={lien(p)} className="text-xs text-accent hover:underline">
                             Ouvrir
                           </Link>
-                          {estModele && estAdmin && saPlanete && (
+                          {estModele && saPlanete && (
                             <button
                               className="ml-3 text-xs text-slate-400 hover:text-white"
-                              onClick={() => {
-                                setPartageOuvert(null);
-                                setPlaneteOuverte(planeteOuverte === p.id ? null : p.id);
-                              }}
+                              onClick={() => setPlaneteOuverte(planeteOuverte === p.id ? null : p.id)}
                             >
                               Planète
                             </button>
                           )}
-                          {estModele && estAdmin && (
-                            <button
-                              className="ml-3 text-xs text-slate-400 hover:text-white"
-                              onClick={() => {
-                                setPlaneteOuverte(null);
-                                setPartageOuvert(partageOuvert === p.id ? null : p.id);
-                              }}
-                            >
-                              Partager
-                              {(p.partages ?? []).length > 0 && (
-                                <span className="ml-1 tabular-nums text-accent">
-                                  {(p.partages ?? []).length}
-                                </span>
-                              )}
-                            </button>
-                          )}
-                          {estAdmin && (
-                            <button
-                              className="ml-3 text-xs text-slate-500 hover:text-red-400"
-                              onClick={() => setASupprimer(p.id)}
-                            >
-                              Supprimer
-                            </button>
-                          )}
+                          <button
+                            className="ml-3 text-xs text-slate-500 hover:text-red-400"
+                            onClick={() => setASupprimer(p.id)}
+                          >
+                            Supprimer
+                          </button>
                         </>
                       )}
                     </td>
                   </tr>
-                  {/*
-                    ⚠️ Le partage se règle dans une LIGNE DÉPLIÉE, jamais dans
-                    une `window.confirm` : la règle du site depuis le 23/08 —
-                    une boîte native gèle l'automatisation Chrome.
-                  */}
-                  {partageOuvert === p.id && (
-                    <tr className="border-b border-edge/60 bg-ink/30">
-                      <td colSpan={10} className="px-3 py-3">
-                        <PanneauPartage
-                          modele={p}
-                          onFini={async () => {
-                            setPartageOuvert(null);
-                            await charger();
-                            await rechargerPortee();
-                          }}
-                          onAnnuler={() => setPartageOuvert(null)}
-                        />
-                      </td>
-                    </tr>
-                  )}
                   {planeteOuverte === p.id && saPlanete && (
                     <tr className="border-b border-edge/60 bg-ink/30">
                       <td colSpan={10} className="px-3 py-3">
@@ -522,8 +452,6 @@ function DialogCreation({
           corps.typeOfPlateau2 = planete.nom;
         }
         corps.appartient = appartient;
-        // ⚠️ Le modèle d'un joueur lui donne le crayon (règle d'API d'update).
-        if (appartient !== APPARTIENT_GAME) corps.partages = [appartient];
       } else corps.ownerId = uid;
       await pb.collection(source).create(corps);
       onCree();
@@ -681,114 +609,6 @@ function DialogCreation({
             {saving ? "Création…" : "Créer"}
           </button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * **Qui a le droit de travailler sur ce modèle.** Déplié sous la ligne du
- * modèle, jamais dans une fenêtre : c'est la règle du site depuis le 23/08.
- *
- * ⚠️ **Cet écran ne donne aucun droit à lui seul.** Il écrit une liste d'ids
- * dans `templates.partages` ; ce sont les **règles d'API PocketBase** qui, en
- * la lisant, laissent (ou non) passer l'écriture. Tant que les règles ne sont
- * pas posées, cocher un joueur ne fait rien du tout — et le dire ici évite de
- * chercher le bug côté site.
- *
- * ⚠️ **Un admin n'apparaît pas dans la liste** : il peut déjà tout écrire, et
- * l'inscrire dans `partages` laisserait croire qu'on peut lui RETIRER quelque
- * chose en le décochant.
- */
-function PanneauPartage({
-  modele,
-  onFini,
-  onAnnuler,
-}: {
-  modele: Plateau;
-  onFini: () => void | Promise<void>;
-  onAnnuler: () => void;
-}) {
-  const [joueurs, setJoueurs] = useState<Joueur[]>([]);
-  const [choisis, setChoisis] = useState<string[]>(modele.partages ?? []);
-  const [chargement, setChargement] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [erreur, setErreur] = useState<string | null>(null);
-
-  useEffect(() => {
-    let annule = false;
-    loadJoueurs()
-      .then((liste) => {
-        if (!annule) setJoueurs(liste.filter((j) => j.role !== "admin"));
-      })
-      .catch((e) => {
-        if (!annule) setErreur(messageErreur(e, "Liste des joueurs illisible."));
-      })
-      .finally(() => {
-        if (!annule) setChargement(false);
-      });
-    return () => {
-      annule = true;
-    };
-  }, []);
-
-  const basculer = (id: string) =>
-    setChoisis((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
-
-  const enregistrer = async () => {
-    setSaving(true);
-    setErreur(null);
-    try {
-      await pb.collection(COLLECTION_TEMPLATES).update(modele.id, { partages: choisis });
-      await onFini();
-    } catch (e) {
-      setErreur(messageErreur(e, "Partage refusé."));
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div>
-      <p className="text-xs text-slate-400">
-        Les joueurs cochés peuvent <strong className="text-slate-200">dessiner ce modèle</strong> et
-        modifier tout ce qui s'y rattache. Ils ne peuvent ni créer ni supprimer un modèle.
-      </p>
-
-      {chargement ? (
-        <p className="mt-2 text-xs text-slate-500">Chargement des joueurs…</p>
-      ) : joueurs.length === 0 ? (
-        <p className="mt-2 text-xs text-slate-500">
-          Aucun compte non-admin à qui partager. Crée-en un dans l'onglet Joueurs.
-        </p>
-      ) : (
-        <ul className="mt-2 grid gap-1 sm:grid-cols-2 lg:grid-cols-3">
-          {joueurs.map((j) => (
-            <li key={j.id}>
-              <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-xs text-slate-300 hover:bg-ink">
-                <input
-                  type="checkbox"
-                  checked={choisis.includes(j.id)}
-                  onChange={() => basculer(j.id)}
-                />
-                <span className="truncate">{j.pseudo || j.email}</span>
-                <span className="shrink-0 text-[10px] uppercase text-slate-600">
-                  {libelleRole(j.role)}
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {erreur && <p className="mt-2 text-xs text-red-300">{erreur}</p>}
-
-      <div className="mt-3 flex gap-3">
-        <button className="btn-primary py-1 text-xs" onClick={() => void enregistrer()} disabled={saving}>
-          {saving ? "Enregistrement…" : "Enregistrer le partage"}
-        </button>
-        <button className="text-xs text-slate-400 hover:text-white" onClick={onAnnuler}>
-          Annuler
-        </button>
       </div>
     </div>
   );

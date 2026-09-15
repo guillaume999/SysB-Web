@@ -3,17 +3,13 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "@/App";
 import { AuthProvider } from "@/lib/auth";
-import { PartageProvider } from "@/lib/partage";
 import "@/index.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        {/* ⚠️ SOUS l'auth : la portée se calcule à partir du compte connecté. */}
-        <PartageProvider>
-          <App />
-        </PartageProvider>
+        <App />
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
