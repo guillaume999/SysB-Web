@@ -35,6 +35,8 @@ import {
   couleurDe,
   estCommun,
   estEntrepot,
+  estMarche,
+  estQuai,
   libelleCycle,
   loadTuiles,
   logistiqueDe,
@@ -214,6 +216,10 @@ const COLONNES: ColonneAuChoix[] = [
       // Le stock commun change ce que le chiffre au-dessus veut dire : ce n'est
       // plus le coffre d'un bâtiment, c'est sa part du coffre de tout le type.
       if (estCommun(l)) bouts.push("commun");
+      // Les échanges hors du plateau (16/09), déclarés sur les paliers.
+      const paliers = paliersDe(tuile);
+      if (estQuai(paliers)) bouts.push("quai");
+      if (estMarche(paliers)) bouts.push("marché");
       return bouts.length === 0 ? RIEN : bouts.join(" · ");
     },
     // Les tuiles sans logistique se rangent APRES : trier sur cette colonne

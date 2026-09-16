@@ -909,6 +909,159 @@ export interface Palier {
   utilisation: LigneFlux[];
   /** Ce qu'il livre à chaque cycle. Rien n'est produit en veille. */
   production: LigneProduction[];
+  /**
+   * **Transfert vers un autre plateau du joueur** (16/09) — `null` = ce
+   * palier ne transfère pas. Un bâtiment qui transfère est aussi un **quai** :
+   * c'est chez lui qu'arrivent les cargaisons. Voir `CapaciteTransfert`.
+   */
+  transfert: CapaciteTransfert | null;
+  /** **Marché universel** (16/09) — `null` = ce palier ne vend pas. */
+  marche: CapaciteMarche | null;
+}
+
+// ─── Les échanges hors du plateau (16/09) ────────────────────────────────────
+
+/**
+ * Où un transfert peut aller. ⚠️ Mêmes valeurs que `moteur/echanges.go`.
+ * « porte » est RÉSERVÉE : les portes ne sont pas encore développées, la case
+ * est montrée grisée.
+ */
+export type DestinationTransfert = "plateau" | "tpt" | "porte";
+
+export const DESTINATIONS_TRANSFERT: {
+  valeur: DestinationTransfert;
+  libelle: string;
+  aide: string;
+  bientot?: boolean;
+}[] = [
+  {
+    valeur: "plateau",
+    libelle: "ses autres plateaux",
+    aide: "une autre planète du jeu, une orbite, sa planète",
+  },
+  { valeur: "tpt", libelle: "le plateau TPT", aide: "le plateau de type TPTplateau" },
+  { valeur: "porte", libelle: "une porte", aide: "pas encore développé", bientot: true },
+];
+
+/**
+ * **Le transfert, déclaré sur le palier.**
+ *
+ * - `envois_max` : envois **en route** au plus depuis ce bâtiment ;
+ * - `quantite_max` : unités au plus par envoi ;
+ * - `duree_minutes` : la durée du voyage (0 = instantané).
+ *
+ * ⚠️ **Les règles d'arrivée** (Guillaume, 16/09) : pas de quai sur le plateau
+ * d'arrivée, ou un quai détruit pendant le voyage → **la cargaison est
+ * perdue** ; des quais **pleins** → elle **attend** qu'il y ait de la place.
+ * Un quai qui ne stocke pas la ressource ne l'attendra jamais : perdue aussi.
+ * La monnaie (FluxStock) arrive dans la réserve, mais il lui faut un quai.
+ */
+export interface CapaciteTransfert {
+  destinations: DestinationTransfert[];
+  envois_max: number;
+  quantite_max: number;
+  duree_minutes: number;
+}
+
+/**
+ * **Le marché universel, déclaré sur le palier.** Le joueur y bloque un stock
+ * pour le vendre (la marchandise quitte le coffre tant que l'offre est
+ * ouverte) ; l'acheteur la reçoit après `duree_minutes`.
+ *
+ * ⚠️ Un marché détruit **perd** la marchandise en vente.
+ */
+export interface CapaciteMarche {
+  offres_max: number;
+  quantite_max: number;
+  duree_minutes: number;
+}
+
+export function transfertVide(): CapaciteTransfert {
+  return { destinations: ["plateau"], envois_max: 1, quantite_max: 100, duree_minutes: 10 };
+}
+
+export function marcheVide(): CapaciteMarche {
+  return { offres_max: 1, quantite_max: 100, duree_minutes: 10 };
+}
+
+function entierLu(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0;
+}
+
+export function normaliserTransfert(v: unknown): CapaciteTransfert | null {
+  if (v === null || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const connues = DESTINATIONS_TRANSFERT.map((d) => d.valeur as string);
+  const destinations = Array.isArray(o.destinations)
+    ? (o.destinations.filter(
+        (d, i, l) => typeof d === "string" && connues.includes(d) && l.indexOf(d) === i,
+      ) as DestinationTransfert[])
+    : [];
+  return {
+    destinations,
+    envois_max: Math.max(0, entierLu(o.envois_max)),
+    quantite_max: Math.max(0, entierLu(o.quantite_max)),
+    duree_minutes: Math.max(0, entierLu(o.duree_minutes)),
+  };
+}
+
+export function normaliserMarche(v: unknown): CapaciteMarche | null {
+  if (v === null || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  return {
+    offres_max: Math.max(0, entierLu(o.offres_max)),
+    quantite_max: Math.max(0, entierLu(o.quantite_max)),
+    duree_minutes: Math.max(0, entierLu(o.duree_minutes)),
+  };
+}
+
+/** Ce que le serveur refuserait dans les échanges d'un palier (bloquant). */
+export function erreursEchanges(p: Pick<Palier, "transfert" | "marche">): string[] {
+  const erreurs: string[] = [];
+  const t = p.transfert;
+  if (t) {
+    if (t.destinations.length === 0) erreurs.push("transfert : coche au moins une destination.");
+    if (!(t.envois_max >= 1)) erreurs.push("transfert : au moins 1 envoi à la fois.");
+    if (!(t.quantite_max >= 1)) erreurs.push("transfert : au moins 1 unité par envoi.");
+    if (!(Number.isInteger(t.duree_minutes) && t.duree_minutes >= 0))
+      erreurs.push("transfert : la durée est un entier de minutes ≥ 0.");
+  }
+  const m = p.marche;
+  if (m) {
+    if (!(m.offres_max >= 1)) erreurs.push("marché : au moins 1 offre à la fois.");
+    if (!(m.quantite_max >= 1)) erreurs.push("marché : au moins 1 unité par offre.");
+    if (!(Number.isInteger(m.duree_minutes) && m.duree_minutes >= 0))
+      erreurs.push("marché : la durée est un entier de minutes ≥ 0.");
+  }
+  return erreurs;
+}
+
+/** Vrai si au moins un palier transfère : la tuile est un quai. */
+export function estQuai(paliers: Pick<Palier, "transfert">[]): boolean {
+  return paliers.some((p) => p.transfert !== null);
+}
+
+export function estMarche(paliers: Pick<Palier, "marche">[]): boolean {
+  return paliers.some((p) => p.marche !== null);
+}
+
+/**
+ * Les avertissements (orange, non bloquants) des échanges : un quai qui ne
+ * stocke rien perdra toute cargaison, un marché sans coffre n'aura rien à
+ * vendre.
+ */
+export function avertissementsEchanges(paliers: Palier[], logistique: Logistique): string[] {
+  const stocke = logistique.stockage.some((l) => l.max > 0);
+  const out: string[] = [];
+  if (estQuai(paliers) && !stocke)
+    out.push(
+      "Ce quai ne stocke aucune ressource (onglet Stock & appro) : toute cargaison qui y arrive sera perdue, sauf la monnaie.",
+    );
+  if (estMarche(paliers) && !stocke)
+    out.push(
+      "Ce marché n'a pas de coffre (onglet Stock & appro) : il n'aura jamais rien à mettre en vente.",
+    );
+  return out;
 }
 
 /*
@@ -945,6 +1098,8 @@ export function palierVide(numero: number): Palier {
     cout: [],
     utilisation: [],
     production: [],
+    transfert: null,
+    marche: null,
   };
 }
 
@@ -1028,6 +1183,8 @@ export function normaliserPalier(n: unknown, position: number): Palier {
           proximites: normaliserProximites(l),
         }))
       : [],
+    transfert: normaliserTransfert((o as { transfert?: unknown }).transfert),
+    marche: normaliserMarche((o as { marche?: unknown }).marche),
   };
 }
 
@@ -1079,6 +1236,7 @@ export function erreursPalier(p: Palier): string[] {
       );
     }
   }
+  erreurs.push(...erreursEchanges(p));
   return erreurs;
 }
 
@@ -1091,7 +1249,12 @@ export function erreursPaliers(paliers: Palier[]): string[] {
  * Un palier tel qu'il PART en base : `cycle_minutes` n'y figure que si le
  * palier tourne, et une consommation seule porte `direct`.
  */
-export type PalierEnregistre = Omit<Palier, "cycle_minutes"> & { cycle_minutes?: number };
+export type PalierEnregistre = Omit<Palier, "cycle_minutes" | "transfert" | "marche"> & {
+  cycle_minutes?: number;
+  /** Absent = ce palier ne transfère pas (jamais `null` en base). */
+  transfert?: CapaciteTransfert;
+  marche?: CapaciteMarche;
+};
 
 /**
  * Renumérotation de sécurité avant l'envoi : la position dans le tableau et le
@@ -1129,6 +1292,8 @@ export function paliersPourEnregistrer(paliers: Palier[]): PalierEnregistre[] {
       })),
     };
     if (palierTourne(p)) sortie.cycle_minutes = p.cycle_minutes;
+    if (p.transfert) sortie.transfert = { ...p.transfert, destinations: [...p.transfert.destinations] };
+    if (p.marche) sortie.marche = { ...p.marche };
     return sortie;
   });
 }

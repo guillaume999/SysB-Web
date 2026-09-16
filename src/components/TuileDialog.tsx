@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Aide, { Terme } from "@/components/Aide";
 import { ChoixIconeJoueur, ChoixPlanete } from "@/components/Conception";
 import TuileCouts from "@/components/TuileCouts";
+import TuileEchanges from "@/components/TuileEchanges";
 import TuilePlacement from "@/components/TuilePlacement";
 import TuileStockage from "@/components/TuileStockage";
 import { Vignette } from "@/components/Vignette";
@@ -54,13 +55,14 @@ import { nomDePlanete, type Icone, type Planete } from "@/lib/planetes";
  * Aucun champ ne laisse taper une reference : le modele se choisit dans une
  * liste. C'est ce qui remplace la validation que PocketBase ne fait pas.
  */
-type Onglet = "identite" | "placement" | "cout" | "stock";
+type Onglet = "identite" | "placement" | "cout" | "stock" | "echanges";
 
 const ONGLETS: { cle: Onglet; libelle: string }[] = [
   { cle: "identite", libelle: "Identite" },
   { cle: "placement", libelle: "Placement" },
   { cle: "cout", libelle: "Cout" },
   { cle: "stock", libelle: "Stock & appro" },
+  { cle: "echanges", libelle: "Echanges" },
 ];
 
 export default function TuileDialog({
@@ -1039,6 +1041,10 @@ export default function TuileDialog({
             />
           )}
 
+          {onglet === "echanges" && (
+            <TuileEchanges paliers={paliers} logistique={logistique} onChange={setPaliers} />
+          )}
+
           {onglet === "stock" && (
             <TuileStockage
               logistique={logistique}
@@ -1055,7 +1061,7 @@ export default function TuileDialog({
             diagnostique pas. */}
         {erreursCout.length > 0 && (
           <div className="mt-3 rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
-            <p>Onglet Cout — le serveur refuserait cette tuile :</p>
+            <p>Onglets Cout / Echanges — le serveur refuserait cette tuile :</p>
             <ul className="ml-4 list-disc">
               {erreursCout.map((e) => (
                 <li key={e}>{e}</li>
