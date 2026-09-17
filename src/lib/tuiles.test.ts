@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  altitudeDe,
   casesCouvertes,
   categoriesDe,
   categoriesVersTexte,
@@ -506,5 +507,26 @@ describe("le bonus de satisfaction (§5.5)", () => {
       { seuil: 0, rendement: 60 },
       { seuil: 0, rendement: 0 },
     ]);
+  });
+});
+
+// ============================================================
+//  L'ALTITUDE PAR DÉFAUT D'UNE TUILE (18/09)
+//
+//  ⚠️ Ce que ça protège : la tuile ne porte qu'une valeur DE DÉPART. Le jour
+//  où quelqu'un voudra lire le relief ici, ce test lui dira que la hauteur
+//  d'une case se lit dans le plateau, pas dans le catalogue.
+// ============================================================
+
+describe("altitude par defaut", () => {
+  it("vaut 0 pour toute tuile d'avant le relief", () => {
+    expect(altitudeDe({})).toBe(0);
+    expect(altitudeDe(null)).toBe(0);
+  });
+
+  it("ramene une saisie de travers a un cran valable", () => {
+    expect(altitudeDe({ altitude: 4 })).toBe(4);
+    expect(altitudeDe({ altitude: -3 })).toBe(0);
+    expect(altitudeDe({ altitude: 2.9 })).toBe(2);
   });
 });

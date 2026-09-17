@@ -28,6 +28,18 @@ import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressourc
 // memes ages, et plus personne ne sait laquelle est la bonne.
 import { libelleAge, loadAges, type Age } from "@/lib/ages";
 import { loadTechnologies, type Technologie } from "@/lib/technologies";
+import { loadSocles, type Socle } from "@/lib/socles";
+// ⚠️ L'ORDRE des categories (17/09) : il est STOCKE, dans la collection
+// `categories`, et c'est le MEME que celui des onglets du magasin dans le jeu.
+// La grille ne fait que le suivre ; les fleches de ses lignes l'ecrivent.
+import {
+  deplacerCategorie,
+  enregistrerOrdre,
+  loadCategoriesRangees,
+  ordreCategories,
+  synchroniserRenommage,
+  type CategorieRangee,
+} from "@/lib/categories";
 import {
   categorieRenommeeDans,
   COLLECTION_TUILES,
@@ -43,6 +55,7 @@ import {
   logistiqueDe,
   paliersDe,
   placementDe,
+  toutesLesCategories,
   tuilesCitant,
   type Tuile,
   type ValeursTuile,
@@ -321,6 +334,17 @@ export default function Tuiles() {
   const [ages, setAges] = useState<Age[]>([]);
   const [technologies, setTechnologies] = useState<Technologie[]>([]);
   const [icones, setIcones] = useState<Icone[]>([]);
+  const [socles, setSocles] = useState<Socle[]>([]);
+  const [rangees, setRangees] = useState<CategorieRangee[]>([]);
+  /**
+   * ⚠️ LE PLEIN ECRAN NE SE RETIENT PAS d'une visite a l'autre, contrairement
+   * a la vue et au tri : on y entre pour lire le tableau, on n'y vit pas.
+   * Retrouver le site sans sa barre laterale en arrivant sur la page
+   * passerait pour une panne.
+   */
+  const [pleinEcran, setPleinEcran] = useState(false);
+  /** Une ecriture d'ordre est en cours : les fleches attendent. */
+  const [rangementOccupe, setRangementOccupe] = useState(false);
   // ⚠️ Admin seulement : la planète qu'il regarde. "" = toutes.
   const [filtrePlanete, setFiltrePlanete] = useState("");
 
@@ -373,6 +397,10 @@ export default function Tuiles() {
   );
   const choisirVue = (v: Vue) => {
     setVue(v);
+    // ⚠️ La vue Liste n'a pas de plein ecran : y passer sans en sortir
+    // laisserait un panneau fixe par-dessus la page, sans bouton pour le
+    // fermer.
+    if (v !== "tableau") setPleinEcran(false);
     ecrirePref(CLE_VUE, v);
   };
 
@@ -580,13 +608,22 @@ export default function Tuiles() {
       // Les technos aussi, et pour la meme raison : leur collection peut etre
       // vide, ou refusee ; le catalogue doit rester ouvrable. La regle
       // « technologie requise » dit alors « aucune technologie declaree ».
-      const [t, m, r, a, tech, ico] = await Promise.all([
+      // Les socles aussi, et pour la meme raison : leur collection n'existe
+      // qu'apres `patch-socles-2026-09-17.js`. Sans elle, le champ Socle dit
+      // « aucune couleur declaree » au lieu de fermer le catalogue.
+      // L'ordre des categories aussi, et pour la meme raison : sa collection
+      // n'existe qu'apres `patch-categories-2026-09-17.js`. Sans elle, les
+      // lignes de la grille restent rangees par ordre alphabetique, comme
+      // avant le 17/09 — et les fleches ne s'affichent pas.
+      const [t, m, r, a, tech, ico, soc, cat] = await Promise.all([
         loadTuiles(),
         loadModeles3D(),
         loadRessources(),
         loadAges().catch(() => [] as Age[]),
         loadTechnologies().catch(() => [] as Technologie[]),
         loadIcones().catch(() => [] as Icone[]),
+        loadSocles().catch(() => [] as Socle[]),
+        loadCategoriesRangees().catch(() => [] as CategorieRangee[]),
       ]);
       setToutesTuiles(t);
       setTousModeles(m);
@@ -594,6 +631,8 @@ export default function Tuiles() {
       setAges(a);
       setTechnologies(tech);
       setIcones(ico);
+      setSocles(soc);
+      setRangees(cat);
     } catch (e) {
       setErreur(messageErreur(e, "Chargement du catalogue impossible."));
     } finally {
@@ -604,6 +643,35 @@ export default function Tuiles() {
   useEffect(() => {
     void charger();
   }, [charger]);
+
+  /**
+   * Le plein ecran : Echap en sort, et la page derriere ne defile plus.
+   *
+   * ⚠️ **Echap ne sort PAS quand la fiche d'une tuile est ouverte** : elle
+   * ecoute la meme touche pour se fermer. Sans ce garde, un seul Echap
+   * fermerait la fiche ET le plein ecran, et on se retrouverait deux ecrans
+   * en arriere sans l'avoir demande.
+   *
+   * ⚠️ **Le defilement du body est bloque** pendant ce temps : le panneau est
+   * `fixed`, donc la molette au-dessus d'une de ses zones non defilantes fait
+   * glisser la page cachee derriere — et on la retrouve ailleurs en sortant.
+   */
+  useEffect(() => {
+    if (!pleinEcran) return;
+
+    const surTouche = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && dialog === null) setPleinEcran(false);
+    };
+    window.addEventListener("keydown", surTouche);
+
+    const defilementAvant = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", surTouche);
+      document.body.style.overflow = defilementAvant;
+    };
+  }, [pleinEcran, dialog]);
 
 
   const enregistrer = async (valeurs: ValeursTuile) => {
@@ -621,6 +689,49 @@ export default function Tuiles() {
       setErreurDialog(messageErreur(e, "Enregistrement refuse."));
     } finally {
       setSaving(false);
+    }
+  };
+
+  /**
+   * L'ordre des lignes de la grille — et des onglets du magasin dans le jeu.
+   *
+   * ⚠️ Il part des tuiles de la PORTEE, pas des tuiles filtrees : un filtre de
+   * planete ne doit pas faire disparaitre une categorie de la liste des rangs,
+   * sinon un deplacement fait sous filtre reecrirait un ordre ampute.
+   */
+  const ordreDesCategories = useMemo(
+    () => ordreCategories(rangees, toutesLesCategories(tuilesDeLaPortee)),
+    [rangees, tuilesDeLaPortee],
+  );
+
+  /**
+   * Monte (`-1`) ou descend (`+1`) une ligne de categorie, et l'ecrit.
+   *
+   * ⚠️ `visibles` vient de la GRILLE, pas d'ici : c'est elle qui sait quelles
+   * lignes un filtre laisse voir, et un cran se compte sur ce qu'on voit.
+   *
+   * ⚠️ On RECHARGE la collection apres coup plutot que de deviner les rangs
+   * ecrits : si deux onglets rangent en meme temps, c'est la base qui tranche.
+   */
+  const deplacerLigne = async (categorie: string, sens: -1 | 1, visibles: string[]) => {
+    const apres = deplacerCategorie(ordreDesCategories, visibles, categorie, sens);
+    if (apres === ordreDesCategories) return;
+
+    setRangementOccupe(true);
+    setErreur(null);
+    try {
+      await enregistrerOrdre(apres, rangees);
+      setRangees(await loadCategoriesRangees());
+    } catch (e) {
+      setErreur(
+        messageErreur(
+          e,
+          "Ordre non enregistre. La collection `categories` existe-t-elle " +
+            "(patch-categories-2026-09-17.js) ?",
+        ),
+      );
+    } finally {
+      setRangementOccupe(false);
     }
   };
 
@@ -657,6 +768,18 @@ export default function Tuiles() {
       // laisse les deux noms en base, ce qui est pire que ne rien faire.
       for (const { id, ligne } of aEcrire)
         await pb.collection(COLLECTION_TUILES).update(id, { categorie: ligne });
+
+      // ⚠️ LE RANG DOIT SUIVRE LE NOM. Sans ca, la rangee « Vivres » resterait
+      // en base sans tuile et « Nourriture » repartirait a la fin de la liste
+      // comme une inconnue. Les tuiles, elles, sont DEJA reecrites : si la
+      // collection d'ordre refuse, on le dit, on ne defait rien.
+      try {
+        await synchroniserRenommage(rangees, ancienne, nouvelle);
+      } catch (e) {
+        setErreurDialog(
+          messageErreur(e, "Categorie renommee, mais son rang n'a pas suivi."),
+        );
+      }
 
       await charger();
     } catch (e) {
@@ -735,6 +858,19 @@ export default function Tuiles() {
               </button>
             ))}
           </div>
+          {/* ⚠️ Il n'apparait qu'en vue Tableau : c'est la seule qui gagne
+              quelque chose a prendre l'ecran. La liste, elle, tient en
+              largeur. */}
+          {vue === "tableau" && (
+            <button
+              type="button"
+              className="btn-ghost h-8 px-2 py-1 text-xs"
+              onClick={() => setPleinEcran(true)}
+              title="Le tableau prend toute la fenetre. Echap pour en sortir."
+            >
+              Plein ecran
+            </button>
+          )}
           {vue === "liste" && (
             <label className="flex items-center gap-2 text-xs text-slate-400">
               Afficher
@@ -826,6 +962,25 @@ export default function Tuiles() {
         </p>
       )}
 
+      {/* ⚠️ EN PLEIN ECRAN, CE BLOC SORT DU FLUX (`fixed inset-0`) et couvre
+          toute la fenetre, barre laterale comprise. Ce qui reste derriere
+          n'est pas cache, il est simplement RECOUVERT — d'ou le fond opaque,
+          sans lequel on lirait le titre de la page au travers.
+
+          ⚠️ LES FILTRES ET LE COMPTE PARTENT AVEC LE TABLEAU, c'est tout
+          l'interet : un plein ecran qui ne garderait que la grille obligerait
+          a en sortir pour filtrer, donc a le quitter tout le temps.
+
+          ⚠️ `z-40`, PAS `z-50` : la fiche d'une tuile est a `z-50`, et elle
+          s'ouvre depuis ce tableau. A egalite, elle passerait dessous et le
+          clic sur une carte n'ouvrirait rien de visible. */}
+      <div
+        className={
+          pleinEcran
+            ? "fixed inset-0 z-40 flex flex-col gap-1 overflow-hidden bg-ink p-3"
+            : undefined
+        }
+      >
       {/* Le filtre, puis le compte. Dans cet ordre : on regle, puis on lit ce
           que le reglage a donne. */}
       {!chargement && tuiles.length > 0 && (
@@ -862,6 +1017,19 @@ export default function Tuiles() {
           {filtreActif && (
             <button type="button" className="text-xs text-accent hover:underline" onClick={reinitialiser}>
               tout afficher
+            </button>
+          )}
+          {/* ⚠️ La sortie est DANS la barre de filtres, pas dans un coin a
+              elle : c'est la seule bande qui reste a l'ecran quoi qu'on
+              fasse, et un plein ecran dont on ne voit pas la sortie se ferme
+              en rechargeant la page. */}
+          {pleinEcran && (
+            <button
+              type="button"
+              className="btn-ghost ml-auto h-8 px-2 py-1 text-xs"
+              onClick={() => setPleinEcran(false)}
+            >
+              Quitter le plein ecran (Echap)
             </button>
           )}
         </div>
@@ -938,6 +1106,10 @@ export default function Tuiles() {
         <GrilleTuiles
           tuiles={tuilesTriees}
           ages={ages}
+          ordreCategories={ordreDesCategories}
+          peutRanger={portee.admin}
+          rangementOccupe={rangementOccupe}
+          onDeplacerCategorie={(c, sens, visibles) => void deplacerLigne(c, sens, visibles)}
           probleme={(t) => problemeDeModele(modeleDe(t))}
           avertissement={avertissementSuppression}
           aSupprimer={aSupprimer}
@@ -947,6 +1119,7 @@ export default function Tuiles() {
           }}
           onDemanderSuppression={setASupprimer}
           onSupprimer={(t) => void supprimer(t)}
+          plein={pleinEcran}
         />
       ) : (
         <div className="card overflow-x-auto">
@@ -1126,6 +1299,7 @@ export default function Tuiles() {
           </table>
         </div>
       )}
+      </div>
 
       {dialog && (
         <TuileDialog
@@ -1138,6 +1312,7 @@ export default function Tuiles() {
           portee={portee}
           planetes={planetes}
           icones={icones}
+          socles={socles}
           planeteProposee={planeteParDefaut(planetes, "tuiles", filtrePlanete)}
           saving={saving}
           erreur={erreurDialog}

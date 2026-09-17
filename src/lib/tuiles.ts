@@ -27,6 +27,7 @@
  */
 
 import { pb } from "@/lib/pb";
+import { cranValable } from "@/lib/plateaux";
 import type { Modele3D, TypePlateau } from "@/lib/modeles3d";
 
 export type { TypePlateau };
@@ -1930,6 +1931,27 @@ export type Tuile = {
   planete?: string;
   /** Relation → `icones` (14/09). `chemin_icone` en est la copie que lit Unity. */
   icone?: string;
+  /**
+   * **La couleur du socle** (17/09) — relation → `socles`. Elle ne dit que la
+   * COULEUR : la forme du socle vient de l'altitude de la case.
+   *
+   * ⚠️ Le jeu lit `expand=socle` et charge le matériau partagé
+   * `Materials/Socles/Socle_<code>`. Vide = la tuile garde l'apparence de son
+   * prefab, ce qui est le cas de TOUTES les tuiles d'avant le 17/09 — et le
+   * cas normal des modèles où l'hexagone et le bâtiment sont fondus en un seul
+   * maillage, qu'il ne faut surtout pas repeindre.
+   */
+  socle?: string;
+  /**
+   * **L'altitude par défaut de la tuile** (18/09) — le cran que la pose recopie
+   * sur la case. 0 = au niveau du sol, et c'est le cas de toutes les tuiles
+   * d'avant cette date.
+   *
+   * ⚠️ **Ce n'est PAS l'altitude de la case** : celle-là vit dans le plateau
+   * (`altitudesBase64`), et l'éditeur peut la corriger sans toucher à la tuile.
+   * Changer ce champ ne remue donc RIEN de ce qui est déjà posé — c'est voulu.
+   */
+  altitude?: number;
   categorie: string;
   description: string;
   /**
@@ -1989,6 +2011,10 @@ export interface ValeursTuile {
   planete: string;
   /** Relation → `icones`, posée par le choix d'icône d'un joueur. */
   icone?: string;
+  /** Relation → `socles` : la couleur du socle. Vide = pas de socle choisi. */
+  socle: string;
+  /** Le cran d'altitude que la pose de cette tuile écrit sur la case. */
+  altitude: number;
   categorie: string;
   description: string;
   couleur: string;
@@ -2018,6 +2044,19 @@ export function contrainteDe(tuile: {
 }): Contrainte {
   if (!tuile.indestructible) return "destructible";
   return tuile.non_remplacable ? "figee" : "indestructible";
+}
+
+// --- Altitude ----------------------------------------------------------------
+
+/**
+ * L'altitude par défaut d'une tuile, ramenée à un cran valable.
+ *
+ * ⚠️ Un seul point de lecture, comme `cheminIcone` : le site, le serveur et le
+ * jeu doivent poser le MÊME cran, sinon une case n'a pas la même hauteur selon
+ * qui la dessine.
+ */
+export function altitudeDe(tuile: { altitude?: number } | null | undefined): number {
+  return cranValable(tuile?.altitude);
 }
 
 // --- Chargement et helpers --------------------------------------------------

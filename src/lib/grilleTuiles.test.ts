@@ -36,6 +36,19 @@ describe("rangerEnGrille", () => {
     expect(g.cellule(SANS_CATEGORIE, 1).map((x) => x.id)).toEqual(["a"]);
   });
 
+  it("suit l'ordre imposé, et met les catégories qu'il ignore à la suite", () => {
+    const g = rangerEnGrille([t("a", 1, "Zinc"), t("b", 1, "Vivres"), t("c", 1, "Abri")], [1], [
+      "Vivres",
+      "Zinc",
+    ]);
+    expect(g.categories).toEqual(["Vivres", "Zinc", "Abri"]);
+  });
+
+  it("garde « sans catégorie » en dernier même si l'ordre imposé le cite", () => {
+    const g = rangerEnGrille([t("a", 1, ""), t("b", 1, "Zinc")], [1], [SANS_CATEGORIE, "Zinc"]);
+    expect(g.categories).toEqual(["Zinc", SANS_CATEGORIE]);
+  });
+
   it("ne crée pas deux lignes pour une différence de casse", () => {
     const g = rangerEnGrille([t("a", 1, "Vivres"), t("b", 2, "vivres")], [1, 2]);
     expect(g.categories).toEqual(["Vivres"]);

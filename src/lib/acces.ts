@@ -37,6 +37,7 @@ export type Lien = { to: string; label: string };
 export const ECRANS_CONTENU: Lien[] = [
   { to: "/3dmodeltuile", label: "3DmodelTuile" },
   { to: "/icones", label: "Icônes" },
+  { to: "/socles", label: "Socles" },
   { to: "/ressources", label: "Ressources" },
   { to: "/ages", label: "Âges" },
   { to: "/tuiles", label: "Tuiles" },

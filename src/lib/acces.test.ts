@@ -99,16 +99,17 @@ describe("les écrans publics", () => {
 describe("ce que voit un admin", () => {
   const vu = ecransVisibles(true);
 
-  // ⚠️ ONZE depuis le 15/09 au soir : « Planètes » est fondu dans « Modèles »,
-  //    « Icônes », « Limites » puis « Guildes » sont arrivés. Le compte est volontairement écrit en dur —
-  //    c'est lui qui fait rougir l'essai quand un écran est ajouté ou retiré
-  //    sans être décidé.
-  it("garde les onze écrans de contenu ET la Conception", () => {
-    // Onze depuis le 15/09 au soir : « Limites » puis « Guildes » sont arrivés.
-    expect(vu.contenu).toHaveLength(11);
+  // ⚠️ DOUZE depuis le 17/09 : « Planètes » est fondu dans « Modèles »,
+  //    « Icônes », « Limites », « Guildes » puis « Socles » sont arrivés. Le compte est
+  //    volontairement écrit en dur — c'est lui qui fait rougir l'essai quand un
+  //    écran est ajouté ou retiré sans être décidé.
+  it("garde les douze écrans de contenu ET la Conception", () => {
+    // Douze depuis le 17/09 : « Socles » (les couleurs de socle) est arrivé.
+    expect(vu.contenu).toHaveLength(12);
     expect(vu.contenu.map((l) => l.to)).toContain("/limites");
     expect(vu.contenu.map((l) => l.to)).toContain("/guildes");
     expect(vu.contenu.map((l) => l.to)).toContain("/icones");
+    expect(vu.contenu.map((l) => l.to)).toContain("/socles");
     expect(vu.contenu.map((l) => l.to)).not.toContain("/planetes");
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);

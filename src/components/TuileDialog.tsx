@@ -22,6 +22,7 @@ import {
   categoriesRenommees,
   categoriesVersTexte,
   cheminIconeAttendu,
+  altitudeDe,
   contrainteDe,
   couleurAuto,
   erreursPaliers,
@@ -44,6 +45,8 @@ import {
 } from "@/lib/tuiles";
 import { duCatalogue, etiquettePourPlanete, type Portee } from "@/lib/conception";
 import { nomDePlanete, type Icone, type Planete } from "@/lib/planetes";
+import { cheminMateriau, libelleSocle, type Socle } from "@/lib/socles";
+import { ALTITUDE_MAX, cranValable } from "@/lib/plateaux";
 
 /**
  * Creation / modification d'une tuile du catalogue.
@@ -75,6 +78,7 @@ export default function TuileDialog({
   portee,
   planetes,
   icones,
+  socles,
   planeteProposee,
   saving,
   erreur,
@@ -101,6 +105,11 @@ export default function TuileDialog({
   portee: Portee;
   planetes: Planete[];
   icones: Icone[];
+  /**
+   * Les couleurs de socle declarees (onglet Socles). Liste vide = la collection
+   * n'existe pas encore, et le champ le dit au lieu de proposer un menu vide.
+   */
+  socles: Socle[];
   /** La planète proposée à une tuile neuve (admin). */
   planeteProposee: string;
   saving: boolean;
@@ -130,6 +139,15 @@ export default function TuileDialog({
     portee.admin ? (tuile?.planete ?? planeteProposee) : (portee.planete?.id ?? ""),
   );
   const [iconeId, setIconeId] = useState(tuile?.icone ?? "");
+  // ⚠️ LA COULEUR DU SOCLE (17/09) : une relation vers `socles`, pas une
+  //    couleur tapee. Une couleur = un materiau partage dans Unity, donc un
+  //    seul ordre de dessin pour toutes les cases qui la portent.
+  const [socle, setSocle] = useState(tuile?.socle ?? "");
+  // ⚠️ L'ALTITUDE PAR DÉFAUT (18/09), pas l'altitude de la case : elle est
+  // recopiée sur la case à la pose, et l'éditeur de plateau peut ensuite la
+  // corriger sans toucher à la tuile. La changer ici ne remue donc rien de ce
+  // qui est déjà posé.
+  const [altitude, setAltitude] = useState(String(altitudeDe(tuile)));
   // Ce qui joue sur cette planète — les seules choses qu'une tuile peut citer.
   const catalogue = useMemo(() => duCatalogue(tuiles, planetes, planete), [tuiles, planetes, planete]);
   const ressources = useMemo(
@@ -191,6 +209,8 @@ export default function TuileDialog({
     () => modeles.find((m) => m.id === modele) ?? null,
     [modeles, modele],
   );
+
+  const socleChoisi = useMemo(() => socles.find((s) => s.id === socle) ?? null, [socles, socle]);
 
   /**
    * Combien de tuiles visent chaque modele 3D. Un meme modele peut servir a
@@ -337,6 +357,8 @@ export default function TuileDialog({
       planete,
       // ⚠️ Un joueur choisit une ICÔNE, le serveur en recopie le chemin.
       ...(portee.admin ? {} : { icone: iconeId }),
+      socle,
+      altitude: cranValable(altitude),
       categorie: categoriesVersTexte(categories),
       description: description.trim(),
       couleur: couleur.trim(),
@@ -406,6 +428,19 @@ export default function TuileDialog({
                 <Terme nom="type de plateau">
                   Sur quel plateau la tuile existe. Il est devine du dossier du modele, tu peux le
                   forcer.
+                </Terme>
+                <Terme nom="altitude par defaut">
+                  Le cran de relief que cette tuile donne a la case ou on la pose. Le relief vit
+                  sur la CASE, pas sur la tuile : c'est une valeur de depart, pas une propriete
+                  qui la suit.
+                </Terme>
+                <Terme nom="socle">
+                  La COULEUR du socle de la case, choisie parmi celles de l'onglet Socles. Sa
+                  HAUTEUR, elle, vient de l'altitude de la case, pas de la tuile. Le jeu ne
+                  repeint que l'objet nomme &laquo; Socle &raquo; du prefab : un modele ou
+                  l'hexagone et le batiment sont fondus n'en a pas, et se laisse donc sans socle.
+                  La couleur ne se tape pas ici parce qu'une couleur = un materiau partage : c'est
+                  ce qui permet de dessiner toutes les cases d'une meme couleur en une fois.
                 </Terme>
                 <Terme nom="categorie">
                   Le regroupement dans le menu de construction du jeu. Une tuile peut en porter
@@ -613,6 +648,70 @@ export default function TuileDialog({
                     Aucun modele declare : commence par l'onglet 3DmodelTuile.
                   </p>
                 )}
+              </div>
+
+              <div>
+                <label className="label" htmlFor="tuile-socle">
+                  Socle
+                </label>
+                <div className="flex items-center gap-3">
+                  {socleChoisi && (
+                    <span
+                      className="inline-block h-9 w-9 shrink-0 rounded border border-edge"
+                      style={{ backgroundColor: socleChoisi.couleur }}
+                      aria-hidden
+                    />
+                  )}
+                  <select
+                    id="tuile-socle"
+                    className="input"
+                    value={socle}
+                    onChange={(e) => setSocle(e.target.value)}
+                  >
+                    <option value="">aucun — le prefab garde son apparence</option>
+                    {socles.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {libelleSocle(s)} ({s.couleur})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {socleChoisi ? (
+                  <p className="mt-1 break-all font-mono text-[11px] text-slate-500">
+                    {cheminMateriau(socleChoisi.code)}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    A laisser vide quand l'hexagone et le batiment sont fondus dans le meme
+                    modele : il n'y a alors pas de socle a peindre a part.
+                  </p>
+                )}
+                {socles.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-300">
+                    Aucune couleur declaree : commence par l'onglet Socles.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="label" htmlFor="tuile-altitude">
+                  Altitude par defaut
+                </label>
+                <input
+                  id="tuile-altitude"
+                  className="input w-32"
+                  type="number"
+                  min={0}
+                  max={ALTITUDE_MAX}
+                  step={1}
+                  value={altitude}
+                  onChange={(e) => setAltitude(e.target.value)}
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Le cran que la pose de cette tuile ecrit sur la case. 0 = au niveau du sol.
+                  L'editeur de plateau peut ensuite corriger la case sans toucher a la tuile, et
+                  changer ce chiffre ne remue rien de ce qui est deja pose.
+                </p>
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">

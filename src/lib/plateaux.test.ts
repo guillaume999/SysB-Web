@@ -11,8 +11,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALTITUDE_MAX,
+  altitudeDeCase,
+  cranValable,
+  decoderAltitudes,
   decoderTiles,
+  encoderAltitudes,
   encoderTiles,
+  estPlat,
+  redimensionnerAltitudes,
   etatVide,
   etatsDe,
   octetsParCase,
@@ -161,3 +168,55 @@ describe("la grille", () => {
   });
 });
 
+// ============================================================
+//  L'ALTITUDE DES CASES (18/09) — le relief vit sur la CASE.
+//
+//  ⚠️ Ce qui se perdrait en silence : un plateau plat qui se met à écrire
+//  5 000 zéros en base, ou une grille d'altitude qui se décale d'une case
+//  quand on change la largeur — le relief irait alors sous les mauvais
+//  bâtiments, et personne ne saurait dire quand ça a commencé.
+// ============================================================
+
+describe("altitude des cases", () => {
+  it("un plateau sans altitude est plat, et ne s'écrit pas", () => {
+    expect([...decoderAltitudes({ largeur: 2, hauteur: 2 })]).toEqual([0, 0, 0, 0]);
+    expect([...decoderAltitudes({ largeur: 2, hauteur: 1, altitudesBase64: "" })]).toEqual([0, 0]);
+    expect(estPlat([0, 0, 0])).toBe(true);
+    // ⚠️ La chaîne VIDE, pas une suite de zéros : c'est ce qui laisse les
+    // plateaux d'avant le relief exactement comme ils sont.
+    expect(encoderAltitudes([0, 0, 0, 0])).toBe("");
+  });
+
+  it("relit ce qu'il écrit, un octet par case", () => {
+    const crans = [0, 1, 10, 255, 3, 0];
+    const texte = encoderAltitudes(crans);
+    expect(atob(texte).length).toBe(6);
+    expect([...decoderAltitudes({ largeur: 3, hauteur: 2, altitudesBase64: texte })]).toEqual(crans);
+  });
+
+  it("un contenu abîmé rend un plateau lisible plutôt qu'une exception", () => {
+    expect([...decoderAltitudes({ largeur: 2, hauteur: 2, altitudesBase64: "§§" })]).toEqual([0, 0, 0, 0]);
+    expect([...decoderAltitudes({ largeur: 2, hauteur: 2, altitudesBase64: btoa("\x01\x02") })]).toEqual([1, 2, 0, 0]);
+  });
+
+  it("redimensionne en gardant les coordonnées, pas l'ordre des octets", () => {
+    const avant = Uint8Array.from([1, 2, 3, 4, 5, 6]); // largeur 3, hauteur 2
+    const apres = redimensionnerAltitudes(avant, { largeur: 3, hauteur: 2 }, { largeur: 2, hauteur: 2 });
+    expect([...apres]).toEqual([1, 2, 4, 5]);
+  });
+
+  it("borne les crans saisis au lieu de les laisser partir en base", () => {
+    expect(cranValable("3")).toBe(3);
+    expect(cranValable(-2)).toBe(0);
+    expect(cranValable(1e9)).toBe(ALTITUDE_MAX);
+    expect(cranValable("bonjour")).toBe(0);
+    expect(cranValable(2.7)).toBe(2);
+    expect(encoderAltitudes([-1, 999])).toBe(encoderAltitudes([0, ALTITUDE_MAX]));
+  });
+
+  it("lit le cran d'une case, et rend 0 hors du plateau", () => {
+    const crans = [1, 2, 3, 4];
+    expect(altitudeDeCase(crans, 2, 1, 1)).toBe(4);
+    expect(altitudeDeCase(crans, 2, 0, 5)).toBe(0);
+  });
+});

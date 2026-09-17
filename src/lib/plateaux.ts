@@ -158,6 +158,16 @@ export type Plateau = {
   largeur: number;
   hauteur: number;
   tilesBase64: string;
+  /**
+   * **L'altitude de chaque case** (18/09), un cran entier par case, encodée en
+   * base64 — voir `decoderAltitudes`. Le relief vit ici, PAS sur la tuile : une
+   * tuile pose son altitude par défaut, et l'éditeur peut ensuite la corriger
+   * case par case sans changer la tuile.
+   *
+   * ⚠️ **Absent ou vide = plateau plat**, et c'est le cas de tous les plateaux
+   * d'avant le 18/09 : rien à migrer, rien à réécrire.
+   */
+  altitudesBase64?: string;
   etats: EtatCase[] | null;
   /** `templates` seulement. */
   actif?: boolean;
@@ -187,6 +197,8 @@ export interface ValeursPlateau {
   largeur: number;
   hauteur: number;
   tilesBase64: string;
+  /** Voir `Plateau.altitudesBase64`. Chaîne vide = plateau plat. */
+  altitudesBase64?: string;
   etats: EtatCase[];
   actif?: boolean;
   amorcage?: Amorcage;
@@ -314,6 +326,117 @@ export function redimensionner(
     }
   }
   return sortie;
+}
+
+// --- L'altitude des cases ----------------------------------------------------
+//
+// ⚠️⚠️ L'ALTITUDE EST UNE DONNÉE DE CASE, PAS DE TUILE (décision du 18/09,
+// après avoir essayé l'inverse). Une tuile porte son altitude PAR DÉFAUT, que
+// la pose recopie sur la case ; ensuite les deux vivent leur vie. C'est ce qui
+// permettra, le jour venu, de monter le terrain sans détruire ce qui est posé
+// dessus — et ce qui évite de décliner chaque bâtiment en onze tuiles.
+//
+// ⚠️ LA COULEUR, ELLE, RESTE SUR LA TUILE : une couleur = un matériau partagé
+// dans Unity, et une couleur par case ferait un ordre de dessin par case.
+//
+// Un octet par case, la même façon de lire que `tilesBase64` : c'est la
+// LONGUEUR qui dit le format, et une longueur inattendue se lit quand même
+// plutôt que de refuser d'ouvrir le plateau.
+
+/** Un cran d'altitude par case. 0 = le niveau du sol. */
+export type Altitudes = Uint8Array;
+
+/**
+ * Le cran le plus haut qu'une case puisse porter — la limite de l'octet.
+ * ⚠️ Ce n'est PAS le nombre de socles modélisés (une dizaine) : un cran sans
+ * socle retombe sur le plus haut disponible, côté Unity, en le disant.
+ */
+export const ALTITUDE_MAX = 255;
+
+/**
+ * Décode. Absent, vide ou illisible = **plateau plat** : une grille de zéros de
+ * la bonne taille. Un plateau d'avant le relief s'ouvre donc tel quel, et un
+ * contenu abîmé se voit et se répare au lieu d'empêcher l'ouverture.
+ */
+export function decoderAltitudes(plateau: {
+  altitudesBase64?: string;
+  largeur: number;
+  hauteur: number;
+}): Altitudes {
+  const taille = plateau.largeur * plateau.hauteur;
+  const crans = new Uint8Array(taille);
+  if (!plateau.altitudesBase64) return crans;
+  let binaire: string;
+  try {
+    binaire = atob(plateau.altitudesBase64);
+  } catch {
+    return crans;
+  }
+  for (let i = 0; i < Math.min(binaire.length, taille); i++) crans[i] = binaire.charCodeAt(i) & 0xff;
+  return crans;
+}
+
+/** True si aucune case n'est surélevée. */
+export function estPlat(crans: ArrayLike<number>): boolean {
+  for (let i = 0; i < crans.length; i++) if (crans[i] > 0) return false;
+  return true;
+}
+
+/**
+ * Encode. ⚠️ **Un plateau plat rend la chaîne VIDE**, il n'écrit pas 5 000
+ * zéros en base : c'est ce qui garde les plateaux d'aujourd'hui exactement
+ * comme ils sont, et ce qui rend le champ ignorable par tout ce qui ne connaît
+ * pas encore le relief.
+ */
+export function encoderAltitudes(crans: ArrayLike<number>): string {
+  if (estPlat(crans)) return "";
+  const octets = new Uint8Array(crans.length);
+  for (let i = 0; i < crans.length; i++)
+    octets[i] = Math.min(ALTITUDE_MAX, Math.max(0, Math.trunc(crans[i]) || 0));
+  let binaire = "";
+  // Par paquets, comme `encoderTiles` : String.fromCharCode(...tableau) dépasse
+  // la pile d'appels au-delà de quelques dizaines de milliers d'éléments.
+  const paquet = 8192;
+  for (let i = 0; i < octets.length; i += paquet)
+    binaire += String.fromCharCode(...octets.subarray(i, i + paquet));
+  return btoa(binaire);
+}
+
+/**
+ * Redimensionne comme `redimensionner`, et pour la même raison : l'index est
+ * `z * largeur + x`, donc changer la largeur sans recalculer décalerait tout le
+ * relief d'une case à l'autre.
+ */
+export function redimensionnerAltitudes(
+  crans: Altitudes,
+  ancienne: { largeur: number; hauteur: number },
+  nouvelle: { largeur: number; hauteur: number },
+): Altitudes {
+  const sortie = new Uint8Array(nouvelle.largeur * nouvelle.hauteur);
+  const largeurCommune = Math.min(ancienne.largeur, nouvelle.largeur);
+  const hauteurCommune = Math.min(ancienne.hauteur, nouvelle.hauteur);
+  for (let z = 0; z < hauteurCommune; z++)
+    for (let x = 0; x < largeurCommune; x++)
+      sortie[index(nouvelle.largeur, x, z)] = crans[index(ancienne.largeur, x, z)];
+  return sortie;
+}
+
+/** Le cran d'une case, 0 hors du plateau. */
+export function altitudeDeCase(
+  crans: ArrayLike<number>,
+  largeur: number,
+  x: number,
+  z: number,
+): number {
+  const i = index(largeur, x, z);
+  return i >= 0 && i < crans.length ? crans[i] : 0;
+}
+
+/** Ramène une saisie à un cran valable : un entier de 0 à `ALTITUDE_MAX`. */
+export function cranValable(saisie: unknown): number {
+  const n = Math.trunc(Number(saisie));
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(ALTITUDE_MAX, Math.max(0, n));
 }
 
 // --- États ------------------------------------------------------------------

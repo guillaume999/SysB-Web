@@ -21,6 +21,7 @@ import News from "@/pages/News";
 import PlateauEditeur from "@/pages/PlateauEditeur";
 import Ressources from "@/pages/Ressources";
 import SalonGuilde from "@/pages/SalonGuilde";
+import Socles from "@/pages/Socles";
 import Technologies from "@/pages/Technologies";
 import Tuiles from "@/pages/Tuiles";
 import { accueil } from "@/lib/acces";
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="/" element={<Home />} />
               <Route path="/3dmodeltuile" element={<Modeles3D />} />
               <Route path="/icones" element={<Icones />} />
+              <Route path="/socles" element={<Socles />} />
               <Route path="/ages" element={<Ages />} />
               <Route path="/plateaux" element={<ListePlateaux source="plateaux" />} />
               <Route path="/plateaux/:id" element={<PlateauEditeur source="plateaux" />} />

@@ -6,8 +6,13 @@
 //  ⚠️ RIEN N'EST STOCKÉ ICI : la grille se recalcule à partir des tuiles
 //  affichées (filtres compris) et des âges déclarés. Une seule source, celle
 //  de la base.
+//
+//  ⚠️ SAUF L'ORDRE DES LIGNES (17/09), qui lui est stocké — dans la collection
+//  `categories`, et lu par `lib/categories.ts`. Il arrive ici tout fait, en
+//  paramètre : la grille le SUIT, elle ne le décide pas et ne l'écrit pas.
 // ============================================================
 
+import { rangCategorie } from "@/lib/categories";
 import { categoriesDe } from "@/lib/tuiles";
 import { SANS_CATEGORIE } from "@/lib/technologies";
 import { SANS_AGE } from "@/lib/ages";
@@ -15,7 +20,11 @@ import { SANS_AGE } from "@/lib/ages";
 export interface GrilleTuiles<T> {
   /** Les numéros d'âge en colonnes, dans l'ordre ; `SANS_AGE` (0) en dernier s'il sert. */
   ages: number[];
-  /** Les catégories en lignes, par ordre alphabétique ; `SANS_CATEGORIE` en dernier. */
+  /**
+   * Les catégories en lignes, dans l'ordre imposé par la collection
+   * `categories` ; celles qu'elle ne cite pas suivent, par ordre alphabétique.
+   * `SANS_CATEGORIE` reste toujours en dernier.
+   */
   categories: string[];
   /** Les tuiles d'une case, dans l'ordre reçu. Case vide = liste vide. */
   cellule: (categorie: string, age: number) => T[];
@@ -49,10 +58,17 @@ const cleCase = (categorie: string, age: number) => `${age}|${cleCategorie(categ
  *
  * ⚠️ « vivres » et « Vivres » sont la même ligne : on garde la première
  * orthographe rencontrée.
+ *
+ * ⚠️ **L'ORDRE DES LIGNES SE RÈGLE (17/09)** : `ordreImpose` vient de la
+ * collection `categories` (voir `lib/categories.ts`), et c'est le MÊME ordre
+ * que suit le magasin du jeu. Une catégorie qu'il ne cite pas n'est pas une
+ * erreur — elle se range à la suite, alphabétiquement, comme avant. Liste vide
+ * = tout est alphabétique, l'état d'avant le 17/09.
  */
 export function rangerEnGrille<T extends { id: string; age?: number | null; categorie?: string }>(
   tuiles: T[],
   agesDeclares: number[],
+  ordreImpose: string[] = [],
 ): GrilleTuiles<T> {
   const cases = new Map<string, T[]>();
   const nomsCategories = new Map<string, string>();
@@ -91,6 +107,12 @@ export function rangerEnGrille<T extends { id: string; age?: number | null; cate
     .sort(([ka, a], [kb, b]) => {
       if (ka === cleSans) return 1;
       if (kb === cleSans) return -1;
+      // ⚠️ Les deux rangs valent `Infinity` pour deux inconnues : le test
+      //    d'égalité AVANT la soustraction n'est pas un raffinement, sans lui
+      //    le comparateur rendrait NaN et l'ordre serait celui du hasard.
+      const ra = rangCategorie(ordreImpose, a);
+      const rb = rangCategorie(ordreImpose, b);
+      if (ra !== rb) return ra - rb;
       return a.localeCompare(b, "fr", { sensitivity: "base" });
     })
     .map(([, nom]) => nom);
