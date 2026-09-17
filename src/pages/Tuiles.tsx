@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BandeauJoueur } from "@/components/Conception";
+import GrilleTuiles from "@/components/GrilleTuiles";
 import TuileDialog from "@/components/TuileDialog";
 import { Vignette } from "@/components/Vignette";
 import {
@@ -274,6 +275,13 @@ const COLONNES: ColonneAuChoix[] = [
 /** Ce qu'on affiche par defaut, et ce qu'on retient d'une visite a l'autre. */
 const CLE_PREFS = "sysb.tuiles.colonne";
 const CLE_TRI = "sysb.tuiles.tri";
+/**
+ * La vue : « tableau » (ages en colonnes, categories en lignes — 17/09) ou
+ * « liste » (une ligne par tuile, colonne au choix et tri). Retenue d'une
+ * visite a l'autre, comme la colonne.
+ */
+const CLE_VUE = "sysb.tuiles.vue";
+type Vue = "tableau" | "liste";
 
 function lirePref(cle: string, defaut: string): string {
   // localStorage jette dans un onglet prive ou avec les cookies bloques : une
@@ -359,6 +367,14 @@ export default function Tuiles() {
   /** La 3e colonne, et le tri. Les deux survivent a un rechargement de page. */
   const [colonneCle, setColonneCle] = useState(() => lirePref(CLE_PREFS, "categorie"));
   const [tri, setTri] = useState(() => lirePref(CLE_TRI, "nom:asc"));
+
+  const [vue, setVue] = useState<Vue>(() =>
+    lirePref(CLE_VUE, "tableau") === "liste" ? "liste" : "tableau",
+  );
+  const choisirVue = (v: Vue) => {
+    setVue(v);
+    ecrirePref(CLE_VUE, v);
+  };
 
   const colonne = COLONNES.find((c) => c.cle === colonneCle) ?? COLONNES[0];
   const [triCle, triSens] = tri.split(":");
@@ -650,6 +666,14 @@ export default function Tuiles() {
     }
   };
 
+  /** Ce qu'on lit avant de confirmer une suppression, dans les deux vues. */
+  const avertissementSuppression = (tuile: Tuile) => {
+    const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
+    return citants.length > 0
+      ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
+      : "Cet id ne sera jamais reattribue.";
+  };
+
   const supprimer = async (tuile: Tuile) => {
     setASupprimer(null);
     try {
@@ -696,20 +720,37 @@ export default function Tuiles() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Le choix de la 3e colonne. En haut, a cote des actions : c'est un
               reglage d'affichage, pas une donnee du tableau. */}
-          <label className="flex items-center gap-2 text-xs text-slate-400">
-            Afficher
-            <select
-              className="input py-1 text-xs"
-              value={colonne.cle}
-              onChange={(e) => choisirColonne(e.target.value)}
-            >
-              {COLONNES.map((c) => (
-                <option key={c.cle} value={c.cle}>
-                  {c.libelle}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex overflow-hidden rounded border border-edge text-xs" role="group" aria-label="Vue">
+            {(["tableau", "liste"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                aria-pressed={vue === v}
+                className={`px-2.5 py-1.5 ${
+                  vue === v ? "bg-accent/20 text-white" : "text-slate-400 hover:text-white"
+                }`}
+                onClick={() => choisirVue(v)}
+              >
+                {v === "tableau" ? "Tableau" : "Liste"}
+              </button>
+            ))}
+          </div>
+          {vue === "liste" && (
+            <label className="flex items-center gap-2 text-xs text-slate-400">
+              Afficher
+              <select
+                className="input py-1 text-xs"
+                value={colonne.cle}
+                onChange={(e) => choisirColonne(e.target.value)}
+              >
+                {COLONNES.map((c) => (
+                  <option key={c.cle} value={c.cle}>
+                    {c.libelle}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {portee.admin && planetes.length > 0 && (
             <select
               className="input h-9 w-auto py-1 text-xs"
@@ -893,6 +934,20 @@ export default function Tuiles() {
             pour leur donner un cout, des conditions de pose et une production.
           </p>
         </div>
+      ) : vue === "tableau" && !chargement ? (
+        <GrilleTuiles
+          tuiles={tuilesTriees}
+          ages={ages}
+          probleme={(t) => problemeDeModele(modeleDe(t))}
+          avertissement={avertissementSuppression}
+          aSupprimer={aSupprimer}
+          onOuvrir={(tuile) => {
+            setErreurDialog(null);
+            setDialog({ tuile });
+          }}
+          onDemanderSuppression={setASupprimer}
+          onSupprimer={(t) => void supprimer(t)}
+        />
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
@@ -978,7 +1033,6 @@ export default function Tuiles() {
                         {c.tuiles.map((tuile) => {
                           const confirme = aSupprimer === tuile.id;
                           const problemeModele = problemeDeModele(modeleDe(tuile));
-                          const citants = tuilesCitant(tuiles, tuile.tileId).filter((t) => t.id !== tuile.id);
                           return (
                             <tr
                               key={tuile.id}
@@ -1021,9 +1075,7 @@ export default function Tuiles() {
                                 {confirme ? (
                                   <div className="inline-flex flex-col items-start gap-1">
                                     <span className="text-[11px] leading-tight text-red-300">
-                                      {citants.length > 0
-                                        ? `${citants.length} tuile(s) citent l'id ${tuile.tileId} dans leurs regles.`
-                                        : "Cet id ne sera jamais reattribue."}
+                                      {avertissementSuppression(tuile)}
                                     </span>
                                     <span>
                                       <button
