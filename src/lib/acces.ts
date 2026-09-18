@@ -47,6 +47,7 @@ export const ECRANS_CONTENU: Lien[] = [
   { to: "/joueurs", label: "Joueurs" },
   { to: "/limites", label: "Limites" },
   { to: "/guildes", label: "Guildes" },
+  { to: "/tuto", label: "Tuto" },
 ];
 
 /**

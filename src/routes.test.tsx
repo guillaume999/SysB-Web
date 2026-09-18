@@ -32,7 +32,7 @@
 //  déclare plus les routes d'admin qu'À L'INTÉRIEUR d'un `{estAdmin && <>…</>}`.
 //  Ça repose sur DEUX comportements de react-router que rien ne type : un
 //  fragment est aplati dans `<Routes>`, et un enfant `false` est ignoré. Si l'un
-//  des deux tombait, un joueur récupérerait les onze routes d'admin — sans la
+//  des deux tombait, un joueur récupérerait les douze routes d'admin — sans la
 //  moindre erreur.
 // ============================================================
 

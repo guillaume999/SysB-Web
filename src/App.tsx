@@ -24,6 +24,7 @@ import SalonGuilde from "@/pages/SalonGuilde";
 import Socles from "@/pages/Socles";
 import Technologies from "@/pages/Technologies";
 import Tuiles from "@/pages/Tuiles";
+import Tuto from "@/pages/Tuto";
 import { accueil } from "@/lib/acces";
 import { useAuth } from "@/lib/auth";
 
@@ -108,6 +109,7 @@ export default function App() {
               <Route path="/joueurs" element={<Joueurs />} />
               <Route path="/limites" element={<Limites />} />
               <Route path="/guildes" element={<Guildes />} />
+              <Route path="/tuto" element={<Tuto />} />
             </>
           )}
           <Route path="*" element={<Navigate to={accueil(estAdmin)} replace />} />
