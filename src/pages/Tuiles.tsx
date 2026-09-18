@@ -5,12 +5,14 @@ import GrilleTuiles from "@/components/GrilleTuiles";
 import TuileDialog from "@/components/TuileDialog";
 import { Vignette } from "@/components/Vignette";
 import {
-  SANS_PLANETE,
   dansLaPortee,
   duCatalogue,
+  duTerritoire,
   etatQuota,
   filtrerParPlanete,
   planeteParDefaut,
+  SANS_PLANETE,
+  territoireDe,
 } from "@/lib/conception";
 import { messageErreur, pb } from "@/lib/pb";
 import { autoriseeSur, loadIcones, usageDuModele3D, type Icone } from "@/lib/planetes";
@@ -362,6 +364,27 @@ export default function Tuiles() {
         : tousModeles.filter((m) => usageDuModele3D(m) === "tuile" && autoriseeSur(m, portee.planete)),
     [portee, tousModeles],
   );
+  /**
+   * ⚠️⚠️ LE TERRITOIRE DONT ON LIT ET ECRIT L'ORDRE DES CATEGORIES (18/09).
+   *
+   * L'admin sans filtre regarde LE JEU ; s'il filtre sur la planete d'un joueur,
+   * il regarde le domaine de ce joueur. Un joueur regarde le sien, toujours.
+   * Sans ca, un rang ecrit chez un joueur se rangerait dans la liste du jeu.
+   */
+  const planeteRegardee = portee.admin
+    ? filtrePlanete === SANS_PLANETE
+      ? ""
+      : filtrePlanete
+    : (portee.planete?.id ?? "");
+  const territoire = useMemo(
+    () => territoireDe(planetes, planeteRegardee),
+    [planetes, planeteRegardee],
+  );
+  const rangeesDuTerritoire = useMemo(
+    () => duTerritoire(rangees, planetes, planeteRegardee),
+    [rangees, planetes, planeteRegardee],
+  );
+
   const quota = portee.admin ? null : etatQuota(portee.limites, "tuiles", tuilesDeLaPortee.length);
   const sansPlanete = portee.admin ? toutesTuiles.filter((t) => !(t.planete ?? "")).length : 0;
   const [chargement, setChargement] = useState(true);
@@ -698,10 +721,18 @@ export default function Tuiles() {
    * ⚠️ Il part des tuiles de la PORTEE, pas des tuiles filtrees : un filtre de
    * planete ne doit pas faire disparaitre une categorie de la liste des rangs,
    * sinon un deplacement fait sous filtre reecrirait un ordre ampute.
+   *
+   * ⚠️⚠️ MAIS IL EST BORNE AU TERRITOIRE (18/09) : les rangs du jeu et ceux
+   * d'un domaine sont deux listes. Melanger les deux ferait ecrire l'ordre du
+   * jeu avec les categories d'un joueur — et l'inverse.
    */
   const ordreDesCategories = useMemo(
-    () => ordreCategories(rangees, toutesLesCategories(tuilesDeLaPortee)),
-    [rangees, tuilesDeLaPortee],
+    () =>
+      ordreCategories(
+        rangeesDuTerritoire,
+        toutesLesCategories(duTerritoire(tuilesDeLaPortee, planetes, planeteRegardee)),
+      ),
+    [rangeesDuTerritoire, tuilesDeLaPortee, planetes, planeteRegardee],
   );
 
   /**
@@ -720,7 +751,7 @@ export default function Tuiles() {
     setRangementOccupe(true);
     setErreur(null);
     try {
-      await enregistrerOrdre(apres, rangees);
+      await enregistrerOrdre(apres, rangeesDuTerritoire, territoire);
       setRangees(await loadCategoriesRangees());
     } catch (e) {
       setErreur(
@@ -774,7 +805,7 @@ export default function Tuiles() {
       // comme une inconnue. Les tuiles, elles, sont DEJA reecrites : si la
       // collection d'ordre refuse, on le dit, on ne defait rien.
       try {
-        await synchroniserRenommage(rangees, ancienne, nouvelle);
+        await synchroniserRenommage(rangeesDuTerritoire, ancienne, nouvelle);
       } catch (e) {
         setErreurDialog(
           messageErreur(e, "Categorie renommee, mais son rang n'a pas suivi."),

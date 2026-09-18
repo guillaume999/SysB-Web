@@ -22,6 +22,14 @@
 //  (tuiles.ts) et `Categories.Lister` (C#). Toutes les comparaisons de ce
 //  fichier passent par `cleCategorie`.
 //
+//  ⚠️⚠️ UN ORDRE PAR TERRITOIRE (18/09). Une rangée porte `planete` : vide pour
+//  LE JEU (toutes les planètes game ensemble), l'id d'une planète de joueur pour
+//  SON DOMAINE. Deux territoires peuvent donc ranger chacun leur
+//  « Nourriture » — c'est pour ça que l'index unique est passé à
+//  (nom, planete) le 18/09. Les fonctions de ce fichier travaillent sur la liste
+//  DÉJÀ filtrée par `duTerritoire` : leur donner toutes les rangées ferait
+//  fusionner les deux ordres.
+//
 //  ⚠️ CÔTÉ JEU, le même ordre est lu par `CategorieCatalogue` (Unity), qui
 //  applique la MÊME règle pour les inconnues : après les rangées, dans l'ordre
 //  où elles étaient. Changer la règle ici sans la changer là-bas ferait mentir
@@ -38,6 +46,11 @@ export type CategorieRangee = {
   nom: string;
   /** Espacé de 10 en 10 à la création ; renuméroté à chaque déplacement. */
   ordre?: number;
+  /**
+   * ⚠️ LE TERRITOIRE où ce rang vaut (18/09) : vide = le jeu, l'id d'une planète
+   * de joueur = son domaine. Voir `territoireDe` (`lib/conception.ts`).
+   */
+  planete?: string;
 };
 
 /** Ce qu'on compare : deux orthographes qui ne diffèrent que par la casse sont la même. */
@@ -180,10 +193,16 @@ export function ecrituresDOrdre(ordre: string[], rangees: CategorieRangee[]): Ec
 export async function enregistrerOrdre(
   ordre: string[],
   rangees: CategorieRangee[],
+  territoire: string,
 ): Promise<void> {
   for (const e of ecrituresDOrdre(ordre, rangees)) {
     if (e.id === null)
-      await pb.collection(COLLECTION_CATEGORIES).create({ nom: e.nom, ordre: e.ordre });
+      // ⚠️ LE TERRITOIRE PART AVEC LA CRÉATION (18/09). L'oublier rangerait le
+      //    rang d'un joueur dans la liste du jeu — et comme l'index est
+      //    (nom, planete), la deuxième « Nourriture » du jeu serait refusée.
+      await pb
+        .collection(COLLECTION_CATEGORIES)
+        .create({ nom: e.nom, ordre: e.ordre, planete: territoire });
     else await pb.collection(COLLECTION_CATEGORIES).update(e.id, { ordre: e.ordre });
   }
 }

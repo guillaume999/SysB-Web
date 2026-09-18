@@ -10,6 +10,7 @@ import { nomDePlanete } from "@/lib/planetes";
 import { usePortee } from "@/lib/portee";
 import { TYPES_PLATEAU, type TypePlateau } from "@/lib/modeles3d";
 import {
+  ALTITUDE_MAX,
   COLLECTION_TEMPLATES,
   TILE_VIDE,
   amorcageDe,
@@ -17,7 +18,11 @@ import {
   amorcageVide,
   casesDansRayon,
   cleCase,
+  cranValable,
+  decoderAltitudes,
   decoderTiles,
+  ecrireAltitudes,
+  encoderAltitudes,
   encoderTiles,
   etatVide,
   etatsDe,
@@ -28,13 +33,15 @@ import {
   nettoyerEtats,
   palettePourPlateau,
   redimensionner,
+  redimensionnerAltitudes,
+  type Altitudes,
   type Amorcage,
   type Cases,
   type EtatCase,
   type Plateau,
   type SourcePlateau,
 } from "@/lib/plateaux";
-import { casesCouvertes, loadTuiles, type Tuile } from "@/lib/tuiles";
+import { altitudeDe, casesCouvertes, loadTuiles, type Tuile } from "@/lib/tuiles";
 import { libelleRessource, loadRessources, type Ressource } from "@/lib/ressources";
 
 /** Au-delà, le SVG commence à ramer, et le plateau devient difficile à jouer sur mobile. */
@@ -89,10 +96,19 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   const [octets, setOctets] = useState<Cases>(new Uint16Array(0));
   const [etats, setEtats] = useState<EtatCase[]>([]);
 
+  /**
+   * Le relief, un cran par case (18/09). ⚠️ IL VIT A COTE DE LA GRILLE, pas
+   * dedans : une case garde sa hauteur quand la tuile change, et c'est tout le
+   * sujet — on doit pouvoir raser un batiment sans raser la colline.
+   */
+  const [crans, setCrans] = useState<Altitudes>(new Uint8Array(0));
+
   const [pinceau, setPinceau] = useState<number>(TILE_VIDE);
+  /** Le cran que le pinceau Relief pose. */
+  const [cranPinceau, setCranPinceau] = useState(1);
   /** Rayon hexagonal du pinceau : 0 = une case, 1 = sept, 2 = dix-neuf. */
   const [rayonPinceau, setRayonPinceau] = useState(0);
-  const [mode, setMode] = useState<"peindre" | "inspecter">("peindre");
+  const [mode, setMode] = useState<"peindre" | "relief" | "inspecter">("peindre");
   const [selection, setSelection] = useState<{ x: number; z: number } | null>(null);
 
   /** L'admin a demandé le rendu d'une grille au-delà du seuil lourd. */
@@ -119,6 +135,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
       setActif(Boolean(p.actif));
       setAmorcage(amorcageDe(p));
       setOctets(decoderTiles(p));
+      setCrans(decoderAltitudes(p));
       setEtats(etatsDe(p));
       setModifie(false);
       chargeInitial.current = true;
@@ -166,6 +183,9 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     if (!portee.admin && plateau && refusTaille(plateau, { largeur: l, hauteur: h }, portee.limites)) return;
     const nouveaux = redimensionner(octets, { largeur, hauteur }, { largeur: l, hauteur: h });
     setOctets(nouveaux);
+    // ⚠️ Le relief suit la MEME regle : par coordonnees, pas par ordre d'octets.
+    // Sans ca, changer la largeur decalerait les collines d'une case par rangee.
+    setCrans((c) => redimensionnerAltitudes(c, { largeur, hauteur }, { largeur: l, hauteur: h }));
     setEtats((e) => nettoyerEtats(e, nouveaux, l, h));
     setLargeur(l);
     setHauteur(h);
@@ -192,6 +212,15 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     }
     if (!copie) return;
     setOctets(copie);
+    // ⚠️ LA POSE ECRIT L'ALTITUDE PAR DEFAUT DE LA TUILE — la meme regle qu'au
+    // serveur (`PoserAltitude`), sinon le plateau dessine ici ne serait pas
+    // celui que le jeu fabriquerait. La GOMME, elle, ne rabaisse rien : effacer
+    // un batiment ne rase pas la colline sous lui.
+    const tuilePeinte = tuiles.find((t) => t.tileId === pinceau);
+    if (tuilePeinte) {
+      const cran = altitudeDe(tuilePeinte);
+      setCrans((avant) => ecrireAltitudes(avant, cibles, cran, largeur, hauteur));
+    }
     // Repeindre une case change ce qu'elle porte : l'état de l'ancien bâtiment
     // n'a plus de sens et continuerait à produire pour une tuile disparue. Seules
     // les cases réellement changées perdent le leur.
@@ -199,7 +228,18 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     setModifie(true);
   };
 
+  /** Le pinceau Relief : il ne touche QUE la hauteur, jamais la tuile. */
+  const peindreRelief = (x: number, z: number) => {
+    const cibles = casesDansRayon(x, z, rayonPinceau, largeur, hauteur);
+    setCrans((avant) => {
+      const apres = ecrireAltitudes(avant, cibles, cranValable(cranPinceau), largeur, hauteur);
+      if (apres !== avant) setModifie(true);
+      return apres;
+    });
+  };
+
   const etatSelection = selection ? etatsIndex.get(cleCase(selection.x, selection.z)) : undefined;
+  const cranSelection = selection ? (crans[index(largeur, selection.x, selection.z)] ?? 0) : 0;
   const tuileSelection = selection
     ? tuiles.find((t) => t.tileId === octets[index(largeur, selection.x, selection.z)])
     : undefined;
@@ -275,6 +315,9 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
         largeur,
         hauteur,
         tilesBase64: encoderTiles(octets),
+        // ⚠️ Chaine VIDE quand le plateau est plat : les plateaux d'avant le
+        // relief ne se mettent pas a porter un octet par case pour rien.
+        altitudesBase64: encoderAltitudes(crans),
         etats: propres,
       };
       // ⚠️ Un JOUEUR n'envoie ni le type ni la planète : la règle d'API refuse
@@ -540,6 +583,12 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             proposées. Une tuile `space` sur un plateau `ground` instancierait un prefab qui n'a
             rien à faire là ; une tuile d'une autre planète serait mise de côté par le serveur.
           </Terme>
+          <Terme nom="relief">
+            L'altitude vit sur la CASE, pas sur la tuile. Peindre une tuile pose son altitude par
+            défaut ; le pinceau Relief la corrige ensuite sans toucher à la tuile, et la gomme ne
+            rabaisse rien — effacer un bâtiment ne rase pas la colline sous lui. Une case haute
+            s'affiche en plus clair, et son chiffre est dans l'infobulle.
+          </Terme>
           <Terme nom="deux octets">
             Une case retient un numéro de tuile jusqu'à 65 535. Tant que toutes les tuiles peintes
             ont un numéro inférieur à 256, la grille s'enregistre sur un octet par case (le format
@@ -616,7 +665,8 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
             tuiles={tuiles}
             selection={selection}
             rayonPinceau={rayonPinceau}
-            onPeindre={mode === "peindre" ? peindre : null}
+            crans={crans}
+            onPeindre={mode === "peindre" ? peindre : mode === "relief" ? peindreRelief : null}
             onSelectionner={(x, z) => setSelection({ x, z })}
           />
             </>
@@ -626,14 +676,30 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
         {/* ── Palette et case sélectionnée ────────────────────────────────── */}
         <div className="space-y-4">
           <div className="card p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="label mb-0">Pinceau</p>
-              <button
-                className="text-xs text-slate-400 hover:text-white"
-                onClick={() => setMode(mode === "peindre" ? "inspecter" : "peindre")}
-              >
-                {mode === "peindre" ? "passer en inspection" : "passer en peinture"}
-              </button>
+            <p className="label mb-1">Pinceau</p>
+            {/* Trois modes, jamais une bascule a deux : le relief et les tuiles
+                se peignent separement, sinon corriger une hauteur reecrirait la
+                tuile en dessous. */}
+            <div className="mb-2 flex overflow-hidden rounded border border-edge text-[11px]">
+              {(
+                [
+                  ["peindre", "Tuiles"],
+                  ["relief", "Relief"],
+                  ["inspecter", "Inspecter"],
+                ] as const
+              ).map(([m, libelle]) => (
+                <button
+                  key={m}
+                  type="button"
+                  aria-pressed={mode === m}
+                  className={`flex-1 px-2 py-1.5 ${
+                    mode === m ? "bg-accent/20 text-white" : "text-slate-400 hover:text-white"
+                  }`}
+                  onClick={() => setMode(m)}
+                >
+                  {libelle}
+                </button>
+              ))}
             </div>
 
             {/* Le disque est hexagonal : 1, 7, 19, 37 cases, pas 1, 9, 25, 49. */}
@@ -656,6 +722,43 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
               ))}
             </div>
 
+            {mode === "relief" ? (
+              <div className="space-y-2">
+                <label className="flex items-center gap-2 text-xs text-slate-400">
+                  Altitude posée
+                  <input
+                    type="number"
+                    className="input h-8 w-20 py-0"
+                    min={0}
+                    max={ALTITUDE_MAX}
+                    step={1}
+                    value={cranPinceau}
+                    onChange={(e) => setCranPinceau(cranValable(e.target.value))}
+                  />
+                </label>
+                <div className="flex flex-wrap gap-1">
+                  {[0, 1, 2, 3, 4, 5, 6].map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`h-7 w-7 rounded border border-edge text-[11px] tabular-nums transition-colors ${
+                        cranPinceau === c
+                          ? "bg-accent/20 text-white"
+                          : "text-slate-400 hover:bg-ink hover:text-white"
+                      }`}
+                      onClick={() => setCranPinceau(c)}
+                      title={c === 0 ? "remettre au niveau du sol" : `altitude ${c}`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] leading-tight text-slate-500">
+                  Le cran choisi se pose tel quel : rien n'est lissé, rien n'est nivelé. Les
+                  tuiles ne bougent pas — seule la hauteur change.
+                </p>
+              </div>
+            ) : (
             <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
               <button
                 className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-xs ${
@@ -680,10 +783,14 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                   />
                   <span className="truncate">
                     #{t.tileId} {t.nom}
+                    {altitudeDe(t) > 0 && (
+                      <span className="ml-1 text-slate-500">· alt. {altitudeDe(t)}</span>
+                    )}
                   </span>
                 </button>
               ))}
             </div>
+            )}
           </div>
 
           <div className="card p-3">
@@ -702,6 +809,27 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
                     <span className="text-slate-600">vide</span>
                   )}
                 </p>
+
+                <label className="flex items-center gap-2">
+                  altitude
+                  <input
+                    type="number"
+                    min={0}
+                    max={ALTITUDE_MAX}
+                    step={1}
+                    className="input h-8 w-16 py-0"
+                    value={cranSelection}
+                    onChange={(e) => {
+                      // ⚠️ La hauteur d'UNE case, pinceau ou pas : c'est la
+                      // retouche au chiffre pres, quand peindre serait imprecis.
+                      setCrans((avant) => {
+                        const apres = ecrireAltitudes(avant, [selection], cranValable(e.target.value), largeur, hauteur);
+                        if (apres !== avant) setModifie(true);
+                        return apres;
+                      });
+                    }}
+                  />
+                </label>
 
                 {tuileSelection && (
                   <>

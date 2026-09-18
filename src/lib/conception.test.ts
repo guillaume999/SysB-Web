@@ -164,3 +164,42 @@ describe("le filtre de planète de l'admin", () => {
     expect(filtrerParPlanete(l, SANS_PLANETE)).toHaveLength(2);
   });
 });
+
+describe("le territoire (18/09)", () => {
+  const gardees = (s: Set<string> | null) => (s ? [...s].sort() : []);
+
+  it("⚠️ deux planètes game ne font qu'UN jeu — ce n'est pas la découpe du catalogue", async () => {
+    const { territoireDe, TERRITOIRE_JEU } = await import("@/lib/conception");
+    expect(territoireDe(planetes, "pTerre")).toBe(TERRITOIRE_JEU);
+    expect(territoireDe(planetes, "pJupiter")).toBe(TERRITOIRE_JEU);
+    // là où le catalogue, lui, les sépare :
+    expect(gardees(planetesDuCatalogue(planetes, "pTerre"))).not.toContain("pJupiter");
+  });
+
+  it("chez un joueur : son domaine, et deux joueurs ne le partagent pas", async () => {
+    const { territoireDe } = await import("@/lib/conception");
+    expect(territoireDe(planetes, "pSeb")).toBe("pSeb");
+    expect(territoireDe(planetes, "pSeb")).not.toBe(territoireDe(planetes, "pZoe"));
+  });
+
+  it("vide, inconnu, ou sans planètes en base : le jeu", async () => {
+    const { territoireDe, TERRITOIRE_JEU } = await import("@/lib/conception");
+    expect(territoireDe(planetes, "")).toBe(TERRITOIRE_JEU);
+    expect(territoireDe(planetes, "inconnue")).toBe(TERRITOIRE_JEU);
+    expect(territoireDe([], "pSeb")).toBe(TERRITOIRE_JEU);
+  });
+
+  it("filtre une liste : les âges du jeu se lisent sur Jupiter, ceux d'un domaine non", async () => {
+    const { duTerritoire } = await import("@/lib/conception");
+    const ages = [{ nom: "jeu" }, { nom: "terre", planete: "pTerre" }, { nom: "seb", planete: "pSeb" }];
+    expect(duTerritoire(ages, planetes, "pJupiter").map((a) => a.nom)).toEqual(["jeu", "terre"]);
+    expect(duTerritoire(ages, planetes, "pSeb").map((a) => a.nom)).toEqual(["seb"]);
+  });
+
+  it("les territoires choisissables : le jeu, puis un domaine par joueur — aucune planète game", async () => {
+    const { territoiresChoisissables, TERRITOIRE_JEU } = await import("@/lib/conception");
+    const l = territoiresChoisissables(planetes);
+    expect(l[0].id).toBe(TERRITOIRE_JEU);
+    expect(l.map((x) => x.id)).toEqual([TERRITOIRE_JEU, "pSeb", "pZoe"]);
+  });
+});

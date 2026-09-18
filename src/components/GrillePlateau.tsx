@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  type Altitudes,
   type Cases,
   HAUTEUR_CASE,
   LARGEUR_CASE,
@@ -58,6 +59,7 @@ export default function GrillePlateau({
   hauteur,
   octets,
   etats,
+  crans,
   tuiles,
   selection,
   rayonPinceau = 0,
@@ -69,6 +71,15 @@ export default function GrillePlateau({
   /** Un `tileId` par case (jusqu'à 65 535 — voir `Cases`). */
   octets: Cases;
   etats: Map<string, EtatCase>;
+  /**
+   * Le relief, un cran par case (18/09). Vide = plateau plat.
+   *
+   * ⚠️ Il s'affiche en ECLAIRCISSANT la case, jamais en changeant sa couleur :
+   * la couleur dit QUELLE TUILE, et deux informations sur le meme canal
+   * rendraient la grille illisible. Une case haute est donc la meme tuile, en
+   * plus clair, et l'infobulle donne le chiffre.
+   */
+  crans?: Altitudes;
   tuiles: Tuile[];
   /** Case mise en évidence, ou null. */
   selection: { x: number; z: number } | null;
@@ -212,6 +223,7 @@ export default function GrillePlateau({
         const tileId = octets[index(largeur, x, z)] ?? TILE_VIDE;
         const tuile = parTileId.get(tileId);
         const etat = etats.get(cleCase(x, z));
+        const cran = crans?.[index(largeur, x, z)] ?? 0;
         const choisie = selection?.x === x && selection?.z === z;
         liste.push(
           <g key={`${x},${z}`}>
@@ -229,9 +241,25 @@ export default function GrillePlateau({
             >
               <title>
                 {`(${x}, ${z}) — ${tileId === TILE_VIDE ? "vide" : (tuile?.nom ?? `id ${tileId}`)}` +
-                  (etat ? ` — niveau ${etat.niveau}${etat.actif ? "" : ", éteint"}` : "")}
+                  (etat ? ` — niveau ${etat.niveau}${etat.actif ? "" : ", éteint"}` : "") +
+                  (cran > 0 ? ` — altitude ${cran}` : "")}
               </title>
             </rect>
+            {/* Le relief : un voile blanc d'autant plus marqué que la case est
+                haute. ⚠️ Plafonné — au-delà d'une dizaine de crans la case
+                deviendrait blanche et on ne verrait plus la tuile. */}
+            {cran > 0 && (
+              <rect
+                x={cx - LARGEUR_CASE / 2}
+                y={cy - HAUTEUR_CASE / 2}
+                width={LARGEUR_CASE}
+                height={HAUTEUR_CASE}
+                rx={0.06}
+                fill="#ffffff"
+                opacity={Math.min(0.5, 0.06 * cran)}
+                pointerEvents="none"
+              />
+            )}
             {/* Un point signale une case qui porte un état : niveau, stock, activité. */}
             {etat && (
               <circle
@@ -247,7 +275,7 @@ export default function GrillePlateau({
       }
     }
     return liste;
-  }, [largeur, hauteur, octets, etats, parTileId, selection, agir]);
+  }, [largeur, hauteur, octets, etats, crans, parTileId, selection, agir]);
 
   /** Ce que le pinceau couvrirait s'il cliquait ici. */
   const apercu = useMemo(

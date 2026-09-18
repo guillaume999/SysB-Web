@@ -72,6 +72,17 @@ export type Age = {
    * le moteur lit.
    */
   batiments_requis: number[];
+  /**
+   * ⚠️⚠️ LE TERRITOIRE où cet âge est rangé (18/09) — pas la planète où il se
+   * joue. Vide = **le jeu**, commun à toutes les planètes game ; l'id d'une
+   * planète de joueur = **son domaine**. La règle est `territoireDe`
+   * (`lib/conception.ts`), miroir du Go et du C#.
+   *
+   * Un âge rattaché à la Terre se lit donc aussi sur Jupiter : la Terre est une
+   * planète game, son territoire est le jeu. C'est ce qui évite un second champ
+   * à côté de `planete`, c'est-à-dire deux vérités pour une même chose.
+   */
+  planete?: string;
   created: string;
   updated: string;
 };
@@ -81,6 +92,8 @@ export interface ValeursAge {
   nom: string;
   description: string;
   batiments_requis: number[];
+  /** Le territoire : vide pour le jeu, l'id d'une planète de joueur pour son domaine. */
+  planete: string;
 }
 
 /** Les bâtiments qui ouvrent cet âge, nettoyés (dédoublonnés, triés, sans zéro). */

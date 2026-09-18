@@ -432,6 +432,35 @@ export function altitudeDeCase(
   return i >= 0 && i < crans.length ? crans[i] : 0;
 }
 
+/**
+ * Écrit un cran sur une liste de cases.
+ *
+ * ⚠️ REND LE MÊME TABLEAU SI RIEN NE CHANGE. C'est ce qui fait qu'un pinceau
+ * qui repasse au même endroit ne marque pas le plateau comme modifié et ne
+ * redessine pas la grille — sur dix mille cases, la différence se voit.
+ *
+ * ⚠️ Un plateau d'avant le relief n'a pas de tableau à la bonne taille : on en
+ * installe un à plat plutôt que d'écrire à côté.
+ */
+export function ecrireAltitudes(
+  avant: Altitudes,
+  cibles: { x: number; z: number }[],
+  cran: number,
+  largeur: number,
+  hauteur: number,
+): Altitudes {
+  const base = avant.length === largeur * hauteur ? avant : new Uint8Array(largeur * hauteur);
+  const valeur = cranValable(cran);
+  let copie: Altitudes | null = null;
+  for (const c of cibles) {
+    const i = index(largeur, c.x, c.z);
+    if (i < 0 || i >= base.length || base[i] === valeur) continue;
+    if (!copie) copie = new Uint8Array(base);
+    copie[i] = valeur;
+  }
+  return copie ?? base;
+}
+
 /** Ramène une saisie à un cran valable : un entier de 0 à `ALTITUDE_MAX`. */
 export function cranValable(saisie: unknown): number {
   const n = Math.trunc(Number(saisie));

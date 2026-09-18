@@ -13,6 +13,8 @@ import {
   type Age,
   type ValeursAge,
 } from "@/lib/ages";
+import { TERRITOIRE_JEU, duTerritoire, territoiresChoisissables } from "@/lib/conception";
+import { usePortee } from "@/lib/portee";
 
 /**
  * Les ages du jeu.
@@ -27,6 +29,14 @@ import {
  * emporte.
  */
 export default function Ages() {
+  const { planetes } = usePortee();
+  /**
+   * ⚠️⚠️ CET ECRAN NE MONTRE QU'UN TERRITOIRE A LA FOIS (18/09), et c'est
+   * delibere : les sept ages du jeu et les ages qu'un joueur s'est ranges chez
+   * lui sont deux listes, avec chacune son age 1. Les afficher ensemble ferait
+   * lire « deux fois l'age 1 » comme une faute de saisie.
+   */
+  const [territoire, setTerritoire] = useState<string>(TERRITOIRE_JEU);
   const [ages, setAges] = useState<Age[]>([]);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
   const [technologies, setTechnologies] = useState<Technologie[]>([]);
@@ -64,6 +74,16 @@ export default function Ages() {
     void charger();
   }, [charger]);
 
+  /** Les ages DE CE TERRITOIRE : tout le reste de l'ecran travaille sur eux. */
+  const vus = useMemo(
+    () => duTerritoire(ages, planetes, territoire),
+    [ages, planetes, territoire],
+  );
+
+  const choix = useMemo(() => territoiresChoisissables(planetes), [planetes]);
+  const libelleTerritoire =
+    choix.find((c) => c.id === territoire)?.libelle ?? "Le jeu (toutes les planètes game)";
+
   /** Ce que chaque age porte, et ce qu'une suppression laisserait orphelin. */
   const compte = useMemo(() => {
     const par = new Map<number, { tuiles: number; technos: number }>();
@@ -72,10 +92,13 @@ export default function Ages() {
       c[cle] += 1;
       par.set(n, c);
     };
-    for (const t of tuiles) if (t.age > 0) ajouter(t.age, "tuiles");
-    for (const t of technologies) if (t.age > 0) ajouter(t.age, "technos");
+    // ⚠️ ON NE COMPTE QUE CE QUI EST DU MEME TERRITOIRE : une tuile rangee dans
+    //    le domaine d'un joueur ne porte pas l'age 1 DU JEU, elle porte le sien.
+    for (const t of duTerritoire(tuiles, planetes, territoire)) if (t.age > 0) ajouter(t.age, "tuiles");
+    for (const t of duTerritoire(technologies, planetes, territoire))
+      if (t.age > 0) ajouter(t.age, "technos");
     return par;
-  }, [tuiles, technologies]);
+  }, [tuiles, technologies, planetes, territoire]);
 
   /**
    * Des numeros portes par des tuiles ou des technos alors qu'aucun age ne les
@@ -83,9 +106,9 @@ export default function Ages() {
    * en arrivant ici, parce que ces lignes-la sont invisibles ailleurs.
    */
   const orphelins = useMemo(() => {
-    const declares = new Set(ages.map((a) => a.numero));
+    const declares = new Set(vus.map((a) => a.numero));
     return [...compte.keys()].filter((n) => !declares.has(n)).sort((x, y) => x - y);
-  }, [ages, compte]);
+  }, [vus, compte]);
 
   const nomDe = (tileId: number) => tuiles.find((t) => t.tileId === tileId)?.nom ?? `#${tileId}`;
 
@@ -121,9 +144,9 @@ export default function Ages() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold text-white">Ages</h1>
-            {!chargement && ages.length > 0 && (
+            {!chargement && vus.length > 0 && (
               <span className="rounded-full border border-edge px-2 py-0.5 text-xs tabular-nums text-slate-400">
-                {ages.length}
+                {vus.length}
               </span>
             )}
           </div>
@@ -132,16 +155,44 @@ export default function Ages() {
             technologie prend celui de son batiment. Le <code className="text-slate-400">numero</code>{" "}
             est ce qui est stocke — le nom, lui, se corrige sans rien casser.
           </p>
+          {/*
+            ⚠️⚠️ UN JEU D'AGES PAR TERRITOIRE (18/09). Le dire ici, en clair :
+            sans cette phrase, un admin qui ne voit plus « ses » sept ages croit
+            a une perte de donnees.
+          */}
+          <p className="mt-1 max-w-2xl text-sm text-slate-500">
+            Ces ages sont ceux de <span className="text-slate-300">{libelleTerritoire}</span>. Les
+            planetes game (Terre, Jupiter…) les partagent toutes ; le domaine d'un joueur a les
+            siens, avec son propre age 1.
+          </p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => {
-            setErreurDialog(null);
-            setDialog({ age: null });
-          }}
-        >
-          + Nouvel age
-        </button>
+        <div className="flex items-center gap-2">
+          {choix.length > 1 && (
+            <label className="flex items-center gap-2 text-xs text-slate-400">
+              Territoire
+              <select
+                className="input py-1 text-sm"
+                value={territoire}
+                onChange={(e) => setTerritoire(e.target.value)}
+              >
+                {choix.map((c) => (
+                  <option key={c.id || "jeu"} value={c.id}>
+                    {c.libelle}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <button
+            className="btn-primary"
+            onClick={() => {
+              setErreurDialog(null);
+              setDialog({ age: null });
+            }}
+          >
+            + Nouvel age
+          </button>
+        </div>
       </header>
 
       {/*
@@ -178,7 +229,7 @@ export default function Ages() {
         </p>
       )}
 
-      {!chargement && ages.length === 0 ? (
+      {!chargement && vus.length === 0 ? (
         <div className="card p-5 text-sm text-slate-400">
           <p className="font-medium text-slate-200">Aucun age declare.</p>
           <p className="mt-2 max-w-2xl">
@@ -209,7 +260,7 @@ export default function Ages() {
                 </tr>
               )}
               {!chargement &&
-                ages.map((a) => {
+                vus.map((a) => {
                   const confirme = aSupprimer === a.id;
                   const c = compte.get(a.numero) ?? { tuiles: 0, technos: 0 };
                   const requis = batimentsRequisDe(a);
@@ -285,7 +336,11 @@ export default function Ages() {
       {dialog && (
         <AgeDialog
           age={dialog.age}
-          ages={ages}
+          // ⚠️ LES AGES DU MEME TERRITOIRE : un doublon de numero ne se juge que
+          //    la-dedans. Le domaine d'un joueur a droit a son age 1.
+          ages={vus}
+          territoire={territoire}
+          territoires={choix}
           tuiles={tuiles}
           porte={
             dialog.age
@@ -306,6 +361,8 @@ export default function Ages() {
 function AgeDialog({
   age,
   ages,
+  territoire,
+  territoires,
   tuiles,
   porte,
   saving,
@@ -315,6 +372,9 @@ function AgeDialog({
 }: {
   age: Age | null;
   ages: Age[];
+  /** Le territoire regarde : celui que prendra un age cree ici. */
+  territoire: string;
+  territoires: { id: string; libelle: string }[];
   tuiles: Tuile[];
   /** Ce que l'age porte deja — pour prevenir avant un renumerotage. */
   porte: { tuiles: number; technos: number };
@@ -328,6 +388,9 @@ function AgeDialog({
   const [nom, setNom] = useState(age?.nom ?? "");
   const [description, setDescription] = useState(age?.description ?? "");
   const [batiments, setBatiments] = useState<number[]>(age ? batimentsRequisDe(age) : []);
+  // ⚠️ A LA CREATION, LE TERRITOIRE REGARDE — pas un choix par defaut cache : on
+  //    cree un age la ou on est en train de regarder. Il reste modifiable.
+  const [ouRange, setOuRange] = useState<string>(age ? (age.planete ?? "") : territoire);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onCancel();
@@ -354,6 +417,7 @@ function AgeDialog({
             nom: nom.trim(),
             description: description.trim(),
             batiments_requis: batiments,
+            planete: ouRange,
           });
         }}
         className="card w-full max-w-lg p-5 shadow-2xl"
@@ -376,6 +440,12 @@ function AgeDialog({
           <Terme nom="description">
             Ce que l'age change, en une phrase — le sous-titre du document d'arbre. Lu par
             l'humain seulement.
+          </Terme>
+          <Terme nom="territoire">
+            Qui lit cet age. <b>Le jeu</b> : toutes les planetes game, Terre et Jupiter
+            ensemble. <b>Le domaine d'un joueur</b> : lui seul, avec ses propres tuiles. Les
+            deux listes sont independantes — chacune a son age 1, et un age du jeu n'ouvre rien
+            chez un joueur.
           </Terme>
           <Terme nom="batiments qui l'ouvrent">
             Les batiments qu'il faut posseder pour entrer dans cet age : la Mairie pour l'ere
@@ -435,6 +505,30 @@ function AgeDialog({
             placeholder="l'energie entre dans l'equation"
           />
         </div>
+
+        {territoires.length > 1 && (
+          <div className="mt-4">
+            <label className="label" htmlFor="age-territoire">
+              Territoire
+            </label>
+            <select
+              id="age-territoire"
+              className="input"
+              value={ouRange}
+              onChange={(e) => setOuRange(e.target.value)}
+            >
+              {territoires.map((c) => (
+                <option key={c.id || "jeu"} value={c.id}>
+                  {c.libelle}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Où cet age est RANGE, pas où il se joue : les planetes game le partagent
+              toutes. Le deplacer le retire de la liste de l'autre territoire.
+            </p>
+          </div>
+        )}
 
         <div className="mt-4">
           <p className="label">Batiments qui ouvrent cet age</p>

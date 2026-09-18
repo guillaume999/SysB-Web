@@ -15,6 +15,7 @@ import {
   altitudeDeCase,
   cranValable,
   decoderAltitudes,
+  ecrireAltitudes,
   decoderTiles,
   encoderAltitudes,
   encoderTiles,
@@ -218,5 +219,32 @@ describe("altitude des cases", () => {
     const crans = [1, 2, 3, 4];
     expect(altitudeDeCase(crans, 2, 1, 1)).toBe(4);
     expect(altitudeDeCase(crans, 2, 0, 5)).toBe(0);
+  });
+});
+
+describe("ecrireAltitudes", () => {
+  const cases = (l: number, h: number) => new Uint8Array(l * h);
+
+  it("n'écrit que les cases visées", () => {
+    const apres = ecrireAltitudes(cases(3, 2), [{ x: 1, z: 1 }], 4, 3, 2);
+    expect([...apres]).toEqual([0, 0, 0, 0, 4, 0]);
+  });
+
+  it("rend LE MÊME tableau quand rien ne change", () => {
+    const avant = Uint8Array.from([0, 2, 0, 0]);
+    // ⚠️ L'identité, pas l'égalité : c'est elle qui évite de marquer le plateau
+    // modifié et de redessiner la grille quand le pinceau repasse au même endroit.
+    expect(ecrireAltitudes(avant, [{ x: 1, z: 0 }], 2, 2, 2)).toBe(avant);
+    expect(ecrireAltitudes(avant, [{ x: 1, z: 0 }], 3, 2, 2)).not.toBe(avant);
+  });
+
+  it("installe un relief à plat sur un plateau qui n'en avait pas", () => {
+    const apres = ecrireAltitudes(new Uint8Array(0), [{ x: 0, z: 0 }], 1, 2, 2);
+    expect([...apres]).toEqual([1, 0, 0, 0]);
+  });
+
+  it("borne le cran et ignore une case hors plateau", () => {
+    expect([...ecrireAltitudes(cases(2, 1), [{ x: 0, z: 0 }], 999, 2, 1)]).toEqual([255, 0]);
+    expect([...ecrireAltitudes(cases(2, 1), [{ x: 9, z: 9 }], 3, 2, 1)]).toEqual([0, 0]);
   });
 });

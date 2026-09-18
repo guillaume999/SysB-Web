@@ -236,6 +236,61 @@ export function duCatalogue<T extends { planete?: string }>(
   return liste.filter((x) => garde.has(x.planete ?? ""));
 }
 
+/**
+ * ⚠️⚠️ LE TERRITOIRE — miroir de `routes.TerritoireDe` (Go) et de
+ * `CataloguePlanete.Territoire` (C#). Décision du 18/09.
+ *
+ *   planète de joueur → son DOMAINE, désigné par l'id de la planète ;
+ *   planète game      → LE JEU (`TERRITOIRE_JEU`), commun à toutes ;
+ *   planète inconnue, vide, ou aucune planète en base → LE JEU.
+ *
+ * ⚠️ CE N'EST PAS LA MÊME DÉCOUPE QUE LE CATALOGUE. Les tuiles, les ressources
+ * et les technos se rangent PAR PLANÈTE — la Terre ne voit pas les tuiles de
+ * Jupiter. Les âges et l'ORDRE DES CATÉGORIES, eux, se rangent PAR TERRITOIRE :
+ * les mêmes sept âges sur toutes les planètes game. Les deux règles cohabitent
+ * exprès — ce qui se JOUE est propre à un monde, ce qui le CLASSE est commun au
+ * jeu.
+ *
+ * ⚠️ Vide veut dire « le jeu », pas « partout » : un âge rangé nulle part est un
+ * âge du jeu, et c'est ce qui laisse les sept âges d'avant le 18/09 en place
+ * sans les réécrire.
+ */
+export const TERRITOIRE_JEU = "";
+
+export function territoireDe(planetes: Planete[], planeteId: string): string {
+  if (planeteId === "") return TERRITOIRE_JEU;
+  const p = planetes.find((x) => x.id === planeteId);
+  if (!p) return TERRITOIRE_JEU;
+  return estPlaneteGame(p) ? TERRITOIRE_JEU : p.id;
+}
+
+/** Ce qui est rangé dans le MÊME territoire que cette planète. */
+export function duTerritoire<T extends { planete?: string }>(
+  liste: T[],
+  planetes: Planete[],
+  planeteId: string,
+): T[] {
+  const voulu = territoireDe(planetes, planeteId);
+  return liste.filter((x) => territoireDe(planetes, x.planete ?? "") === voulu);
+}
+
+/**
+ * Les territoires qu'un admin peut choisir dans un écran rangé par territoire :
+ * le jeu d'abord, puis un domaine par joueur.
+ *
+ * ⚠️ Une planète game N'EST PAS un choix : elle n'a pas de territoire à elle.
+ * En proposer une ferait croire qu'on peut donner un âge à Jupiter seule.
+ */
+export function territoiresChoisissables(
+  planetes: Planete[],
+): { id: string; libelle: string }[] {
+  const domaines = planetes
+    .filter((p) => !estPlaneteGame(p))
+    .sort((a, b) => a.nom.localeCompare(b.nom, "fr"))
+    .map((p) => ({ id: p.id, libelle: `Domaine de ${p.nom}` }));
+  return [{ id: TERRITOIRE_JEU, libelle: "Le jeu (toutes les planètes game)" }, ...domaines];
+}
+
 /** La valeur du filtre « sans planète » des écrans de l'admin. */
 export const SANS_PLANETE = "__sans__";
 

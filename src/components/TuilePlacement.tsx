@@ -1,6 +1,7 @@
 import Aide, { Terme } from "@/components/Aide";
 import ChoixTuiles from "@/components/ChoixTuiles";
 import { niveauxDe, type Technologie } from "@/lib/technologies";
+import { ALTITUDE_MAX, cranValable } from "@/lib/plateaux";
 import {
   CASE_VIDE,
   TYPES_REGLE,
@@ -98,7 +99,7 @@ export default function TuilePlacement({
         Toutes les regles doivent etre vraies en meme temps.
       </p>
 
-      <Aide titre="Le support, la limite, la gratuite, les batiments et la techno requis">
+      <Aide titre="Le support, l'altitude, la limite, la gratuite, les batiments et la techno requis">
         <Terme nom="support">
           Ne regarde pas le voisinage mais <strong>la case elle-meme</strong> : ce qu'il y a
           dessous au moment de construire.
@@ -118,6 +119,13 @@ export default function TuilePlacement({
           Une entree comme une autre, en tete des listes. Elle permet
           <em> « seulement sur une case vide »</em>, et son contraire
           <em> « partout sauf sur du vide »</em>.
+        </Terme>
+        <Terme nom="altitude">
+          La hauteur du TERRAIN de la case, pas celle de la tuile qu'on pose. Le relief vit sur la
+          case : c'est l'editeur de plateau (ou la tuile posee avant celle-ci) qui l'a mis la.
+          <br />
+          <strong>« jusqu'a » decoche = pas de plafond</strong>, et ce n'est pas la meme chose que
+          « jusqu'a 0 », qui veut dire <em>seulement au niveau du sol</em>.
         </Terme>
         <Terme nom="gratuite">
           Tant que le joueur en possede <strong>moins de N sur ce plateau</strong>, poser ne coute
@@ -266,6 +274,48 @@ export default function TuilePlacement({
                         <option value="empire">dans tout l'empire</option>
                       </select>
                     </label>
+                  )}
+
+                  {regle.regle === "altitude" && (
+                    <div className="flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                      <label className="flex items-center gap-1">
+                        a partir de l'altitude
+                        <input
+                          type="number"
+                          min={0}
+                          max={ALTITUDE_MAX}
+                          step={1}
+                          className="input h-9 w-20 py-1"
+                          value={regle.altMin}
+                          onChange={(e) => maj(index, { altMin: cranValable(e.target.value) })}
+                        />
+                      </label>
+                      {/* ⚠️ Une CASE A COCHER pour le plafond, pas un zero : « au
+                          plus 0 » veut dire « seulement au niveau du sol », et
+                          c'est une regle du jeu. Sans cette case, l'ecran ne
+                          saurait pas dire la difference avec « pas de plafond ». */}
+                      <label className="ml-2 flex items-center gap-1">
+                        <input
+                          type="checkbox"
+                          checked={regle.altMax !== null}
+                          onChange={(e) =>
+                            maj(index, { altMax: e.target.checked ? Math.max(regle.altMin, 1) : null })
+                          }
+                        />
+                        jusqu'a
+                      </label>
+                      {regle.altMax !== null && (
+                        <input
+                          type="number"
+                          min={0}
+                          max={ALTITUDE_MAX}
+                          step={1}
+                          className="input h-9 w-20 py-1"
+                          value={regle.altMax}
+                          onChange={(e) => maj(index, { altMax: cranValable(e.target.value) })}
+                        />
+                      )}
+                    </div>
                   )}
 
                   {regle.regle === "gratuite" && (

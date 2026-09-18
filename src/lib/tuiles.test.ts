@@ -20,6 +20,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  decrireRegle,
   altitudeDe,
   casesCouvertes,
   categoriesDe,
@@ -528,5 +529,40 @@ describe("altitude par defaut", () => {
     expect(altitudeDe({ altitude: 4 })).toBe(4);
     expect(altitudeDe({ altitude: -3 })).toBe(0);
     expect(altitudeDe({ altitude: 2.9 })).toBe(2);
+  });
+});
+
+// ============================================================
+//  LA REGLE DE POSE « altitude » (18/09)
+//
+//  ⚠️ Ce que ca protege : `altMax: 0` confondu avec `altMax: null`. « Seulement
+//  au niveau du sol » est une regle du jeu ; la lire « n'importe quelle
+//  hauteur » ferait pousser les fermes au sommet des falaises, et personne ne
+//  verrait d'ou ca vient.
+// ============================================================
+
+describe("regle de pose altitude", () => {
+  const alt = (altMin: number, altMax: number | null) =>
+    normaliserRegle({ regle: "altitude", altMin, altMax });
+
+  it("garde le zero et le sans-plafond distincts", () => {
+    expect(alt(0, 0).altMax).toBe(0);
+    expect(alt(0, null).altMax).toBeNull();
+    expect(normaliserRegle({ regle: "altitude" }).altMax).toBeNull();
+  });
+
+  it("n'est utile que si elle borne quelque chose", () => {
+    expect(regleUtile(alt(0, null))).toBe(false);
+    expect(regleUtile(alt(1, null))).toBe(true);
+    expect(regleUtile(alt(0, 0))).toBe(true);
+  });
+
+  it("se relit en francais, y compris quand la saisie est impossible", () => {
+    const nom = (id: number) => "tuile " + id;
+    expect(decrireRegle(alt(2, null), nom)).toMatch(/a partir de l'altitude 2|à partir de l'altitude 2/);
+    expect(decrireRegle(alt(0, 0), nom)).toMatch(/jusqu'à l'altitude 0/);
+    expect(decrireRegle(alt(3, 3), nom)).toMatch(/seulement à l'altitude 3/);
+    // Une borne basse au-dessus de la haute ne refuse pas la saisie : elle le DIT.
+    expect(decrireRegle(alt(5, 2), nom)).toMatch(/aucune case ne peut convenir/);
   });
 });

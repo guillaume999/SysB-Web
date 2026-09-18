@@ -85,7 +85,13 @@ export function tileIdsDe(v: unknown): number[] {
  * la troisième celle de `CoutConstruction`, et le validateur doit **ignorer
  * explicitement** `gratuite` au lieu de la traiter en règle inconnue.
  */
-export type TypeRegle = "support" | "limite" | "gratuite" | "batiments" | "technologie";
+export type TypeRegle =
+  | "support"
+  | "limite"
+  | "gratuite"
+  | "batiments"
+  | "technologie"
+  | "altitude";
 
 export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[] = [
   { valeur: "support", libelle: "support", aide: "ce que la case elle-même doit porter" },
@@ -100,6 +106,11 @@ export const TYPES_REGLE: { valeur: TypeRegle; libelle: string; aide: string }[]
     valeur: "technologie",
     libelle: "technologie requise",
     aide: "il faut avoir cherché une technologie, jusqu'à un niveau donné",
+  },
+  {
+    valeur: "altitude",
+    libelle: "altitude",
+    aide: "à quelle hauteur de terrain la tuile a le droit de se poser",
   },
 ];
 
@@ -225,6 +236,24 @@ export interface ReglePlacement {
    * poser, et l'écran le dit en orange.
    */
   niveau: number;
+  // --- altitude (18/09) ---
+  /**
+   * Le cran de relief minimum de la case. 0 = aucune exigence.
+   *
+   * ⚠️ **Le relief est une donnée de CASE** (`plateaux.altitudesBase64`), pas
+   * de tuile : cette règle lit la hauteur du terrain tel qu'il est, pas
+   * l'altitude par défaut de la tuile qu'on pose.
+   */
+  altMin: number;
+  /**
+   * Le cran maximum, ou `null` = **pas de plafond**.
+   *
+   * ⚠️ `0` et `null` ne veulent PAS dire la même chose : `0` = « seulement au
+   * niveau du sol », qui est une règle du jeu parfaitement valable. Les
+   * confondre ferait pousser les fermes au sommet des falaises sans que
+   * personne ne voie d'où ça vient.
+   */
+  altMax: number | null;
 }
 
 export function regleVide(regle: TypeRegle): ReglePlacement {
@@ -240,6 +269,8 @@ export function regleVide(regle: TypeRegle): ReglePlacement {
     nombre: regle === "batiments" ? 1 : 0,
     techno: "",
     niveau: regle === "technologie" ? 1 : 0,
+    altMin: 0,
+    altMax: null,
   };
 }
 
@@ -253,7 +284,9 @@ export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
     Array.isArray(v) ? Array.from(new Set(v.filter((n) => typeof n === "number"))).sort((a, b) => a - b) : [];
   const entier = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.trunc(v) : 0);
   const connu = (v: unknown): TypeRegle =>
-    v === "limite" || v === "gratuite" || v === "batiments" || v === "technologie" ? v : "support";
+    v === "limite" || v === "gratuite" || v === "batiments" || v === "technologie" || v === "altitude"
+      ? v
+      : "support";
   return {
     regle: connu(r.regle),
     base: r.base === "tout" ? "tout" : "liste",
@@ -266,6 +299,11 @@ export function normaliserRegle(r: Partial<ReglePlacement>): ReglePlacement {
     nombre: Math.max(0, entier(r.nombre)),
     techno: typeof r.techno === "string" ? r.techno : "",
     niveau: Math.max(0, entier(r.niveau)),
+    altMin: Math.max(0, entier(r.altMin)),
+    // ⚠️ Absent = pas de plafond, jamais 0 : une règle d'altitude à peine
+    // ébauchée interdirait sinon tout relief à la tuile qui la porte.
+    altMax:
+      r.altMax === null || r.altMax === undefined ? null : Math.max(0, entier(r.altMax)),
   };
 }
 
@@ -282,6 +320,8 @@ export function regleUtile(r: ReglePlacement): boolean {
   if (r.regle === "limite") return r.max > 0;
   if (r.regle === "batiments") return r.batiment > 0 && r.nombre > 0;
   if (r.regle === "technologie") return r.techno !== "";
+  // « à partir de 0, sans plafond » n'interdit rien.
+  if (r.regle === "altitude") return r.altMin > 0 || r.altMax !== null;
   return r.base === "liste" ? r.tileIds.length > 0 : r.sauf.length > 0;
 }
 
@@ -316,6 +356,16 @@ export function decrireRegle(
       `Il faut avoir cherché « ${nomTechno(r.techno)} »` +
       (n > 1 ? `, au moins jusqu'au niveau ${n}.` : ".")
     );
+  }
+  if (r.regle === "altitude") {
+    if (r.altMin <= 0 && r.altMax === null)
+      return "Aucune borne — cette règle n'interdit rien, elle sera ignorée en jeu.";
+    if (r.altMax === null) return `Se pose à partir de l'altitude ${r.altMin}.`;
+    if (r.altMin <= 0) return `Se pose jusqu'à l'altitude ${r.altMax}.`;
+    if (r.altMin === r.altMax) return `Se pose seulement à l'altitude ${r.altMin}.`;
+    if (r.altMin > r.altMax)
+      return `Entre ${r.altMin} et ${r.altMax} : aucune case ne peut convenir, rien ne se posera.`;
+    return `Se pose entre les altitudes ${r.altMin} et ${r.altMax}.`;
   }
   if (r.regle === "limite") {
     if (r.max <= 0)
