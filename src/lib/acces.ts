@@ -20,16 +20,44 @@
 // ============================================================
 
 import type { Role } from "@/lib/auth";
+import type { FamillePlateau, SourcePlateau } from "@/lib/plateaux";
 
 /** Une entrée de navigation : son adresse et son libellé. */
 export type Lien = { to: string; label: string };
+
+/**
+ * **LES QUATRE ONGLETS DES PLATEAUX (19/09)** — la seule source des adresses et
+ * des libellés, pour la barre latérale, le routeur et le lien « retour » de
+ * l'éditeur.
+ *
+ * Deux collections × deux familles : les MODÈLES qu'on dessine et les COPIES
+ * que les joueurs jouent, chacun d'un côté **game** (les planètes du jeu :
+ * Terre, Jupiter…) ou **joueur** (le domaine d'un joueur). Ce qui range une
+ * ligne dans l'une ou l'autre est écrit une fois pour toutes dans
+ * `familleDeModele` / `familleDeCopie` (`lib/plateaux.ts`).
+ *
+ * ⚠️ Écrire une de ces quatre adresses en dur ailleurs, c'est la laisser
+ * diverger le jour où elle change : c'est cette table qu'on lit.
+ */
+export const ONGLETS_PLATEAUX: Record<SourcePlateau, Record<FamillePlateau, Lien>> = {
+  templates: {
+    game: { to: "/modeles", label: "Modèles game" },
+    joueur: { to: "/modeles-joueurs", label: "Modèles joueurs" },
+  },
+  plateaux: {
+    game: { to: "/plateaux", label: "Plateaux game" },
+    joueur: { to: "/plateaux-joueurs", label: "Plateaux joueurs" },
+  },
+};
 
 /**
  * Les écrans qui pilotent une collection. **Réservés aux admins.**
  *
  * L'ordre suit la chaîne de fabrication : on déclare un modèle 3D et ses
  * icônes, on nomme les ressources, on pose les âges, puis on en fait des tuiles jouables — et
- * les technologies rangent ces tuiles par palier.
+ * les technologies rangent ces tuiles par palier. « Unités » vient après : ce
+ * qu'un bâtiment de bataille produit se range par âge comme le reste, mais ce
+ * n'est PAS une tuile (pas de tileId, pas de plateau) — voir `lib/unites.ts`.
  *
  * ⚠️ « Âges » est placé AVANT « Tuiles » parce qu'il en est la base : une
  * tuile se range dans un âge, et une techno prend celui de son bâtiment.
@@ -42,8 +70,11 @@ export const ECRANS_CONTENU: Lien[] = [
   { to: "/ages", label: "Âges" },
   { to: "/tuiles", label: "Tuiles" },
   { to: "/technologies", label: "Technologie" },
-  { to: "/modeles", label: "Modèles" },
-  { to: "/plateaux", label: "Plateaux joueurs" },
+  { to: "/unites", label: "Unités" },
+  ONGLETS_PLATEAUX.templates.game,
+  ONGLETS_PLATEAUX.templates.joueur,
+  ONGLETS_PLATEAUX.plateaux.game,
+  ONGLETS_PLATEAUX.plateaux.joueur,
   { to: "/joueurs", label: "Joueurs" },
   { to: "/limites", label: "Limites" },
   { to: "/guildes", label: "Guildes" },
@@ -60,11 +91,18 @@ export const ECRANS_CONTENU: Lien[] = [
  *
  * ⚠️ Ce sont les MÊMES routes que l'admin : c'est la page qui borne ce qu'elle
  * montre (`lib/conception.ts`), et le serveur qui refuse le reste.
+ *
+ * ⚠️ **LE SEUL LIBELLÉ RÉÉCRIT, depuis le 19/09 : « Modèles ».** L'admin a
+ * maintenant deux onglets de modèles (game / joueurs) ; le joueur n'en a qu'un,
+ * le sien — lui afficher « Modèles game » serait faux, puisque la page ne lui
+ * montre QUE les modèles de sa planète (`dansLaPortee`). L'adresse, elle, reste
+ * lue dans la table : c'est la même route.
  */
-const ADRESSES_CONCEPTION = ["/ressources", "/tuiles", "/technologies", "/modeles"];
-export const ECRANS_CONCEPTION: Lien[] = ADRESSES_CONCEPTION.map(
-  (to) => ECRANS_CONTENU.find((e) => e.to === to)!,
-);
+const ADRESSES_CONCEPTION = ["/ressources", "/tuiles", "/technologies"];
+export const ECRANS_CONCEPTION: Lien[] = [
+  ...ADRESSES_CONCEPTION.map((to) => ECRANS_CONTENU.find((e) => e.to === to)!),
+  { to: ONGLETS_PLATEAUX.templates.game.to, label: "Modèles" },
+];
 
 /**
  * **Les écrans ouverts à TOUT COMPTE CONNECTÉ** — c'est par eux que le joueur

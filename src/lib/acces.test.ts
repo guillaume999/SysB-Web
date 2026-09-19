@@ -22,6 +22,7 @@ import {
   ECRANS_CONTENU,
   ECRANS_GUILDE,
   ECRANS_PUBLICS,
+  ONGLETS_PLATEAUX,
   accueil,
   ecransVisibles,
   roleEstAdmin,
@@ -50,7 +51,7 @@ describe("ce que voit un joueur", () => {
     // ⚠️ L'ESSAI QUI COMPTE : ni Joueurs, ni Limites, ni les plateaux des
     // autres, ni le catalogue 3D ou les icônes (c'est l'admin qui les ouvre).
     expect(vu.contenu.map((l) => l.to)).toEqual(["/ressources", "/tuiles", "/technologies", "/modeles"]);
-    for (const interdit of ["/", "/joueurs", "/limites", "/guildes", "/plateaux", "/3dmodeltuile", "/icones", "/ages"]) {
+    for (const interdit of ["/", "/joueurs", "/limites", "/guildes", "/plateaux", "/plateaux-joueurs", "/modeles-joueurs", "/3dmodeltuile", "/icones", "/ages", "/unites"]) {
       expect(vu.contenu.map((l) => l.to)).not.toContain(interdit);
     }
     for (const ecran of ECRANS_CONTENU) {
@@ -65,8 +66,14 @@ describe("ce que voit un joueur", () => {
     expect(ecransVisibles(true).guilde).toEqual(ECRANS_GUILDE);
   });
 
-  it("des écrans de conception qui existent tous chez l'admin", () => {
-    expect(ECRANS_CONCEPTION.every((e) => ECRANS_CONTENU.includes(e))).toBe(true);
+  it("des écrans de conception dont les ADRESSES existent toutes chez l'admin", () => {
+    // ⚠️ Par l'adresse, plus par l'objet, depuis le 19/09 : « Modèles » est le
+    // seul libellé réécrit pour le joueur (l'admin lit « Modèles game », lui
+    // n'a qu'un domaine). La ROUTE, elle, doit rester la même — c'est ce que
+    // cet essai garde.
+    const chez = ECRANS_CONTENU.map((e) => e.to);
+    expect(ECRANS_CONCEPTION.every((e) => chez.includes(e.to))).toBe(true);
+    expect(ECRANS_CONCEPTION.find((e) => e.to === "/modeles")?.label).toBe("Modèles");
   });
 
   it("contient la Conception, les News et le Forum", () => {
@@ -96,6 +103,29 @@ describe("les écrans publics", () => {
   });
 });
 
+describe("les quatre onglets des plateaux (19/09)", () => {
+  it("ont chacun leur adresse, et toutes sont dans la barre de l'admin", () => {
+    const quatre = [
+      ONGLETS_PLATEAUX.templates.game,
+      ONGLETS_PLATEAUX.templates.joueur,
+      ONGLETS_PLATEAUX.plateaux.game,
+      ONGLETS_PLATEAUX.plateaux.joueur,
+    ];
+    // ⚠️ L'ESSAI QUI COMPTE : quatre adresses DISTINCTES. Deux onglets sur la
+    // même route, c'est un onglet qu'on croit ouvrir et qui montre l'autre.
+    expect(new Set(quatre.map((l) => l.to)).size).toBe(4);
+    const chez = ecransVisibles(true).contenu.map((l) => l.to);
+    for (const onglet of quatre) expect(chez).toContain(onglet.to);
+  });
+
+  it("ne se recouvrent pas avec la route de l'éditeur `/modeles/:id`", () => {
+    // `/modeles-joueurs` est un SEGMENT à part, pas `/modeles/joueurs` : sans
+    // ça, react-router hésiterait entre l'onglet et un plateau d'id « joueurs ».
+    for (const l of Object.values(ONGLETS_PLATEAUX.templates))
+      expect(l.to.startsWith("/modeles/")).toBe(false);
+  });
+});
+
 describe("ce que voit un admin", () => {
   const vu = ecransVisibles(true);
 
@@ -103,14 +133,19 @@ describe("ce que voit un admin", () => {
   //    « Icônes », « Limites », « Guildes », « Socles » puis « Tuto » sont arrivés.
   //    Le compte est volontairement écrit en dur — c'est lui qui fait rougir
   //    l'essai quand un écran est ajouté ou retiré sans être décidé.
-  it("garde les treize écrans de contenu ET la Conception", () => {
-    // Treize depuis le 18/09 : « Tuto » (les cartes de tutoriel) est arrivé.
-    expect(vu.contenu).toHaveLength(13);
+  it("garde les seize écrans de contenu ET la Conception", () => {
+    // ⚠️ QUINZE depuis le 19/09 : « Modèles » et « Plateaux joueurs » se sont
+    //    chacun dédoublés en un onglet game et un onglet joueurs.
+    // ⚠️ SEIZE le 19/09 au soir : « Unités » (le catalogue de bataille).
+    expect(vu.contenu).toHaveLength(16);
+    expect(vu.contenu.map((l) => l.to)).toContain("/unites");
     expect(vu.contenu.map((l) => l.to)).toContain("/limites");
     expect(vu.contenu.map((l) => l.to)).toContain("/guildes");
     expect(vu.contenu.map((l) => l.to)).toContain("/icones");
     expect(vu.contenu.map((l) => l.to)).toContain("/socles");
     expect(vu.contenu.map((l) => l.to)).toContain("/tuto");
+    expect(vu.contenu.map((l) => l.to)).toContain("/modeles-joueurs");
+    expect(vu.contenu.map((l) => l.to)).toContain("/plateaux-joueurs");
     expect(vu.contenu.map((l) => l.to)).not.toContain("/planetes");
     expect(vu.contenu.map((l) => l.to)).toContain("/joueurs");
     expect(vu.documents.map((l) => l.to)).toEqual(["/conception"]);

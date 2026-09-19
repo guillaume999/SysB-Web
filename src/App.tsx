@@ -24,6 +24,7 @@ import SalonGuilde from "@/pages/SalonGuilde";
 import Socles from "@/pages/Socles";
 import Technologies from "@/pages/Technologies";
 import Tuiles from "@/pages/Tuiles";
+import Unites from "@/pages/Unites";
 import Tuto from "@/pages/Tuto";
 import { accueil } from "@/lib/acces";
 import { useAuth } from "@/lib/auth";
@@ -95,7 +96,13 @@ export default function App() {
           <Route path="/ressources" element={<Ressources />} />
           <Route path="/tuiles" element={<Tuiles />} />
           <Route path="/technologies" element={<Technologies />} />
-          <Route path="/modeles" element={<ListePlateaux source="templates" />} />
+          {/*
+            ⚠️ LES QUATRE ONGLETS (19/09) : modèles / copies × game / joueur.
+            `/modeles` est la SEULE route partagée avec le joueur — il n'y voit
+            que les modèles de sa planète, et la famille de l'onglet ne
+            s'applique qu'à l'admin (voir `ListePlateaux`).
+          */}
+          <Route path="/modeles" element={<ListePlateaux source="templates" famille="game" />} />
           <Route path="/modeles/:id" element={<PlateauEditeur source="templates" />} />
           {estAdmin && (
             <>
@@ -104,7 +111,16 @@ export default function App() {
               <Route path="/icones" element={<Icones />} />
               <Route path="/socles" element={<Socles />} />
               <Route path="/ages" element={<Ages />} />
-              <Route path="/plateaux" element={<ListePlateaux source="plateaux" />} />
+              <Route path="/unites" element={<Unites />} />
+              <Route
+                path="/modeles-joueurs"
+                element={<ListePlateaux source="templates" famille="joueur" />}
+              />
+              <Route path="/plateaux" element={<ListePlateaux source="plateaux" famille="game" />} />
+              <Route
+                path="/plateaux-joueurs"
+                element={<ListePlateaux source="plateaux" famille="joueur" />}
+              />
               <Route path="/plateaux/:id" element={<PlateauEditeur source="plateaux" />} />
               <Route path="/joueurs" element={<Joueurs />} />
               <Route path="/limites" element={<Limites />} />

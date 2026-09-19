@@ -4,6 +4,7 @@ import Aide, { Terme } from "@/components/Aide";
 import AmorcageEditeur from "@/components/AmorcageEditeur";
 import { ChoixPlanete } from "@/components/Conception";
 import GrillePlateau, { couleurTuile } from "@/components/GrillePlateau";
+import { ONGLETS_PLATEAUX } from "@/lib/acces";
 import { duCatalogue, etiquettePourPlanete, refusTaille } from "@/lib/conception";
 import { messageErreur, pb } from "@/lib/pb";
 import { nomDePlanete } from "@/lib/planetes";
@@ -14,6 +15,7 @@ import {
   COLLECTION_TEMPLATES,
   TILE_VIDE,
   amorcageDe,
+  familleDe,
   amorcageNettoye,
   amorcageVide,
   casesDansRayon,
@@ -70,7 +72,6 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
   const { portee, planetes } = usePortee();
   const collection = source;
   const estModele = collection === COLLECTION_TEMPLATES;
-  const retour = estModele ? "/modeles" : "/plateaux";
 
   const [plateau, setPlateau] = useState<Plateau | null>(null);
   const [tuiles, setTuiles] = useState<Tuile[]>([]);
@@ -348,6 +349,19 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     }
   };
 
+  /**
+   * ⚠️ « ← » RAMÈNE À L'ONGLET D'OÙ LA LIGNE VIENT (19/09). Il y a quatre
+   * listes : revenir sur celle qui ne contient PAS le plateau qu'on vient de
+   * fermer donne l'impression de l'avoir perdu. Tant qu'il n'est pas chargé, on
+   * ne connaît pas sa famille : on retombe sur « game ».
+   *
+   * ⚠️ Le joueur, lui, n'a qu'un onglet de modèles — même adresse, mais pas le
+   * libellé de l'admin : chez lui, « Modèles » ce sont les siens.
+   */
+  const retour = !portee.admin
+    ? { to: ONGLETS_PLATEAUX.templates.game.to, label: "Modèles" }
+    : ONGLETS_PLATEAUX[source][plateau ? familleDe(plateau, source, planetes) : "game"];
+
   if (chargement) return <p className="text-sm text-slate-500">Chargement…</p>;
   if (!plateau)
     return (
@@ -355,10 +369,7 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
         <p className="rounded border border-red-900/60 bg-red-950/40 p-2 text-sm text-red-300">
           {erreur ?? "Plateau introuvable."}
         </p>
-        <Link
-          to={source === COLLECTION_TEMPLATES ? "/modeles" : "/plateaux"}
-          className="mt-3 inline-block text-sm text-accent hover:underline"
-        >
+        <Link to={retour.to} className="mt-3 inline-block text-sm text-accent hover:underline">
           Retour à la liste
         </Link>
       </div>
@@ -371,8 +382,8 @@ export default function PlateauEditeur({ source }: { source: SourcePlateau }) {
     <div>
       <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <Link to={retour} className="text-xs text-slate-500 hover:text-white">
-            ← {estModele ? "Modèles" : "Plateaux des joueurs"}
+          <Link to={retour.to} className="text-xs text-slate-500 hover:text-white">
+            ← {retour.label}
           </Link>
           <h1 className="mt-1 text-xl font-semibold text-white">
             {nom || "(sans nom)"}

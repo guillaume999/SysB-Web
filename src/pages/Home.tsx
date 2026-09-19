@@ -59,14 +59,16 @@ export default function Home() {
         to: "/modeles",
         collection: "templates",
         label: "Modèles",
-        hint: "Le terrain de départ, copié pour chaque joueur à sa première venue.",
+        // ⚠️ Le compte est celui de TOUTE la collection ; le lien, lui, ouvre
+        //    l'onglet du jeu — ceux des joueurs ont le leur depuis le 19/09.
+        hint: "Le terrain de départ, copié pour chaque joueur à sa première venue. Le lien ouvre ceux du jeu.",
       },
       {
         cle: "plateaux",
         to: "/plateaux",
         collection: "plateaux",
         label: "Plateaux des joueurs",
-        hint: "Une copie par joueur et par type, née de son modèle.",
+        hint: "Une copie par joueur et par type, née de son modèle. Le lien ouvre celles des planètes du jeu.",
       },
       {
         cle: "users",

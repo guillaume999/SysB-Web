@@ -14,6 +14,9 @@ import {
   ALTITUDE_MAX,
   altitudeDeCase,
   cranValable,
+  deLaFamille,
+  familleDeCopie,
+  familleDeModele,
   decoderAltitudes,
   ecrireAltitudes,
   decoderTiles,
@@ -246,5 +249,79 @@ describe("ecrireAltitudes", () => {
   it("borne le cran et ignore une case hors plateau", () => {
     expect([...ecrireAltitudes(cases(2, 1), [{ x: 0, z: 0 }], 999, 2, 1)]).toEqual([255, 0]);
     expect([...ecrireAltitudes(cases(2, 1), [{ x: 9, z: 9 }], 3, 2, 1)]).toEqual([0, 0]);
+  });
+});
+
+// ============================================================
+//  GAME OU JOUEUR — la découpe des quatre onglets (19/09)
+//
+//  ⚠️ L'ESSAI QUI COMPTE est celui de L'INCONNU : un modèle non rangé et un
+//  plateau sans planète doivent tomber dans « game ». S'ils tombaient ailleurs
+//  — ou nulle part — ils disparaîtraient des deux écrans sans une erreur, et
+//  personne n'irait les corriger.
+// ============================================================
+
+const ligne = (x: Partial<Plateau>): Plateau => x as Plateau;
+
+describe("la famille d'un MODÈLE", () => {
+  it("se lit sur `appartient`, et sur rien d'autre", () => {
+    expect(familleDeModele(ligne({ appartient: "game" }))).toBe("game");
+    expect(familleDeModele(ligne({ appartient: "u1" }))).toBe("joueur");
+  });
+
+  it("range un modèle NON RANGÉ dans « game », là où l'admin le verra", () => {
+    expect(familleDeModele(ligne({ appartient: "" }))).toBe("game");
+    expect(familleDeModele(ligne({}))).toBe("game");
+  });
+
+  it("ne regarde PAS la planète : la colonne « appartient » dirait autre chose", () => {
+    // Un modèle marqué « game » posé par erreur sur la planète d'un joueur
+    // reste dans l'onglet game — c'est là qu'on peut le corriger.
+    expect(familleDeModele(ligne({ appartient: "game", planete: "pSeb" }))).toBe("game");
+  });
+});
+
+describe("la famille d'une COPIE de joueur", () => {
+  it("se lit sur la PLANÈTE où elle se joue", () => {
+    expect(familleDeCopie(ligne({ planete: "pTerre" }), planetes)).toBe("game");
+    expect(familleDeCopie(ligne({ planete: "pSeb" }), planetes)).toBe("joueur");
+  });
+
+  it("range dans « game » un plateau sans planète, ou dont la planète a disparu", () => {
+    expect(familleDeCopie(ligne({}), planetes)).toBe("game");
+    expect(familleDeCopie(ligne({ planete: "envolee" }), planetes)).toBe("game");
+  });
+});
+
+describe("deLaFamille", () => {
+  const modeles = [
+    ligne({ id: "a", appartient: "game" }),
+    ligne({ id: "b", appartient: "u1" }),
+    ligne({ id: "c", appartient: "" }),
+  ];
+  const copies = [
+    ligne({ id: "d", planete: "pJupiter" }),
+    ligne({ id: "e", planete: "pSeb" }),
+  ];
+
+  it("partage les modèles en deux, sans en perdre un seul", () => {
+    expect(deLaFamille(modeles, "game", "templates", planetes).map((p) => p.id)).toEqual(["a", "c"]);
+    expect(deLaFamille(modeles, "joueur", "templates", planetes).map((p) => p.id)).toEqual(["b"]);
+  });
+
+  it("partage les copies par leur planète", () => {
+    expect(deLaFamille(copies, "game", "plateaux", planetes).map((p) => p.id)).toEqual(["d"]);
+    expect(deLaFamille(copies, "joueur", "plateaux", planetes).map((p) => p.id)).toEqual(["e"]);
+  });
+
+  it("met tout le monde dans exactement UN onglet", () => {
+    // ⚠️ Deux onglets qui se recouvrent afficheraient deux fois la même ligne ;
+    // deux onglets qui laissent un trou la feraient disparaître.
+    for (const [liste, source] of [[modeles, "templates"], [copies, "plateaux"]] as const) {
+      const game = deLaFamille(liste, "game", source, planetes);
+      const joueur = deLaFamille(liste, "joueur", source, planetes);
+      expect(game.length + joueur.length).toBe(liste.length);
+      expect(game.filter((p) => joueur.includes(p))).toEqual([]);
+    }
   });
 });

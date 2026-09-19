@@ -2165,7 +2165,8 @@ export const ANIMATIONS: { code: CodeAnimation; libelle: string; detail: string 
   {
     code: "terre",
     libelle: "Le bâtiment sort de terre",
-    detail: "Aucun matériau : le bâtiment monte du sol en poussant un anneau de poussière.",
+    detail:
+      "Un tas de terre grossit pendant tout le chantier, puis le bâtiment monte du sol.",
   },
 ];
 

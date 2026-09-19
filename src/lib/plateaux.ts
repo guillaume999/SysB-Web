@@ -22,7 +22,7 @@
 import { duCatalogue } from "@/lib/conception";
 import { pb } from "@/lib/pb";
 import type { TypePlateau } from "@/lib/modeles3d";
-import type { Planete } from "@/lib/planetes";
+import { appartenance, estPlaneteGame, type Planete } from "@/lib/planetes";
 
 export const COLLECTION_TEMPLATES = "templates";
 export const COLLECTION_PLATEAUX = "plateaux";
@@ -203,6 +203,57 @@ export interface ValeursPlateau {
   actif?: boolean;
   amorcage?: Amorcage;
   ownerId?: string;
+}
+
+// --- Game ou joueur : la famille d'un plateau (19/09) ------------------------
+//
+// ⚠️⚠️ LA MÊME QUESTION DES DEUX CÔTÉS, DEUX ENDROITS OÙ ELLE SE LIT. « Est-ce
+// au jeu, ou au domaine d'un joueur ? » range aussi bien un modèle qu'une copie
+// — mais les deux collections ne portent pas le même champ :
+//
+//   · un MODÈLE porte `appartient` (`"game"` ou l'id du joueur), et c'est LUI
+//     qu'affiche la colonne « appartient » de la liste. Le déduire d'ailleurs
+//     ferait dire deux choses différentes à la même ligne.
+//   · une COPIE de joueur n'a pas ce champ — elles sont toutes à un joueur. Ce
+//     qui les sépare, c'est la PLANÈTE où elles se jouent : une planète du jeu
+//     (Terre, Jupiter) ou le domaine de son propriétaire.
+//
+// ⚠️ **L'INCONNU VA DANS `game`**, jamais dans un troisième onglet que
+// personne n'ouvrirait : un modèle non rangé (`appartient` vide) et un plateau
+// d'avant les planètes (`planete` vide) restent là où l'admin regarde, avec
+// leur mention orange, plutôt que de disparaître de l'écran.
+
+/** De quel côté une ligne tombe : le jeu, ou le domaine d'un joueur. */
+export type FamillePlateau = "game" | "joueur";
+
+/** La famille d'un MODÈLE — ce que dit `appartient`, et rien d'autre. */
+export function familleDeModele(p: Plateau): FamillePlateau {
+  return appartenance(p.appartient).famille === "joueur" ? "joueur" : "game";
+}
+
+/** La famille d'une COPIE de joueur — celle de la planète où elle se joue. */
+export function familleDeCopie(p: Plateau, planetes: Planete[]): FamillePlateau {
+  const sienne = planetes.find((x) => x.id === p.planete);
+  return sienne && !estPlaneteGame(sienne) ? "joueur" : "game";
+}
+
+/** La famille d'une ligne, quelle que soit la collection d'où elle vient. */
+export function familleDe(
+  p: Plateau,
+  source: SourcePlateau,
+  planetes: Planete[],
+): FamillePlateau {
+  return source === COLLECTION_TEMPLATES ? familleDeModele(p) : familleDeCopie(p, planetes);
+}
+
+/** Ce que garde un onglet : les lignes de sa famille. */
+export function deLaFamille(
+  liste: Plateau[],
+  famille: FamillePlateau,
+  source: SourcePlateau,
+  planetes: Planete[],
+): Plateau[] {
+  return liste.filter((p) => familleDe(p, source, planetes) === famille);
 }
 
 // --- La palette : ce qui se peint sur un plateau ------------------------------

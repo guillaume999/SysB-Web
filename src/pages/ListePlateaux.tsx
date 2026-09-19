@@ -15,6 +15,7 @@ import {
   appartenance,
   appartientPourPlanete,
   estGame,
+  estPlaneteGame,
   loadIcones,
   loadPlanetes,
   nomDePlanete,
@@ -27,11 +28,13 @@ import {
   COLLECTION_PLATEAUX,
   COLLECTION_TEMPLATES,
   compterOccupees,
+  deLaFamille,
   encoderTiles,
   etatsDe,
   libelleProprietaire,
   loadPlateauxJoueurs,
   loadTemplates,
+  type FamillePlateau,
   type Plateau,
   type SourcePlateau,
 } from "@/lib/plateaux";
@@ -44,9 +47,18 @@ import {
  * naît — tient dans la table ci-dessous plutôt que dans deux fichiers qui
  * divergeraient au premier changement.
  *
- * Ils ont en revanche **deux onglets distincts** dans la navigation : un modèle
- * se dessine, un plateau de joueur s'inspecte. Les mélanger dans une seule page
- * mettait sur le même plan ce qu'on fabrique et ce qu'on observe.
+ * Ils ont en revanche **quatre onglets distincts** dans la navigation (19/09) :
+ * un modèle se dessine, un plateau de joueur s'inspecte — et de chaque côté, ce
+ * qui est **au jeu** ne se regarde pas avec ce qui est **au domaine d'un
+ * joueur**. Les mélanger mettait sur le même plan ce qu'on fabrique et ce qu'on
+ * observe, puis le contenu du jeu et celui des joueurs.
+ *
+ * ⚠️ La famille d'une ligne se lit dans `lib/plateaux.ts` (`familleDe`), jamais
+ * ici : c'est la même règle pour la liste, le tri et le « retour » de l'éditeur.
+ *
+ * ⚠️ **ELLE NE S'APPLIQUE QU'À L'ADMIN.** Un joueur arrive sur `/modeles` par
+ * la même route, mais n'y voit que les modèles de SA planète (`dansLaPortee`) :
+ * lui appliquer en plus la famille « game » de l'onglet lui viderait l'écran.
  */
 /** Ce que lit un joueur sur SES modèles. */
 const TEXTES_JOUEUR = {
@@ -57,29 +69,56 @@ const TEXTES_JOUEUR = {
   bouton: "",
 } as const;
 
+/** Le vocabulaire des QUATRE onglets : deux collections × deux familles. */
 const TEXTES = {
   [COLLECTION_TEMPLATES]: {
-    titre: "Modèles de plateau",
-    chapeau: "Le terrain de départ que tu dessines, rangé par planète. Le jeu en fait une copie pour chaque joueur, à sa première venue. Chaque joueur reçoit à l'inscription sa planète, à son pseudo, avec un modèle ground et un modèle space.",
-    vide: "Aucun modèle. Tant qu'il n'y en a pas, le jeu refuse de fabriquer le plateau d'un joueur et le dit dans la console — c'est voulu.",
-    bouton: "+ Nouveau modèle",
+    game: {
+      titre: "Modèles game",
+      chapeau:
+        "Le terrain de départ des planètes DU JEU — Terre, Jupiter… Le jeu en fait une copie pour chaque joueur, à sa première venue.",
+      vide: "Aucun modèle du jeu. Tant qu'il n'y en a pas, le jeu refuse de fabriquer le plateau d'un joueur et le dit dans la console — c'est voulu.",
+      bouton: "+ Nouveau modèle game",
+    },
+    joueur: {
+      titre: "Modèles joueurs",
+      chapeau:
+        "Le terrain de départ des DOMAINES : deux modèles par joueur (ground et space), créés avec sa planète à son inscription. C'est ce qu'il peint lui-même dans son onglet Modèles.",
+      vide: "Aucun modèle de joueur. Ils naissent avec la planète d'un joueur, à son inscription.",
+      bouton: "+ Nouveau modèle joueur",
+    },
   },
   [COLLECTION_PLATEAUX]: {
-    titre: "Plateaux des joueurs",
-    chapeau: "Les copies personnelles, une par joueur et par type. Elles naissent toutes seules à la première venue du joueur.",
-    vide: "Aucun plateau de joueur pour l'instant.",
-    bouton: "+ Nouveau (le tien)",
+    game: {
+      titre: "Plateaux game",
+      chapeau:
+        "Les copies personnelles jouées sur les planètes DU JEU — une par joueur et par type. Elles naissent toutes seules à la première venue du joueur.",
+      vide: "Aucun plateau sur une planète du jeu pour l'instant.",
+      bouton: "+ Nouveau (le tien)",
+    },
+    joueur: {
+      titre: "Plateaux joueurs",
+      chapeau:
+        "Les copies jouées sur le DOMAINE d'un joueur : sa planète, son catalogue, son modèle à lui.",
+      vide: "Aucun plateau sur le domaine d'un joueur pour l'instant.",
+      bouton: "+ Nouveau (le tien)",
+    },
   },
 } as const;
 
-export default function ListePlateaux({ source }: { source: SourcePlateau }) {
+export default function ListePlateaux({
+  source,
+  famille,
+}: {
+  source: SourcePlateau;
+  famille: FamillePlateau;
+}) {
   // ⚠️ Les plateaux des joueurs : admin seul (la route n'existe que pour lui).
   //    Les MODÈLES : l'admin les voit tous ; un joueur, depuis le 15/09, voit et
   //    peint les deux de SA planète — sans en créer ni en supprimer.
   const { user } = useAuth();
   const { portee, chargement: chargementPortee } = usePortee();
   const admin = portee.admin;
-  const textes = admin ? TEXTES[source] : TEXTES_JOUEUR;
+  const textes = admin ? TEXTES[source][famille] : TEXTES_JOUEUR;
   const estModele = source === COLLECTION_TEMPLATES;
   const [planeteOuverte, setPlaneteOuverte] = useState<string | null>(null);
 
@@ -91,19 +130,29 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
   const [modeles3d, setModeles3d] = useState<Modele3DPartage[]>([]);
   const [icones, setIcones] = useState<Icone[]>([]);
 
-  /** Planètes, joueurs, modèles 3D, icônes. */
+  /**
+   * Planètes et joueurs — puis les modèles 3D et les icônes, qui ne servent
+   * qu'au panneau Planète des modèles.
+   *
+   * ⚠️ **Les planètes se chargent maintenant des DEUX côtés** : sans elles, on
+   * ne sait pas si la copie d'un joueur se joue sur une planète du jeu ou sur
+   * son domaine — c'est ce qui range la ligne dans l'un ou l'autre onglet.
+   */
   const chargerAutour = useCallback(async () => {
+    const panneau = estModele && admin;
     const [p, j, m, i] = await Promise.all([
       loadPlanetes().catch(() => [] as Planete[]),
       loadJoueurs().catch(() => [] as Joueur[]),
-      (loadModeles3D() as Promise<Modele3DPartage[]>).catch(() => [] as Modele3DPartage[]),
-      loadIcones().catch(() => [] as Icone[]),
+      panneau
+        ? (loadModeles3D() as Promise<Modele3DPartage[]>).catch(() => [] as Modele3DPartage[])
+        : Promise.resolve([] as Modele3DPartage[]),
+      panneau ? loadIcones().catch(() => [] as Icone[]) : Promise.resolve([] as Icone[]),
     ]);
     setPlanetes(p);
     setJoueurs(j);
     setModeles3d(m);
     setIcones(i);
-  }, []);
+  }, [estModele, admin]);
 
   const [liste, setListe] = useState<Plateau[]>([]);
   const [chargement, setChargement] = useState(true);
@@ -117,7 +166,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
     try {
       const chargee = await (estModele ? loadTemplates() : loadPlateauxJoueurs());
       setListe(chargee);
-      if (estModele) await chargerAutour();
+      await chargerAutour();
     } catch (e) {
       setErreur(messageErreur(e, "Chargement impossible."));
     } finally {
@@ -131,16 +180,18 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
    * deux modèles d'une planète se suivent.
    */
   const rangee = useMemo(() => {
-    if (!estModele) return liste;
-    if (!admin) return dansLaPortee(portee, liste);
+    // Le joueur : SES modèles, sans découpe — il n'a qu'un domaine.
+    if (!admin) return estModele ? dansLaPortee(portee, liste) : [];
+    const sienne = deLaFamille(liste, famille, source, planetes);
+    if (!estModele) return sienne;
     const nomP = (p: Plateau) => nomDePlanete(planetes, p.planete);
-    return [...liste].sort(
+    return [...sienne].sort(
       (a, b) =>
         rangAppartenance(a.appartient) - rangAppartenance(b.appartient) ||
         nomP(a).localeCompare(nomP(b), "fr", { sensitivity: "base" }) ||
         a.typeOfPlateau.localeCompare(b.typeOfPlateau),
     );
-  }, [liste, planetes, estModele, admin, portee]);
+  }, [liste, planetes, estModele, admin, portee, famille, source]);
 
   const libelleAppartient = (valeur: string | undefined) => {
     const a = appartenance(valeur);
@@ -227,6 +278,13 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
             <code>space</code>. Le bouton « Planète » règle son apparence et ce qui lui est
             ouvert : quels modèles 3D et quelles icônes ses tuiles peuvent utiliser.
           </Terme>
+          <Terme nom="game ou joueurs">
+            Deux onglets depuis le 19/09. <strong>Modèles game</strong> : les terrains du jeu, sur
+            les planètes sans propriétaire (Terre, Jupiter…). <strong>Modèles joueurs</strong> :
+            ceux des domaines, créés avec la planète d'un joueur. Un modèle{" "}
+            <strong>non rangé</strong> (champ « appartient » vide) reste ici, en orange, pour être
+            corrigé.
+          </Terme>
           <Terme nom="appartient">
             <strong>game</strong> = modèle du jeu (Terre, Jupiter…). Sinon, le joueur à qui est la
             planète — elle est créée d'office à son inscription et porte son pseudo.{" "}
@@ -243,6 +301,12 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
         </Aide>
       ) : (
         <Aide titre="Comment marchent les plateaux des joueurs">
+          <Terme nom="game ou joueurs">
+            Deux onglets depuis le 19/09, séparés par la <strong>planète</strong> où la copie se
+            joue : <strong>Plateaux game</strong> pour les planètes du jeu (Terre, Jupiter…),{" "}
+            <strong>Plateaux joueurs</strong> pour le domaine d'un joueur. Un plateau sans planète
+            — d'avant le 14/09 — reste dans « game », avec sa mention orange.
+          </Terme>
           <Terme nom="un par joueur et par type">
             Garanti par la base, pas seulement par le code : un index unique sur (joueur, type).
             Sans lui, un incident réseau pourrait en créer un second et faire croire au joueur
@@ -281,7 +345,9 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
             <thead>
               <tr className="border-b border-edge text-left text-xs uppercase tracking-wide text-slate-400">
                 <th className="px-3 py-2 font-medium">nom</th>
-                {estModele && <th className="px-3 py-2 font-medium">planète</th>}
+                {/* ⚠️ La planète est affichée des DEUX côtés : c'est elle qui
+                    range une copie de joueur dans l'onglet game ou joueurs. */}
+                <th className="px-3 py-2 font-medium">planète</th>
                 {estModele && admin && <th className="px-3 py-2 font-medium">appartient</th>}
                 {!estModele && <th className="px-3 py-2 font-medium">joueur</th>}
                 <th className="w-20 px-3 py-2 font-medium">type</th>
@@ -311,15 +377,13 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
                         </span>
                       )}
                     </td>
-                    {estModele && (
-                      <td className="px-3 py-2 text-xs text-slate-300">
-                        {p.planete ? (
-                          nomDePlanete(planetes, p.planete)
-                        ) : (
-                          <span className="text-amber-300">aucune</span>
-                        )}
-                      </td>
-                    )}
+                    <td className="px-3 py-2 text-xs text-slate-300">
+                      {p.planete ? (
+                        nomDePlanete(planetes, p.planete)
+                      ) : (
+                        <span className="text-amber-300">aucune</span>
+                      )}
+                    </td>
                     {estModele && admin && <td className="px-3 py-2">{libelleAppartient(p.appartient)}</td>}
                     {!estModele && (
                       <td className="px-3 py-2 text-xs text-slate-400">{libelleProprietaire(p)}</td>
@@ -404,6 +468,7 @@ export default function ListePlateaux({ source }: { source: SourcePlateau }) {
       {creation && admin && (
         <DialogCreation
           source={source}
+          famille={famille}
           uid={String(user?.id ?? "")}
           planetes={planetes}
           joueurs={joueurs}
@@ -424,6 +489,7 @@ const NOUVELLE_PLANETE = "__nouvelle__";
 
 function DialogCreation({
   source,
+  famille,
   uid,
   planetes,
   joueurs,
@@ -431,6 +497,7 @@ function DialogCreation({
   onCree,
 }: {
   source: SourcePlateau;
+  famille: FamillePlateau;
   uid: string;
   planetes: Planete[];
   joueurs: Joueur[];
@@ -440,12 +507,27 @@ function DialogCreation({
   const estModele = source === COLLECTION_TEMPLATES;
   // ⚠️ « Game » porte le contenu commun et ne se joue pas : aucun modèle ne
   //    doit s'y rattacher, donc il n'est pas proposé.
-  const choixPlanetes = useMemo(() => triAdmin(planetes).filter((p) => !estGame(p)), [planetes]);
-  const [planeteId, setPlaneteId] = useState(choixPlanetes[0]?.id ?? NOUVELLE_PLANETE);
+  // ⚠️ **ET ON NE PROPOSE QUE LES PLANÈTES DE L'ONGLET** (19/09) : créer depuis
+  //    « game » un plateau qui irait s'afficher dans l'onglet des joueurs, c'est
+  //    le perdre de vue à la seconde où on l'enregistre.
+  const choixPlanetes = useMemo(
+    () =>
+      triAdmin(planetes).filter(
+        (p) => !estGame(p) && (estPlaneteGame(p) ? famille === "game" : famille === "joueur"),
+      ),
+    [planetes, famille],
+  );
+  // ⚠️ La planète NEUVE ne se propose que pour un modèle : une copie de joueur
+  //    se joue sur une planète qui existe déjà, avec son modèle.
+  const [planeteId, setPlaneteId] = useState(
+    choixPlanetes[0]?.id ?? (estModele ? NOUVELLE_PLANETE : ""),
+  );
   const [nomPlanete, setNomPlanete] = useState("");
-  const [appartientNeuf, setAppartientNeuf] = useState(APPARTIENT_GAME);
+  const [appartientNeuf, setAppartientNeuf] = useState(
+    famille === "game" ? APPARTIENT_GAME : (joueurs[0]?.id ?? ""),
+  );
   const planeteChoisie = choixPlanetes.find((p) => p.id === planeteId) ?? null;
-  const nouvelle = planeteId === NOUVELLE_PLANETE;
+  const nouvelle = estModele && planeteId === NOUVELLE_PLANETE;
   // ⚠️ `appartient` SE DÉDUIT de la planète existante : on ne le laisse saisir
   //    que pour une planète neuve, sinon le modèle et sa planète diraient deux
   //    propriétaires différents.
@@ -464,7 +546,10 @@ function DialogCreation({
     saving ||
     nom.trim() === "" ||
     !(l >= 1 && h >= 1 && l <= 200 && h <= 200) ||
-    (estModele && nouvelle && nomPlanete.trim() === "");
+    (estModele && nouvelle && (nomPlanete.trim() === "" || appartient === "")) ||
+    // ⚠️ Un plateau sans planète retomberait dans l'onglet « game » : à la
+    //    famille « joueur », la planète est obligatoire.
+    (!estModele && famille === "joueur" && !planeteChoisie);
 
   const creer = async () => {
     setSaving(true);
@@ -493,7 +578,15 @@ function DialogCreation({
           corps.typeOfPlateau2 = planete.nom;
         }
         corps.appartient = appartient;
-      } else corps.ownerId = uid;
+      } else {
+        corps.ownerId = uid;
+        // ⚠️ La planète aussi, pour une copie : c'est elle que lit `assurer`,
+        //    et c'est elle qui range la ligne dans le bon onglet.
+        if (planeteChoisie) {
+          corps.planete = planeteChoisie.id;
+          corps.typeOfPlateau2 = planeteChoisie.nom;
+        }
+      }
       await pb.collection(source).create(corps);
       onCree();
     } catch (e) {
@@ -527,34 +620,47 @@ function DialogCreation({
             />
           </div>
 
-          {estModele && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label" htmlFor="pl-planete">
-                  Planète
-                </label>
-                <select
-                  id="pl-planete"
-                  className="input"
-                  value={planeteId}
-                  onChange={(e) => setPlaneteId(e.target.value)}
-                >
-                  {choixPlanetes.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nom}
-                    </option>
-                  ))}
-                  <option value={NOUVELLE_PLANETE}>+ nouvelle planète…</option>
-                </select>
-                {nouvelle && (
-                  <input
-                    className="input mt-2"
-                    placeholder="Nom de la planète (unique)"
-                    value={nomPlanete}
-                    onChange={(e) => setNomPlanete(e.target.value)}
-                  />
+          {/*
+            ⚠️ LA PLANÈTE SE CHOISIT DES DEUX CÔTÉS depuis le 19/09 : une copie
+            créée sans planète retomberait dans l'onglet « game », quel que soit
+            l'onglet d'où on l'a créée.
+          */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label" htmlFor="pl-planete">
+                Planète
+              </label>
+              <select
+                id="pl-planete"
+                className="input"
+                value={planeteId}
+                onChange={(e) => setPlaneteId(e.target.value)}
+              >
+                {choixPlanetes.length === 0 && !estModele && (
+                  <option value="">aucune planète {famille === "game" ? "du jeu" : "de joueur"}</option>
                 )}
-              </div>
+                {choixPlanetes.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nom}
+                  </option>
+                ))}
+                {estModele && <option value={NOUVELLE_PLANETE}>+ nouvelle planète…</option>}
+              </select>
+              {nouvelle && (
+                <input
+                  className="input mt-2"
+                  placeholder="Nom de la planète (unique)"
+                  value={nomPlanete}
+                  onChange={(e) => setNomPlanete(e.target.value)}
+                />
+              )}
+              {!estModele && famille === "joueur" && !planeteChoisie && (
+                <p className="mt-1 text-xs text-amber-300">
+                  Aucune planète de joueur : elles naissent avec le compte du joueur.
+                </p>
+              )}
+            </div>
+            {estModele && (
               <div>
                 <label className="label" htmlFor="pl-appartient">
                   Appartient
@@ -566,20 +672,28 @@ function DialogCreation({
                   disabled={!nouvelle}
                   onChange={(e) => setAppartientNeuf(e.target.value)}
                 >
-                  <option value={APPARTIENT_GAME}>game (le jeu)</option>
-                  {joueurs.map((j) => (
-                    <option key={j.id} value={j.id}>
-                      {j.pseudo?.trim() || j.email}
-                    </option>
-                  ))}
+                  {/* ⚠️ L'onglet décide de la famille : « game » ne propose que
+                      le jeu, « joueurs » ne propose que des joueurs. */}
+                  {famille === "game" ? (
+                    <option value={APPARTIENT_GAME}>game (le jeu)</option>
+                  ) : (
+                    joueurs.map((j) => (
+                      <option key={j.id} value={j.id}>
+                        {j.pseudo?.trim() || j.email}
+                      </option>
+                    ))
+                  )}
                   {appartient !== APPARTIENT_GAME && !joueurs.some((j) => j.id === appartient) && (
-                    <option value={appartient}>{appartient}</option>
+                    <option value={appartient}>{appartient || "(personne)"}</option>
                   )}
                 </select>
                 {!nouvelle && <p className="mt-1 text-xs text-slate-500">Celui de la planète choisie.</p>}
+                {nouvelle && famille === "joueur" && joueurs.length === 0 && (
+                  <p className="mt-1 text-xs text-amber-300">Aucun joueur à qui la rattacher.</p>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <div>
