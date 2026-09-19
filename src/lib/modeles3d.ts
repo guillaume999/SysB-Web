@@ -251,7 +251,6 @@ export const PREFABS_CONNUS: { chemin: string; nom: string }[] = [
   { chemin: "Empire/Earth/Ground", nom: "usine_hydrazine" },
   { chemin: "Empire/Earth/Ground", nom: "usine_quantique" },
   { chemin: "Empire/Earth/Ground", nom: "verrerie" },
-  { chemin: "Empire/Earth/Ground/building", nom: "bat_admin02" },
   { chemin: "Empire/Earth/Space", nom: "Tile_transparente_doree" },
   { chemin: "Univers/Plateau", nom: "Foret" },
   { chemin: "Univers/Plateau", nom: "VERT" },
