@@ -22,6 +22,9 @@ import { describe, expect, it } from "vitest";
 import {
   decrireRegle,
   altitudeDe,
+  ANIMATIONS,
+  animationDe,
+  libelleAnimation,
   casesCouvertes,
   categoriesDe,
   categoriesVersTexte,
@@ -564,5 +567,49 @@ describe("regle de pose altitude", () => {
     expect(decrireRegle(alt(3, 3), nom)).toMatch(/seulement à l'altitude 3/);
     // Une borne basse au-dessus de la haute ne refuse pas la saisie : elle le DIT.
     expect(decrireRegle(alt(5, 2), nom)).toMatch(/aucune case ne peut convenir/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+//  L'ANIMATION DE CONSTRUCTION (19/09)
+// ---------------------------------------------------------------------------
+
+describe("animation de construction", () => {
+  it("ramene a « aucune » tout code que le jeu ne connait pas", () => {
+    // Pourquoi ce test : le champ est du TEXTE en base (pas un `select`
+    // PocketBase), donc une valeur tapee a la main ou restee d'une animation
+    // supprimee peut arriver ici. Elle doit valoir « aucune » — comme dans le
+    // jeu — et surtout pas etre passee telle quelle au `<select>`, qui
+    // afficherait alors une option vide sans que personne comprenne pourquoi.
+    expect(animationDe({ animation: "chateau" })).toBe("");
+    expect(animationDe({ animation: "" })).toBe("");
+    expect(animationDe({})).toBe("");
+    expect(animationDe(null)).toBe("");
+  });
+
+  it("accepte la casse et les espaces, comme le jeu", () => {
+    expect(animationDe({ animation: " POUTRES " })).toBe("poutres");
+    expect(animationDe({ animation: "Terre" })).toBe("terre");
+  });
+
+  it("garde « aucune » en tete de liste, et un libelle pour chaque code", () => {
+    // La premiere option est celle des 140 tuiles deja en base : la sortir de
+    // la tete du `<select>` ferait choisir une animation par inadvertance.
+    expect(ANIMATIONS[0].code).toBe("");
+    for (const a of ANIMATIONS) expect(libelleAnimation(a.code)).toBe(a.libelle);
+    expect(libelleAnimation("chateau")).toMatch(/inconnue/);
+  });
+
+  it("annonce les quatre styles que le jeu sait jouer", () => {
+    // ⚠️ Ce test est le rappel que la liste a un MIROIR dans Unity
+    // (`AnimationChantier.StyleDe`). En ajouter une ici sans la coder la rend
+    // choisissable et sans effet.
+    expect(ANIMATIONS.map((a) => a.code)).toEqual([
+      "",
+      "poutres",
+      "pierre",
+      "echafaudage",
+      "terre",
+    ]);
   });
 });

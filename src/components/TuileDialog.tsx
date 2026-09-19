@@ -23,6 +23,9 @@ import {
   categoriesVersTexte,
   cheminIconeAttendu,
   altitudeDe,
+  ANIMATIONS,
+  animationDe,
+  type CodeAnimation,
   contrainteDe,
   couleurAuto,
   erreursPaliers,
@@ -148,6 +151,9 @@ export default function TuileDialog({
   // corriger sans toucher à la tuile. La changer ici ne remue donc rien de ce
   // qui est déjà posé.
   const [altitude, setAltitude] = useState(String(altitudeDe(tuile)));
+  // ⚠️ L'ANIMATION DE CONSTRUCTION (19/09) : un habillage choisi par tuile. Elle
+  // joue même sans `duree_construction_s` — une fois, puis le bâtiment se pose.
+  const [animation, setAnimation] = useState<CodeAnimation>(animationDe(tuile));
   // Ce qui joue sur cette planète — les seules choses qu'une tuile peut citer.
   const catalogue = useMemo(() => duCatalogue(tuiles, planetes, planete), [tuiles, planetes, planete]);
   const ressources = useMemo(
@@ -359,6 +365,7 @@ export default function TuileDialog({
       ...(portee.admin ? {} : { icone: iconeId }),
       socle,
       altitude: cranValable(altitude),
+      animation,
       categorie: categoriesVersTexte(categories),
       description: description.trim(),
       couleur: couleur.trim(),
@@ -433,6 +440,15 @@ export default function TuileDialog({
                   Le cran de relief que cette tuile donne a la case ou on la pose. Le relief vit
                   sur la CASE, pas sur la tuile : c'est une valeur de depart, pas une propriete
                   qui la suit.
+                </Terme>
+                <Terme nom="animation de construction">
+                  La mise en scene jouee quand la tuile se construit : des materiaux arrivent sur
+                  la case, s'assemblent, puis un &laquo; paf &raquo; et le batiment est la. Elle
+                  joue AUSSI quand le palier n'a pas de duree de construction — une fois, puis le
+                  batiment se pose. Avec une duree, l'assemblage se fait puis le tas travaille
+                  jusqu'a la fin du chantier. Laisse &laquo; aucune &raquo; pour le comportement
+                  d'avant : la tuile apparait d'un coup. Ca ne change AUCUN calcul — ni le prix,
+                  ni le cycle, ni le droit de poser.
                 </Terme>
                 <Terme nom="socle">
                   La COULEUR du socle de la case, choisie parmi celles de l'onglet Socles. Sa
@@ -711,6 +727,27 @@ export default function TuileDialog({
                   Le cran que la pose de cette tuile ecrit sur la case. 0 = au niveau du sol.
                   L'editeur de plateau peut ensuite corriger la case sans toucher a la tuile, et
                   changer ce chiffre ne remue rien de ce qui est deja pose.
+                </p>
+              </div>
+
+              <div>
+                <label className="label" htmlFor="tuile-animation">
+                  Animation de construction
+                </label>
+                <select
+                  id="tuile-animation"
+                  className="input"
+                  value={animation}
+                  onChange={(e) => setAnimation(e.target.value as CodeAnimation)}
+                >
+                  {ANIMATIONS.map((a) => (
+                    <option key={a.code || "aucune"} value={a.code}>
+                      {a.libelle}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  {ANIMATIONS.find((a) => a.code === animation)?.detail}
                 </p>
               </div>
 

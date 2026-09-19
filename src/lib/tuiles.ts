@@ -2002,6 +2002,20 @@ export type Tuile = {
    * Changer ce champ ne remue donc RIEN de ce qui est déjà posé — c'est voulu.
    */
   altitude?: number;
+  /**
+   * **L'animation de construction** (19/09) — le code de la mise en scène jouée
+   * quand la tuile se construit, parmi `ANIMATIONS`. Vide = aucune, la tuile
+   * apparaît d'un coup, et c'est le cas de toutes les tuiles d'avant cette date.
+   *
+   * ⚠️ **C'est un habillage** : le moteur ne le lit pas, il ne change ni un
+   * verdict de pose, ni un cycle, ni un coût.
+   *
+   * ⚠️ Un code que le jeu ne connaît pas ne casse rien : la tuile se pose sans
+   * animation et la Console d'Unity le dit une fois. C'est pourquoi le champ est
+   * du texte et non un `select` PocketBase — voir
+   * `patch-animation-tuile-2026-09-19.js`.
+   */
+  animation?: string;
   categorie: string;
   description: string;
   /**
@@ -2065,6 +2079,8 @@ export interface ValeursTuile {
   socle: string;
   /** Le cran d'altitude que la pose de cette tuile écrit sur la case. */
   altitude: number;
+  /** Le code de l'animation de construction, ou `""` pour aucune. */
+  animation: CodeAnimation;
   categorie: string;
   description: string;
   couleur: string;
@@ -2107,6 +2123,68 @@ export function contrainteDe(tuile: {
  */
 export function altitudeDe(tuile: { altitude?: number } | null | undefined): number {
   return cranValable(tuile?.altitude);
+}
+
+// --- Animation de construction (19/09) ---------------------------------------
+
+/**
+ * Les codes d'animation que le JEU sait jouer. `""` = aucune.
+ *
+ * ⚠️⚠️ **CETTE LISTE EST LE CONTRAT AVEC UNITY** : son miroir est
+ * `AnimationChantier.Style` / `StyleDe()` dans
+ * `Assets/Scripts/Empire/Jouer/Plateau/AnimationChantier.cs`. Les deux bougent
+ * ENSEMBLE. Elles ne peuvent pas être une seule liste (deux langages, deux
+ * dépôts), mais le déséquilibre est sans danger dans ce sens-là : un code
+ * proposé ici et inconnu du jeu donne une tuile qui se pose sans animation, et
+ * la Console d'Unity le dit. L'inverse — une animation codée dans le jeu et
+ * absente d'ici — la rend simplement inchoisissable.
+ */
+export type CodeAnimation = "" | "poutres" | "pierre" | "echafaudage" | "terre";
+
+export const ANIMATIONS: { code: CodeAnimation; libelle: string; detail: string }[] = [
+  {
+    code: "",
+    libelle: "aucune — la tuile apparaît d'un coup",
+    detail: "Le comportement d'avant le 19/09, et celui de toutes les tuiles non réglées.",
+  },
+  {
+    code: "poutres",
+    libelle: "Poutres de bois",
+    detail: "Huit poutres tombent du ciel et s'empilent en croix, puis « paf ».",
+  },
+  {
+    code: "pierre",
+    libelle: "Blocs de pierre",
+    detail: "Six blocs gris, plus lourds et plus lents, et un nuage plus large.",
+  },
+  {
+    code: "echafaudage",
+    libelle: "Échafaudage qui monte",
+    detail: "Quatre poteaux poussent du sol, deux traverses les relient, puis « paf ».",
+  },
+  {
+    code: "terre",
+    libelle: "Le bâtiment sort de terre",
+    detail: "Aucun matériau : le bâtiment monte du sol en poussant un anneau de poussière.",
+  },
+];
+
+/**
+ * Le code d'animation d'une tuile, ramené à un code connu.
+ *
+ * ⚠️ Un seul point de lecture, comme `altitudeDe` : un code tapé à la main en
+ * base (ou resté d'une animation supprimée) vaut « aucune » ici comme dans le
+ * jeu, plutôt que de faire afficher au `select` une valeur qu'il n'a pas.
+ */
+export function animationDe(tuile: { animation?: string } | null | undefined): CodeAnimation {
+  const code = (tuile?.animation ?? "").trim().toLowerCase();
+  return ANIMATIONS.some((a) => a.code === code) ? (code as CodeAnimation) : "";
+}
+
+/** Le libellé d'un code d'animation, pour un tableau ou une phrase. */
+export function libelleAnimation(code: string | undefined | null): string {
+  const trouve = ANIMATIONS.find((a) => a.code === (code ?? "").trim().toLowerCase());
+  return trouve ? trouve.libelle : `inconnue (${code})`;
 }
 
 // --- Chargement et helpers --------------------------------------------------
